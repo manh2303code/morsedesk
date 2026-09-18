@@ -71,6 +71,15 @@ def test_render(en, ru):
     assert en.render(["...-.-"]) == "<SK>"
 
 
+def test_shared_prosigns_encode_but_render_as_punctuation(en):
+    assert en.prosign_to_pattern["<AR>"] == ".-.-."
+    assert en.prosign_to_pattern["<BT>"] == "-...-"
+    assert en.prosign_to_pattern["<KN>"] == "-.--."
+    assert en.prosign_to_pattern["<AS>"] == ".-..."
+    assert en.decode_options(".-.-.") == ["+"]
+    assert en.decode_options("-...-") == ["="]
+
+
 def test_inverse_conflict_raises():
     with pytest.raises(ValueError):
         Profile(

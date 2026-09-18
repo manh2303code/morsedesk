@@ -42,6 +42,10 @@ def test_prosign_syntax(en):
     assert text_to_tokens("<sos>", en) == ["...---..."]
 
 
+def test_shared_prosigns_in_text(en):
+    assert text_to_tokens("<BT> 73 <AR> <KN>", en) == ["-...-", SPACE, "--...", "...--", SPACE, ".-.-.", SPACE, "-.--."]
+
+
 def test_digits_and_punct(en):
     assert text_to_tokens("73?", en) == ["--...", "...--", "..--.."]
 

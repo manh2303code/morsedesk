@@ -536,6 +536,10 @@ prosigns:
   "...-.-": "<SK>"
   "...---...": "<SOS>"
   "........": "<ERR>"
+  ".-.-.": "<AR>"
+  "-...-": "<BT>"
+  "-.--.": "<KN>"
+  ".-...": "<AS>"
 ```
 
 `morsedesk/profiles/en.yaml`:
@@ -2927,6 +2931,36 @@ def test_run_manifest_with_fake_tool(tmp_path):
     assert result["n"] == 1
     assert abs(result["mean_cer"] - 2 / 7) < 1e-9
     assert result["rows"][0]["hyp"] == "CQ DE"
+
+
+def test_run_manifest_isolates_tool_errors(tmp_path):
+    x = Encoder("en").to_audio("CQ DE K", wpm=20)
+    save_audio(tmp_path / "a.wav", x, 8000)
+    (tmp_path / "a.txt").write_text("CQ DE K")
+    rows = build_manifest(tmp_path, source="x", profile_id="en")
+    manifest = tmp_path / "m.jsonl"
+    write_jsonl(rows, manifest)
+    result = run_manifest(manifest, "definitely-not-a-real-tool-xyz {path}")
+    assert result["n"] == 1
+    assert result["rows"][0]["hyp"] == ""
+    assert result["rows"][0]["cer"] == 1.0
+    assert result["rows"][0]["error"]
+
+
+def test_run_manifest_records_stderr(tmp_path):
+    import sys
+
+    x = Encoder("en").to_audio("CQ", wpm=20)
+    save_audio(tmp_path / "a.wav", x, 8000)
+    (tmp_path / "a.txt").write_text("CQ")
+    manifest = tmp_path / "m.jsonl"
+    write_jsonl(build_manifest(tmp_path, source="x", profile_id="en"), manifest)
+    script = tmp_path / "noisy.py"
+    script.write_text("import sys; print('CQ'); print('warn: xyz', file=sys.stderr)\n")
+    result = run_manifest(manifest, f'"{sys.executable}" "{script}" {{path}}')
+    assert result["rows"][0]["cer"] == 0.0
+    assert "warn: xyz" in result["rows"][0]["stderr"]
+    assert result["rows"][0]["error"] is None
 ```
 
 - [ ] **Step 2: Chạy test, xác nhận thất bại**
@@ -3049,9 +3083,26 @@ def run_manifest(manifest: Path, cmd_template: str, strip_prefix: str = "", to_w
                 save_audio(wav, x, sr)
             else:
                 wav = src
-            cmd = shlex.split(cmd_template.replace("{path}", str(wav)), posix=False)
+            # posix=False giữ dấu ngoặc kép nguyên trong token (để tách đúng theo khoảng
+            # trắng) nhưng subprocess.run trên Windows cần argv không còn dấu ngoặc kép
+            # bao ngoài, nếu không list2cmdline sẽ escape chúng thành literal và
+            # CreateProcess không tìm thấy file (WinError 2). Bóc dấu ngoặc kép bao ngoài
+            # từng token trước khi truyền cho subprocess.
+            raw_parts = shlex.split(cmd_template.replace("{path}", str(wav)), posix=False)
+            cmd = [p[1:-1] if len(p) >= 2 and p[0] == p[-1] == '"' else p for p in raw_parts]
             t0 = time.time()
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
+            try:
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
+            except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+                # Cô lập lỗi từng file: một công cụ ngoài bị thiếu, treo, hoặc lỗi hệ
+                # điều hành không được làm hỏng cả lượt đo; ghi nhận như một hyp rỗng
+                # (CER = 1.0 với ref không rỗng) và tiếp tục file kế tiếp.
+                rows_out.append({
+                    "path": row["path"], "ref": row["text"], "hyp": "",
+                    "cer": cer(row["text"], ""), "seconds": time.time() - t0,
+                    "returncode": None, "error": f"{type(e).__name__}: {e}",
+                })
+                continue
             lines = []
             for line in proc.stdout.splitlines():
                 if strip_prefix and line.startswith(strip_prefix):
@@ -3061,7 +3112,7 @@ def run_manifest(manifest: Path, cmd_template: str, strip_prefix: str = "", to_w
             rows_out.append({
                 "path": row["path"], "ref": row["text"], "hyp": hyp,
                 "cer": cer(row["text"], hyp), "seconds": time.time() - t0,
-                "returncode": proc.returncode,
+                "returncode": proc.returncode, "stderr": proc.stderr[-500:], "error": None,
             })
     mean = sum(r["cer"] for r in rows_out) / max(1, len(rows_out))
     return {"name": cmd_template.split()[0], "n": len(rows_out), "mean_cer": mean, "rows": rows_out}
@@ -3081,7 +3132,8 @@ def main(argv: list[str] | None = None) -> int:
     a.out_dir.mkdir(parents=True, exist_ok=True)
     out = a.out_dir / f"external_{a.name}.json"
     out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"{a.name}: n={result['n']} CER trung bình={result['mean_cer']:.3f} -> {out}")
+    n_err = sum(1 for r in result["rows"] if r.get("error"))
+    print(f"{a.name}: n={result['n']} CER trung bình={result['mean_cer']:.3f} lỗi={n_err} -> {out}")
     return 0
 
 
@@ -3146,7 +3198,7 @@ bench_results/
 - [ ] **Step 6: Chạy test, xác nhận đạt**
 
 Run: `uv run pytest tests/unit/test_tools_t2.py -v`
-Expected: `3 passed`
+Expected: `5 passed`
 
 - [ ] **Step 7: Commit**
 

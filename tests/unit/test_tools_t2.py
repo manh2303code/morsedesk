@@ -42,3 +42,33 @@ def test_run_manifest_with_fake_tool(tmp_path):
     assert result["n"] == 1
     assert abs(result["mean_cer"] - 2 / 7) < 1e-9
     assert result["rows"][0]["hyp"] == "CQ DE"
+
+
+def test_run_manifest_isolates_tool_errors(tmp_path):
+    x = Encoder("en").to_audio("CQ DE K", wpm=20)
+    save_audio(tmp_path / "a.wav", x, 8000)
+    (tmp_path / "a.txt").write_text("CQ DE K")
+    rows = build_manifest(tmp_path, source="x", profile_id="en")
+    manifest = tmp_path / "m.jsonl"
+    write_jsonl(rows, manifest)
+    result = run_manifest(manifest, "definitely-not-a-real-tool-xyz {path}")
+    assert result["n"] == 1
+    assert result["rows"][0]["hyp"] == ""
+    assert result["rows"][0]["cer"] == 1.0
+    assert result["rows"][0]["error"]
+
+
+def test_run_manifest_records_stderr(tmp_path):
+    import sys
+
+    x = Encoder("en").to_audio("CQ", wpm=20)
+    save_audio(tmp_path / "a.wav", x, 8000)
+    (tmp_path / "a.txt").write_text("CQ")
+    manifest = tmp_path / "m.jsonl"
+    write_jsonl(build_manifest(tmp_path, source="x", profile_id="en"), manifest)
+    script = tmp_path / "noisy.py"
+    script.write_text("import sys; print('CQ'); print('warn: xyz', file=sys.stderr)\n")
+    result = run_manifest(manifest, f'"{sys.executable}" "{script}" {{path}}')
+    assert result["rows"][0]["cer"] == 0.0
+    assert "warn: xyz" in result["rows"][0]["stderr"]
+    assert result["rows"][0]["error"] is None

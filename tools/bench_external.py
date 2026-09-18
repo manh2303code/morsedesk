@@ -43,7 +43,18 @@ def run_manifest(manifest: Path, cmd_template: str, strip_prefix: str = "", to_w
             raw_parts = shlex.split(cmd_template.replace("{path}", str(wav)), posix=False)
             cmd = [p[1:-1] if len(p) >= 2 and p[0] == p[-1] == '"' else p for p in raw_parts]
             t0 = time.time()
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
+            try:
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
+            except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+                # Cô lập lỗi từng file: một công cụ ngoài bị thiếu, treo, hoặc lỗi hệ
+                # điều hành không được làm hỏng cả lượt đo; ghi nhận như một hyp rỗng
+                # (CER = 1.0 với ref không rỗng) và tiếp tục file kế tiếp.
+                rows_out.append({
+                    "path": row["path"], "ref": row["text"], "hyp": "",
+                    "cer": cer(row["text"], ""), "seconds": time.time() - t0,
+                    "returncode": None, "error": f"{type(e).__name__}: {e}",
+                })
+                continue
             lines = []
             for line in proc.stdout.splitlines():
                 if strip_prefix and line.startswith(strip_prefix):
@@ -53,7 +64,7 @@ def run_manifest(manifest: Path, cmd_template: str, strip_prefix: str = "", to_w
             rows_out.append({
                 "path": row["path"], "ref": row["text"], "hyp": hyp,
                 "cer": cer(row["text"], hyp), "seconds": time.time() - t0,
-                "returncode": proc.returncode,
+                "returncode": proc.returncode, "stderr": proc.stderr[-500:], "error": None,
             })
     mean = sum(r["cer"] for r in rows_out) / max(1, len(rows_out))
     return {"name": cmd_template.split()[0], "n": len(rows_out), "mean_cer": mean, "rows": rows_out}
@@ -73,7 +84,8 @@ def main(argv: list[str] | None = None) -> int:
     a.out_dir.mkdir(parents=True, exist_ok=True)
     out = a.out_dir / f"external_{a.name}.json"
     out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"{a.name}: n={result['n']} CER trung bình={result['mean_cer']:.3f} -> {out}")
+    n_err = sum(1 for r in result["rows"] if r.get("error"))
+    print(f"{a.name}: n={result['n']} CER trung bình={result['mean_cer']:.3f} lỗi={n_err} -> {out}")
     return 0
 
 
