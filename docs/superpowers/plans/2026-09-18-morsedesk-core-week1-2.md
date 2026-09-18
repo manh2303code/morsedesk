@@ -13,6 +13,7 @@
 - Python `>=3.11,<3.12`; tạo môi trường bằng `uv sync --all-extras` (uv tự tải Python 3.11). Không dùng Python 3.14 của hệ thống.
 - `numpy>=1.26,<2` (pyctcdecode ở tuần 3 cần numpy < 2).
 - Chỉ thêm phụ thuộc có license Apache-2.0, MIT, BSD hoặc LGPL liên kết động. Không nhúng GPL/AGPL; `ffmpeg` chỉ được gọi như tiến trình ngoài và phải là tùy chọn.
+- `torch` (extra `train`, chỉ dùng trên máy dev) lấy từ index CPU `https://download.pytorch.org/whl/cpu` qua `[tool.uv.sources]` để `uv.lock` không kéo gói NVIDIA CUDA.
 - Âm thanh nội bộ: mono float32, `SAMPLE_RATE = 8000`, `HOP = 40` mẫu (200 khung/giây), `N_FFT = 256`, đặc trưng `FEAT_DIM = 11` mỗi khung 5 ms.
 - Từ vựng đầu ra đúng 65 lớp: index 0 `<blank>`, 1 `<space>`, 2 `<unk>`, rồi 62 mẫu (31 chữ, 10 số, 18 dấu, 3 prosign) theo thứ tự cố định trong `morsedesk/model/vocab.py`.
 - Timing chuẩn PARIS: dit = 1.2/WPM giây; dash = weight × dit (mặc định 3); khoảng trong chữ 1 dit; giữa chữ 3; giữa từ 7. Farnsworth theo ARRL: `t_a = (60c − 37.2s)/(s·c)`, khoảng giữa chữ `3·t_a/19`, giữa từ `7·t_a/19`.
@@ -117,6 +118,14 @@ addopts = "-q"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 ```
 
 - [ ] **Step 2: Viết README.md**
