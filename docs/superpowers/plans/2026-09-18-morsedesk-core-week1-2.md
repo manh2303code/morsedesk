@@ -47,6 +47,7 @@
 | `morsedesk/metrics.py` | CER, WER |
 | `morsedesk/api.py` | `Encoder`, `Decoder`, `DecodeResult`, `Word` |
 | `morsedesk/cli.py` | `morsedesk encode/decode/devices/bench` |
+| `morsedesk/textio.py` | ép UTF-8 cho stdout/stderr |
 | `morsedesk/data/text.py` | lấy mẫu văn bản ba ngôn ngữ |
 | `morsedesk/data/keyer.py` | mô hình tay gõ ngẫu nhiên |
 | `morsedesk/data/channel.py` | kênh: trôi tone, AWGN, QSB, QRM, QRN, băng, mức, clipping, DC, MP3 |
@@ -2753,16 +2754,7 @@ from morsedesk.api import Decoder, Encoder
 from morsedesk.audio.io import UnsupportedAudio, save_audio
 from morsedesk.encode.text import UnsupportedCharacter
 from morsedesk.lm.profile import list_profiles
-
-
-def _force_utf8_streams() -> None:
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is not None:
-            try:
-                reconfigure(encoding="utf-8", errors="replace")
-            except (ValueError, OSError):
-                pass
+from morsedesk.textio import force_utf8_streams
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -2832,7 +2824,7 @@ def cmd_devices(a: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    _force_utf8_streams()
+    force_utf8_streams()
     a = build_parser().parse_args(argv)
     return {"encode": cmd_encode, "decode": cmd_decode, "devices": cmd_devices}[a.cmd](a)
 
@@ -2986,6 +2978,7 @@ from pathlib import Path
 
 from morsedesk.encode.text import text_to_tokens
 from morsedesk.lm.profile import load_profile
+from morsedesk.textio import force_utf8_streams
 
 AUDIO_EXT = (".wav", ".mp3", ".ogg", ".flac", ".oga")
 _WPM_RE = re.compile(r"_(\d+(?:\.\d+)?)WPM", re.IGNORECASE)
@@ -3027,6 +3020,7 @@ def write_jsonl(rows: list[dict], out: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    force_utf8_streams()
     ap = argparse.ArgumentParser(description="Tạo manifest T2 từ thư mục audio + txt")
     ap.add_argument("audio_dir", type=Path)
     ap.add_argument("--source", required=True, help="nhãn nguồn, ví dụ arrl, commons, sraa")
@@ -3064,6 +3058,7 @@ from pathlib import Path
 
 from morsedesk.audio.io import load_audio, save_audio
 from morsedesk.metrics import cer
+from morsedesk.textio import force_utf8_streams
 
 
 def read_manifest(path: Path) -> list[dict]:
@@ -3119,6 +3114,7 @@ def run_manifest(manifest: Path, cmd_template: str, strip_prefix: str = "", to_w
 
 
 def main(argv: list[str] | None = None) -> int:
+    force_utf8_streams()
     ap = argparse.ArgumentParser(description="Đo công cụ giải mã ngoài trên manifest")
     ap.add_argument("--manifest", type=Path, required=True)
     ap.add_argument("--cmd", required=True, help='ví dụ: "multimon-ng -a MORSE_CW -t wav {path}"')
@@ -4485,7 +4481,7 @@ def test_overfit_tiny_batch_reduces_loss():
         opt.zero_grad()
         loss.backward()
         opt.step()
-        losses.append(float(loss))
+        losses.append(loss.item())
     assert losses[-1] < 0.7 * losses[0], losses[::10]
     ter = token_error_rate(model, [(f, t) for f, _, t in items])
     assert 0.0 <= ter <= 1.5
@@ -4599,6 +4595,7 @@ from morsedesk.dsp.tone import estimate_tone
 from morsedesk.metrics import edit_distance
 from morsedesk.model.ctc import greedy_decode
 from morsedesk.model.vocab import VOCAB
+from morsedesk.textio import force_utf8_streams
 from tools.net_torch import CONFIG_DEFAULT, MorseNet, count_params, output_length
 
 
@@ -4666,10 +4663,10 @@ def train_loop(model, loader, opt, ctc, steps, val_items, run_dir: Path, log_eve
         opt.step()
         step += 1
         if step % log_every == 0:
-            print(f"step {step} loss {float(loss):.4f} ({time.time() - t0:.0f}s)", flush=True)
+            print(f"step {step} loss {loss.item():.4f} ({time.time() - t0:.0f}s)", flush=True)
         if step % val_every == 0 or step == steps:
             ter = token_error_rate(model, val_items)
-            history.append({"step": step, "loss": float(loss), "val_ter": ter})
+            history.append({"step": step, "loss": loss.item(), "val_ter": ter})
             save_ckpt(run_dir / "last.pt", model, step, ter)
             if ter < best:
                 best = ter
@@ -4682,6 +4679,7 @@ def train_loop(model, loader, opt, ctc, steps, val_items, run_dir: Path, log_eve
 
 
 def main(argv: list[str] | None = None) -> int:
+    force_utf8_streams()
     ap = argparse.ArgumentParser(description="Huấn luyện MorseNet bằng dữ liệu tổng hợp")
     ap.add_argument("--name", default="v1")
     ap.add_argument("--steps", type=int, default=20000)

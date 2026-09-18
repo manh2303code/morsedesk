@@ -55,7 +55,7 @@ def test_overfit_tiny_batch_reduces_loss():
         opt.zero_grad()
         loss.backward()
         opt.step()
-        losses.append(float(loss))
+        losses.append(loss.item())
     assert losses[-1] < 0.7 * losses[0], losses[::10]
     ter = token_error_rate(model, [(f, t) for f, _, t in items])
     assert 0.0 <= ter <= 1.5

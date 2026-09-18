@@ -16,6 +16,7 @@ from pathlib import Path
 
 from morsedesk.audio.io import load_audio, save_audio
 from morsedesk.metrics import cer
+from morsedesk.textio import force_utf8_streams
 
 
 def read_manifest(path: Path) -> list[dict]:
@@ -71,6 +72,7 @@ def run_manifest(manifest: Path, cmd_template: str, strip_prefix: str = "", to_w
 
 
 def main(argv: list[str] | None = None) -> int:
+    force_utf8_streams()
     ap = argparse.ArgumentParser(description="Đo công cụ giải mã ngoài trên manifest")
     ap.add_argument("--manifest", type=Path, required=True)
     ap.add_argument("--cmd", required=True, help='ví dụ: "multimon-ng -a MORSE_CW -t wav {path}"')

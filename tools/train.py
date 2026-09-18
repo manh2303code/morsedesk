@@ -18,6 +18,7 @@ from morsedesk.dsp.tone import estimate_tone
 from morsedesk.metrics import edit_distance
 from morsedesk.model.ctc import greedy_decode
 from morsedesk.model.vocab import VOCAB
+from morsedesk.textio import force_utf8_streams
 from tools.net_torch import CONFIG_DEFAULT, MorseNet, count_params, output_length
 
 
@@ -85,10 +86,10 @@ def train_loop(model, loader, opt, ctc, steps, val_items, run_dir: Path, log_eve
         opt.step()
         step += 1
         if step % log_every == 0:
-            print(f"step {step} loss {float(loss):.4f} ({time.time() - t0:.0f}s)", flush=True)
+            print(f"step {step} loss {loss.item():.4f} ({time.time() - t0:.0f}s)", flush=True)
         if step % val_every == 0 or step == steps:
             ter = token_error_rate(model, val_items)
-            history.append({"step": step, "loss": float(loss), "val_ter": ter})
+            history.append({"step": step, "loss": loss.item(), "val_ter": ter})
             save_ckpt(run_dir / "last.pt", model, step, ter)
             if ter < best:
                 best = ter
@@ -101,6 +102,7 @@ def train_loop(model, loader, opt, ctc, steps, val_items, run_dir: Path, log_eve
 
 
 def main(argv: list[str] | None = None) -> int:
+    force_utf8_streams()
     ap = argparse.ArgumentParser(description="Huấn luyện MorseNet bằng dữ liệu tổng hợp")
     ap.add_argument("--name", default="v1")
     ap.add_argument("--steps", type=int, default=20000)

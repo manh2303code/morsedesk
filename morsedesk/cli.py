@@ -11,16 +11,7 @@ from morsedesk.api import Decoder, Encoder
 from morsedesk.audio.io import UnsupportedAudio, save_audio
 from morsedesk.encode.text import UnsupportedCharacter
 from morsedesk.lm.profile import list_profiles
-
-
-def _force_utf8_streams() -> None:
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is not None:
-            try:
-                reconfigure(encoding="utf-8", errors="replace")
-            except (ValueError, OSError):
-                pass
+from morsedesk.textio import force_utf8_streams
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -107,7 +98,7 @@ def cmd_bench(a: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    _force_utf8_streams()
+    force_utf8_streams()
     a = build_parser().parse_args(argv)
     return {"encode": cmd_encode, "decode": cmd_decode, "devices": cmd_devices, "bench": cmd_bench}[a.cmd](a)
 

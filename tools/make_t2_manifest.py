@@ -13,6 +13,7 @@ from pathlib import Path
 
 from morsedesk.encode.text import text_to_tokens
 from morsedesk.lm.profile import load_profile
+from morsedesk.textio import force_utf8_streams
 
 AUDIO_EXT = (".wav", ".mp3", ".ogg", ".flac", ".oga")
 _WPM_RE = re.compile(r"_(\d+(?:\.\d+)?)WPM", re.IGNORECASE)
@@ -54,6 +55,7 @@ def write_jsonl(rows: list[dict], out: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    force_utf8_streams()
     ap = argparse.ArgumentParser(description="Tạo manifest T2 từ thư mục audio + txt")
     ap.add_argument("audio_dir", type=Path)
     ap.add_argument("--source", required=True, help="nhãn nguồn, ví dụ arrl, commons, sraa")
