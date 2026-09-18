@@ -1,0 +1,17 @@
+# dữ liệu test có bản quyền, không commit
+testdata/private/
+
+# build
+build/
+dist/
+*.AppImage
+
+# python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# model lớn sinh ra khi train
+runs/
+*.ckpt
