@@ -17,3 +17,5 @@ __pycache__/
 # model lớn sinh ra khi train
 runs/
 *.ckpt
+models/*.onnx
+models/*.npz
