@@ -3284,6 +3284,18 @@ def test_sampler_corpus(tmp_path, profiles):
     assert "CORPUS" in s or "LINE" in s
 
 
+def test_sampler_fallback_is_profile_native(tmp_path, profiles):
+    corpus = tmp_path / "ru.txt"
+    corpus.write_text("ONLY LATIN LINE\n", encoding="utf-8")   # không mã hóa được trong profile ru
+    ts = TextSampler(profiles, corpus={"ru": corpus}, ham_ratio=0.0, random_ratio=0.0)
+    s = ts.sample("ru", np.random.default_rng(0))
+    assert s == BUILTIN_WORDS["ru"][0]
+    assert text_to_tokens(s, profiles["ru"])                     # strict không lỗi
+    gen = SynthGenerator(SynthConfig(mp3_enabled=False, corpus={"ru": corpus}))
+    ex = gen.generate(3, profile_id="ru")
+    assert ex.text and ex.profile_id == "ru"
+
+
 # ---- keyer ----
 
 def test_sample_keyer_ranges():
@@ -3368,8 +3380,25 @@ def test_generator_reproducible_and_valid():
     assert a.tokens[0] != SPACE and a.tokens[-1] != SPACE
     assert all(0 <= i < len(VOCAB) for i in a.labels)
     assert all(VOCAB.token(i) == t for i, t in zip(a.labels, a.tokens))
-    assert 4.0 <= a.seconds <= 12.0 + 1.6 + 0.5
+    assert 4.0 <= a.seconds <= 12.0 + 1.6 + 1e-6
     assert a.profile_id in ("en", "ru", "kk-cyrl-ru")
+
+
+def test_generator_duration_bounds_over_many_seeds():
+    gen = SynthGenerator(SynthConfig(mp3_enabled=False))
+    n = 200
+    within_max = 0
+    for seed in range(1000, 1000 + n):
+        ex = gen.generate(seed)
+        signal_s = ex.seconds - 0.0  # gồm cả đệm 0.2–0.8 s mỗi đầu
+        assert ex.seconds >= 4.0, (seed, ex.seconds)
+        assert ex.seconds <= 12.0 * 1.5 + 1.6, (seed, ex.seconds)
+        within_max += ex.seconds <= 12.0 + 1.6 + 1e-6
+    # một từ đơn rất dài ở tốc độ chậm có thể vượt trần; phải hiếm
+    assert within_max >= 0.97 * n, within_max
+    for seed in (861, 2462):
+        ex = gen.generate(seed)
+        assert 4.0 <= ex.seconds <= 12.0 * 1.5 + 1.6, (seed, ex.seconds)
 
 
 def test_generator_different_seeds_differ():
@@ -3513,7 +3542,7 @@ class TextSampler:
         else:
             raw = self._words(profile_id, profile, rng, n)
         cleaned = profile.render(text_to_tokens(raw, profile, strict=False)).strip()
-        return cleaned or "TEST"
+        return cleaned or BUILTIN_WORDS[profile_id][0]
 ```
 
 - [ ] **Step 4: Viết keyer.py**
@@ -3755,14 +3784,23 @@ from morsedesk.data.channel import (
     ChannelParams, apply_channel, ffmpeg_available, sample_channel_params,
 )
 from morsedesk.data.keyer import KeyerParams, apply_keyer, machine, sample_keyer_params
-from morsedesk.data.text import TextSampler
+from morsedesk.data.text import BUILTIN_WORDS, TextSampler
 from morsedesk.encode.synth import elements_to_audio, tone_power
 from morsedesk.encode.text import text_to_tokens
-from morsedesk.encode.timing import elements_to_segments, tokens_to_elements, total_seconds
+from morsedesk.encode.timing import Element, elements_to_segments, tokens_to_elements, total_seconds
 from morsedesk.lm.profile import Profile, load_profile
 from morsedesk.model.vocab import SPACE, VOCAB
 
 AMPLITUDE = 0.8
+
+
+def rescale_elements(elements: list[Element], target_seconds: float) -> list[Element]:
+    """Co giãn đều mọi phần tử để tổng thời lượng bằng target_seconds (giữ nguyên hình dạng jitter/drift)."""
+    total = total_seconds(elements)
+    if total <= 0 or target_seconds <= 0:
+        return elements
+    k = target_seconds / total
+    return [Element(e.on, e.duration * k) for e in elements]
 
 
 @dataclass
@@ -3816,7 +3854,7 @@ class SynthGenerator:
         while self.tokens_duration(tokens, keyer) > self.cfg.max_seconds and SPACE in tokens:
             tokens = tokens[: len(tokens) - 1 - tokens[::-1].index(SPACE)]
         if not tokens or self.tokens_duration(tokens, keyer) > self.cfg.max_seconds:
-            tokens = text_to_tokens("TEST", self.profiles["en"])
+            tokens = text_to_tokens(BUILTIN_WORDS[profile.id][0], profile)
         return tokens
 
     def _random_morse(self, n: int, f0: float, rng: np.random.Generator) -> np.ndarray:
@@ -3845,7 +3883,8 @@ class SynthGenerator:
 
         target = float(rng.uniform(self.cfg.min_seconds, self.cfg.max_seconds))
         tokens = self._sample_tokens(profile, keyer, rng, target)
-        elements = apply_keyer(tokens_to_elements(tokens, keyer.timing()), keyer, rng)
+        nominal = tokens_to_elements(tokens, keyer.timing())
+        elements = rescale_elements(apply_keyer(nominal, keyer, rng), total_seconds(nominal))
         n_sig = elements_to_segments(elements, SAMPLE_RATE)[-1][2]
         t = np.arange(n_sig) / SAMPLE_RATE
         freq = channel.tone_hz + channel.tone_drift_hz_per_s * t
@@ -3872,7 +3911,7 @@ class SynthGenerator:
 - [ ] **Step 7: Chạy test, xác nhận đạt**
 
 Run: `uv run pytest tests/unit/test_data_synth.py -v`
-Expected: `16 passed`. Nếu `test_generator_fixed_params_decodable_by_baseline` trượt vì `channel.clean` có lọc băng làm mềm sườn, in `hyp` và `ex.text` để so; nếu chỉ lệch khoảng cách từ thì kiểm tra lại `split_gap_threshold`.
+Expected: `17 passed`. Nếu `test_generator_fixed_params_decodable_by_baseline` trượt vì `channel.clean` có lọc băng làm mềm sườn, in `hyp` và `ex.text` để so; nếu chỉ lệch khoảng cách từ thì kiểm tra lại `split_gap_threshold`.
 
 - [ ] **Step 8: Commit**
 

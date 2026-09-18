@@ -12,14 +12,23 @@ from morsedesk.data.channel import (
     ChannelParams, apply_channel, ffmpeg_available, sample_channel_params,
 )
 from morsedesk.data.keyer import KeyerParams, apply_keyer, machine, sample_keyer_params
-from morsedesk.data.text import TextSampler
+from morsedesk.data.text import BUILTIN_WORDS, TextSampler
 from morsedesk.encode.synth import elements_to_audio, tone_power
 from morsedesk.encode.text import text_to_tokens
-from morsedesk.encode.timing import elements_to_segments, tokens_to_elements, total_seconds
+from morsedesk.encode.timing import Element, elements_to_segments, tokens_to_elements, total_seconds
 from morsedesk.lm.profile import Profile, load_profile
 from morsedesk.model.vocab import SPACE, VOCAB
 
 AMPLITUDE = 0.8
+
+
+def rescale_elements(elements: list[Element], target_seconds: float) -> list[Element]:
+    """Co giãn đều mọi phần tử để tổng thời lượng bằng target_seconds (giữ nguyên hình dạng jitter/drift)."""
+    total = total_seconds(elements)
+    if total <= 0 or target_seconds <= 0:
+        return elements
+    k = target_seconds / total
+    return [Element(e.on, e.duration * k) for e in elements]
 
 
 @dataclass
@@ -73,7 +82,7 @@ class SynthGenerator:
         while self.tokens_duration(tokens, keyer) > self.cfg.max_seconds and SPACE in tokens:
             tokens = tokens[: len(tokens) - 1 - tokens[::-1].index(SPACE)]
         if not tokens or self.tokens_duration(tokens, keyer) > self.cfg.max_seconds:
-            tokens = text_to_tokens("TEST", self.profiles["en"])
+            tokens = text_to_tokens(BUILTIN_WORDS[profile.id][0], profile)
         return tokens
 
     def _random_morse(self, n: int, f0: float, rng: np.random.Generator) -> np.ndarray:
@@ -102,7 +111,8 @@ class SynthGenerator:
 
         target = float(rng.uniform(self.cfg.min_seconds, self.cfg.max_seconds))
         tokens = self._sample_tokens(profile, keyer, rng, target)
-        elements = apply_keyer(tokens_to_elements(tokens, keyer.timing()), keyer, rng)
+        nominal = tokens_to_elements(tokens, keyer.timing())
+        elements = rescale_elements(apply_keyer(nominal, keyer, rng), total_seconds(nominal))
         n_sig = elements_to_segments(elements, SAMPLE_RATE)[-1][2]
         t = np.arange(n_sig) / SAMPLE_RATE
         freq = channel.tone_hz + channel.tone_drift_hz_per_s * t

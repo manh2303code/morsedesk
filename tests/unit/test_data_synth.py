@@ -49,6 +49,18 @@ def test_sampler_corpus(tmp_path, profiles):
     assert "CORPUS" in s or "LINE" in s
 
 
+def test_sampler_fallback_is_profile_native(tmp_path, profiles):
+    corpus = tmp_path / "ru.txt"
+    corpus.write_text("ONLY LATIN LINE\n", encoding="utf-8")   # không mã hóa được trong profile ru
+    ts = TextSampler(profiles, corpus={"ru": corpus}, ham_ratio=0.0, random_ratio=0.0)
+    s = ts.sample("ru", np.random.default_rng(0))
+    assert s == BUILTIN_WORDS["ru"][0]
+    assert text_to_tokens(s, profiles["ru"])                     # strict không lỗi
+    gen = SynthGenerator(SynthConfig(mp3_enabled=False, corpus={"ru": corpus}))
+    ex = gen.generate(3, profile_id="ru")
+    assert ex.text and ex.profile_id == "ru"
+
+
 # ---- keyer ----
 
 def test_sample_keyer_ranges():
@@ -133,8 +145,25 @@ def test_generator_reproducible_and_valid():
     assert a.tokens[0] != SPACE and a.tokens[-1] != SPACE
     assert all(0 <= i < len(VOCAB) for i in a.labels)
     assert all(VOCAB.token(i) == t for i, t in zip(a.labels, a.tokens))
-    assert 4.0 <= a.seconds <= 12.0 + 1.6 + 0.5
+    assert 4.0 <= a.seconds <= 12.0 + 1.6 + 1e-6
     assert a.profile_id in ("en", "ru", "kk-cyrl-ru")
+
+
+def test_generator_duration_bounds_over_many_seeds():
+    gen = SynthGenerator(SynthConfig(mp3_enabled=False))
+    n = 200
+    within_max = 0
+    for seed in range(1000, 1000 + n):
+        ex = gen.generate(seed)
+        signal_s = ex.seconds - 0.0  # gồm cả đệm 0.2–0.8 s mỗi đầu
+        assert ex.seconds >= 4.0, (seed, ex.seconds)
+        assert ex.seconds <= 12.0 * 1.5 + 1.6, (seed, ex.seconds)
+        within_max += ex.seconds <= 12.0 + 1.6 + 1e-6
+    # một từ đơn rất dài ở tốc độ chậm có thể vượt trần; phải hiếm
+    assert within_max >= 0.97 * n, within_max
+    for seed in (861, 2462):
+        ex = gen.generate(seed)
+        assert 4.0 <= ex.seconds <= 12.0 * 1.5 + 1.6, (seed, ex.seconds)
 
 
 def test_generator_different_seeds_differ():

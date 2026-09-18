@@ -118,4 +118,4 @@ class TextSampler:
         else:
             raw = self._words(profile_id, profile, rng, n)
         cleaned = profile.render(text_to_tokens(raw, profile, strict=False)).strip()
-        return cleaned or "TEST"
+        return cleaned or BUILTIN_WORDS[profile_id][0]
