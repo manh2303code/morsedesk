@@ -1,0 +1,95 @@
+import numpy as np
+
+from morsedesk.dsp.baseline import (
+    BaselineDecoder,
+    candidate_units,
+    run_lengths,
+    split_gap_threshold,
+)
+from morsedesk.encode.synth import add_noise
+from morsedesk.lm.profile import load_profile
+from morsedesk.metrics import cer
+from morsedesk.model.vocab import SPACE
+from tests.helpers import make_morse
+
+
+def _decode(text, profile_id="en", **kw):
+    x, _ = make_morse(text, profile_id=profile_id, **kw)
+    res, est = BaselineDecoder().decode_audio(x)
+    return load_profile(profile_id).render(res.tokens), res, est
+
+
+def test_run_lengths():
+    mask = np.array([0, 0, 1, 1, 1, 0, 1, 0, 0], dtype=bool)
+    assert run_lengths(mask) == [(False, 0, 2), (True, 2, 5), (False, 5, 6), (True, 6, 7), (False, 7, 9)]
+    assert run_lengths(np.zeros(0, dtype=bool)) == []
+
+
+def test_candidate_units_two_clusters():
+    on = np.array([12, 11, 13, 36, 35, 37, 12])
+    cands = candidate_units(on)
+    assert any(abs(c - 12) < 1.5 for c in cands)
+
+
+def test_split_gap_threshold_standard_and_farnsworth():
+    gaps = np.array([3.0, 3.1, 2.9, 7.0, 7.2])
+    thr = split_gap_threshold(gaps)
+    assert 3.2 < thr < 6.8
+    far = np.array([12.9, 13.0, 30.0, 29.5])
+    thr2 = split_gap_threshold(far)
+    assert 13.5 < thr2 < 29.0
+    assert split_gap_threshold(np.array([3.0, 3.1, 3.0])) > 3.1   # một cụm -> tất cả là giữa chữ
+
+
+def test_clean_20wpm_english():
+    text = "CQ CQ DE R1ABC K"
+    out, res, est = _decode(text, wpm=20)
+    assert out == text
+    assert abs(res.wpm - 20) < 2.0
+    assert est.has_signal
+
+
+def test_clean_russian_15wpm():
+    text = "ПРИВЕТ МИР"
+    out, _, _ = _decode(text, profile_id="ru", wpm=15)
+    assert out == text
+
+
+def test_fast_40wpm():
+    text = "THE QUICK BROWN FOX"
+    out, res, _ = _decode(text, wpm=40)
+    assert out == text
+    assert abs(res.wpm - 40) < 4.0
+
+
+def test_slow_5wpm():
+    text = "SOS SOS"
+    out, _, _ = _decode(text, wpm=5)
+    assert out == text
+
+
+def test_farnsworth_18_8():
+    text = "CQ DE K1ABC"
+    out, _, _ = _decode(text, wpm=18, farnsworth_wpm=8)
+    assert out == text
+
+
+def test_noisy_25wpm_10db():
+    text = "CQ CQ DE R1ABC R1ABC PSE K"
+    out, _, _ = _decode(text, wpm=25, snr_db=10.0, seed=11)
+    assert cer(text, out) <= 0.05
+
+
+def test_noise_only_returns_nothing():
+    rng = np.random.default_rng(3)
+    x = add_noise(np.zeros(8000 * 4, dtype=np.float32), 0.0, 0.32, rng=rng)
+    res, est = BaselineDecoder().decode_audio(x)
+    assert not est.has_signal
+    assert res.symbols == []
+
+
+def test_symbols_have_frames_and_no_trailing_space():
+    _, res, _ = _decode("AB CD", wpm=20)
+    assert res.symbols[-1].token != SPACE
+    for a, b in zip(res.symbols, res.symbols[1:]):
+        assert a.end_frame <= b.start_frame
