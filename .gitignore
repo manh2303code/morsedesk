@@ -1,5 +1,7 @@
 # dữ liệu test có bản quyền, không commit
 testdata/private/
+testdata/generated/
+bench_results/
 
 # build
 build/
