@@ -48,6 +48,15 @@ def build_parser() -> argparse.ArgumentParser:
     dec.add_argument("--json", action="store_true")
 
     sub.add_parser("devices", help="liệt kê thiết bị âm thanh")
+
+    b = sub.add_parser("bench", help="đo CER/WER trên manifest JSONL")
+    b.add_argument("--manifest", type=Path, required=True)
+    b.add_argument("--engine", default="baseline", choices=["baseline", "onnx"])
+    b.add_argument("--model", type=Path, default=Path("models/acoustic.onnx"))
+    b.add_argument("--out-dir", type=Path, default=Path("bench_results"))
+    b.add_argument("--limit", type=int, default=None)
+    b.add_argument("--gate", action="store_true", help="kiểm tra vùng SNR>=0, 10-35 WPM")
+    b.add_argument("--max-cer", type=float, default=0.02)
     return p
 
 
@@ -89,10 +98,18 @@ def cmd_devices(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_bench(a: argparse.Namespace) -> int:
+    from morsedesk.bench import run
+
+    model = a.model if a.engine == "onnx" else None
+    _, ok = run(a.manifest, a.engine, model, a.out_dir, a.limit, a.gate, a.max_cer)
+    return 0 if ok else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     _force_utf8_streams()
     a = build_parser().parse_args(argv)
-    return {"encode": cmd_encode, "decode": cmd_decode, "devices": cmd_devices}[a.cmd](a)
+    return {"encode": cmd_encode, "decode": cmd_decode, "devices": cmd_devices, "bench": cmd_bench}[a.cmd](a)
 
 
 if __name__ == "__main__":
