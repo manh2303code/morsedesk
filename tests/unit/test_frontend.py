@@ -68,3 +68,27 @@ def test_derivative_column_is_diff_of_agc():
     feats = compute_features(x, 700.0)
     d = np.diff(feats[:, 0], prepend=feats[0, 0])
     assert np.allclose(feats[:, 1], d, atol=1e-5)
+
+
+def test_short_input_returns_empty_without_warnings():
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        for n in (0, 5, 39):
+            x = np.zeros(n, dtype=np.float32)
+            assert compute_features(x, 700.0).shape == (0, FEAT_DIM)
+            assert mix_envelope(x, 700.0).shape == (0,)
+            assert spectral_bins(x, 700.0).shape == (0, 9)
+
+
+def test_envelope_frames_centered_like_stft():
+    # tone bật từ mẫu 400 đến 800: khung 10 (tâm 400) phải nằm nửa chừng giữa tắt và bật
+    x = np.zeros(1600, dtype=np.float32)
+    t = np.arange(400) / SAMPLE_RATE
+    x[400:800] = 0.8 * np.sin(2 * np.pi * 700.0 * t)
+    env = mix_envelope(x, 700.0)
+    full = env[12:18].mean()
+    assert env[8] < 0.15 * full
+    assert 0.3 * full < env[10] < 0.7 * full
+    assert env[12] > 0.85 * full

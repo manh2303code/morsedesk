@@ -1480,7 +1480,7 @@ def load_audio(path: str | Path, target_sr: int = SAMPLE_RATE) -> tuple[np.ndarr
     path = Path(path)
     try:
         data, sr = sf.read(str(path), dtype="float32", always_2d=True)
-    except (RuntimeError, sf.LibsndfileError) as e:  # pragma: no cover - thông điệp phụ thuộc libsndfile
+    except sf.LibsndfileError as e:
         raise UnsupportedAudio(
             f"không đọc được {path.name}: {e}. Định dạng hỗ trợ: {', '.join(SUPPORTED_EXT)}"
         ) from e
@@ -1811,6 +1811,30 @@ def test_derivative_column_is_diff_of_agc():
     feats = compute_features(x, 700.0)
     d = np.diff(feats[:, 0], prepend=feats[0, 0])
     assert np.allclose(feats[:, 1], d, atol=1e-5)
+
+
+def test_short_input_returns_empty_without_warnings():
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        for n in (0, 5, 39):
+            x = np.zeros(n, dtype=np.float32)
+            assert compute_features(x, 700.0).shape == (0, FEAT_DIM)
+            assert mix_envelope(x, 700.0).shape == (0,)
+            assert spectral_bins(x, 700.0).shape == (0, 9)
+
+
+def test_envelope_frames_centered_like_stft():
+    # tone bật từ mẫu 400 đến 800: khung 10 (tâm 400) phải nằm nửa chừng giữa tắt và bật
+    x = np.zeros(1600, dtype=np.float32)
+    t = np.arange(400) / SAMPLE_RATE
+    x[400:800] = 0.8 * np.sin(2 * np.pi * 700.0 * t)
+    env = mix_envelope(x, 700.0)
+    full = env[12:18].mean()
+    assert env[8] < 0.15 * full
+    assert 0.3 * full < env[10] < 0.7 * full
+    assert env[12] > 0.85 * full
 ```
 
 - [ ] **Step 2: Chạy test, xác nhận thất bại**
@@ -1847,8 +1871,16 @@ class FrontendConfig:
 def mix_envelope(
     x: np.ndarray, f0_hz: float, sample_rate: int = SAMPLE_RATE, lowpass_hz: float = 200.0
 ) -> np.ndarray:
-    """Trộn xuống băng gốc phức tại f0, lọc thấp, |I+jQ|, trung bình mỗi HOP mẫu."""
+    """Trộn xuống băng gốc phức tại f0, lọc thấp, |I+jQ|, trung bình mỗi HOP mẫu.
+
+    Khung t được căn giữa tại mẫu t*HOP, giống stft_power: pad env với HOP//2 mẫu 0
+    ở đầu (và HOP mẫu 0 ở cuối để đủ cho khung cuối) rồi lấy trung bình từng khung
+    HOP mẫu, sao cho khung t phủ [t*HOP - HOP//2, t*HOP + HOP//2).
+    """
     n = len(x)
+    n_frames = n // HOP
+    if n_frames == 0:
+        return np.zeros(0)
     t = np.arange(n) / sample_rate
     lo = np.exp(-2j * np.pi * f0_hz * t)
     y = x.astype(np.float64) * lo
@@ -1856,8 +1888,8 @@ def mix_envelope(
     yi = sosfiltfilt(sos, y.real)
     yq = sosfiltfilt(sos, y.imag)
     env = np.sqrt(yi * yi + yq * yq)
-    n_frames = n // HOP
-    return env[: n_frames * HOP].reshape(n_frames, HOP).mean(axis=1)
+    env_p = np.pad(env, (HOP // 2, HOP))
+    return env_p[: n_frames * HOP].reshape(n_frames, HOP).mean(axis=1)
 
 
 def _ema(v: np.ndarray, alpha: float, init: float) -> np.ndarray:
@@ -1885,6 +1917,9 @@ def agc_log(env: np.ndarray, frame_rate: int = FRAME_RATE, tau_s: float = 1.0) -
 def spectral_bins(
     x: np.ndarray, f0_hz: float, n_bins: int = 9, sample_rate: int = SAMPLE_RATE
 ) -> np.ndarray:
+    n_frames = len(x) // HOP
+    if n_frames == 0:
+        return np.zeros((0, n_bins), dtype=np.float32)
     power, freqs = stft_power(x, sample_rate=sample_rate)
     bin_hz = float(freqs[1] - freqs[0])
     k0 = int(round(f0_hz / bin_hz))
@@ -1903,6 +1938,8 @@ def compute_features(
     cfg: FrontendConfig = FrontendConfig(),
 ) -> np.ndarray:
     n_frames = len(x) // HOP
+    if n_frames == 0:
+        return np.zeros((0, FEAT_DIM), dtype=np.float32)
     env = mix_envelope(x, f0_hz, sample_rate, cfg.lowpass_hz)
     a = agc_log(env, FRAME_RATE, cfg.agc_tau_s)
     d = np.diff(a, prepend=a[0] if len(a) else 0.0)
@@ -1915,7 +1952,7 @@ def compute_features(
 - [ ] **Step 4: Chạy test, xác nhận đạt**
 
 Run: `uv run pytest tests/unit/test_frontend.py -v`
-Expected: `6 passed`
+Expected: `8 passed`
 
 - [ ] **Step 5: Commit**
 

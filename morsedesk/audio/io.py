@@ -39,7 +39,7 @@ def load_audio(path: str | Path, target_sr: int = SAMPLE_RATE) -> tuple[np.ndarr
     path = Path(path)
     try:
         data, sr = sf.read(str(path), dtype="float32", always_2d=True)
-    except (RuntimeError, sf.LibsndfileError) as e:  # pragma: no cover - thông điệp phụ thuộc libsndfile
+    except sf.LibsndfileError as e:
         raise UnsupportedAudio(
             f"không đọc được {path.name}: {e}. Định dạng hỗ trợ: {', '.join(SUPPORTED_EXT)}"
         ) from e
