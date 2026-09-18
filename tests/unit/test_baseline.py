@@ -112,3 +112,16 @@ def test_timing_cost_ignores_boundary_off_runs():
     # đoạn tắt đầu 10u và tắt cuối 2u đều bị bỏ qua -> chi phí 0
     runs = [(False, 0, 100), (True, 100, 110), (False, 110, 140), (True, 140, 170), (False, 170, 190)]
     assert timing_cost(runs, 10.0) == 0.0
+
+
+def test_short_all_dit_message_prefers_plausible_speed():
+    for text in ("HI", "EE E", "SI"):
+        out, res, _ = _decode(text, wpm=20)
+        assert out == text, (text, out)
+        assert abs(res.wpm - 20) < 3.0
+
+
+def test_short_all_dash_message_prefers_plausible_speed():
+    out, res, _ = _decode("TTT", wpm=20)
+    assert out == "TTT", out
+    assert abs(res.wpm - 20) < 3.0

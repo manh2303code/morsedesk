@@ -1,6 +1,8 @@
 """Bộ giải mã DSP thích nghi: thử nhiều cặp (ngưỡng, độ dài dit), chọn cặp khớp timing nhất.
 
-Dùng làm baseline đo lường và fallback khi mô hình nơ-ron kém tin cậy.
+Dùng làm baseline đo lường và fallback khi mô hình nơ-ron kém tin cậy. Khi timing mơ hồ
+(bản tin ngắn không tương phản dot/dash), một prior tốc độ nhẹ quanh SPEED_PRIOR_WPM
+phá thế hòa giữa các giả thuyết (ngưỡng, độ dài dit) có timing_cost gần bằng nhau.
 """
 
 from __future__ import annotations
@@ -17,6 +19,9 @@ from morsedesk.model.vocab import SPACE
 THRESHOLDS = (0.15, 0.25, 0.35, 0.45, 0.55, 0.65)
 IDEAL_ON = np.array([1.0, 3.0])
 IDEAL_OFF = np.array([1.0, 3.0, 7.0])
+
+SPEED_PRIOR_WPM = 20.0       # tốc độ tiên nghiệm khi timing mơ hồ
+SPEED_PRIOR_WEIGHT = 0.01    # nhỏ so với chi phí timing, chỉ phá thế hòa
 
 
 @dataclass
@@ -142,7 +147,7 @@ class BaselineDecoder:
             return BaselineResult([], 0.0, 0.0, float("inf"))
         env = env / (np.percentile(env, 98) + 1e-9)
         env = np.convolve(env, np.ones(3) / 3.0, mode="same")
-        best: tuple[float, float, float, list[tuple[bool, int, int]]] | None = None
+        best: tuple[float, float, float, float, list[tuple[bool, int, int]]] | None = None
         for thr in self.thresholds:
             runs = run_lengths(env > thr)
             on_lengths = np.array([e - s for on, s, e in runs if on])
@@ -150,11 +155,13 @@ class BaselineDecoder:
                 continue
             for unit in candidate_units(on_lengths):
                 cost = timing_cost(runs, unit)
-                if best is None or cost < best[0]:
-                    best = (cost, thr, unit, runs)
+                wpm = 1.2 * FRAME_RATE / unit
+                total = cost + SPEED_PRIOR_WEIGHT * float(np.log(wpm / SPEED_PRIOR_WPM)) ** 2
+                if best is None or total < best[0]:
+                    best = (total, cost, thr, unit, runs)
         if best is None:
             return BaselineResult([], 0.0, 0.0, float("inf"))
-        cost, thr, unit, runs = best
+        _total, cost, thr, unit, runs = best
         return BaselineResult(runs_to_symbols(runs, unit), unit, thr, cost)
 
     def decode_audio(
