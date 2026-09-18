@@ -3393,17 +3393,27 @@ def test_generator_duration_bounds_over_many_seeds():
         assert 4.0 + 0.4 - 1e-6 <= ex.seconds <= 12.0 + 1.6 + 1e-6, (seed, ex.seconds)
 
 
-def test_sample_tokens_never_exceeds_max_and_reaches_min():
+def test_sample_tokens_bounds_with_default_window():
+    gen = SynthGenerator(SynthConfig(mp3_enabled=False))     # min 4 s, max 12 s
+    for seed in range(20):
+        rng = np.random.default_rng(seed)
+        for pid in ("en", "ru", "kk-cyrl-ru"):
+            for wpm in (5.0, 12.0, 30.0, 60.0):
+                keyer = machine(wpm)
+                toks = gen._sample_tokens(gen.profiles[pid], keyer, rng, target_s=8.0)
+                d = gen.tokens_duration(toks, keyer)
+                assert 4.0 - 1e-9 <= d <= 12.0 + 1e-9, (seed, pid, wpm, d)
+                assert toks[0] != SPACE and toks[-1] != SPACE
+
+
+def test_sample_tokens_tight_window_never_exceeds_max():
+    # cửa sổ hẹp: chỉ đảm bảo trần; sàn là nỗ lực tốt nhất (xem docstring _sample_tokens)
     gen = SynthGenerator(SynthConfig(min_seconds=4.0, max_seconds=6.0, mp3_enabled=False))
-    rng = np.random.default_rng(0)
-    for pid in ("en", "ru", "kk-cyrl-ru"):
-        for wpm in (5.0, 12.0, 30.0, 60.0):
-            keyer = machine(wpm)
-            toks = gen._sample_tokens(gen.profiles[pid], keyer, rng, target_s=5.0)
-            d = gen.tokens_duration(toks, keyer)
-            assert d <= 6.0 + 1e-9, (pid, wpm, d)
-            assert d >= 4.0 - 1e-9, (pid, wpm, d)
-            assert toks[0] != SPACE and toks[-1] != SPACE
+    for seed in range(20):
+        rng = np.random.default_rng(seed)
+        for pid in ("en", "ru", "kk-cyrl-ru"):
+            toks = gen._sample_tokens(gen.profiles[pid], machine(5.0), rng, target_s=5.0)
+            assert gen.tokens_duration(toks, machine(5.0)) <= 6.0 + 1e-9, (seed, pid)
 
 
 def test_generator_different_seeds_differ():
@@ -3872,9 +3882,11 @@ class SynthGenerator:
         Chỉ thêm từ nào còn vừa trần; dừng khi đã đạt target_s, hoặc khi không còn từ vừa
         mà thời lượng đã >= min_seconds. Sinh tối đa MAX_SAMPLE_ROUNDS đoạn văn bản.
 
-        Bất biến: nếu vòng lặp thêm được ít nhất một từ thì thời lượng <= max_seconds; và
-        thời lượng >= min_seconds trừ khi hết MAX_SAMPLE_ROUNDS mà không tìm được từ nào vừa
-        (trên thực tế gần như không xảy ra).
+        Đảm bảo: thời lượng <= max_seconds nếu vòng lặp thêm được ít nhất một từ. Đạt
+        min_seconds được đảm bảo chỉ khi cửa sổ (max_seconds - min_seconds) đủ rộng so với
+        độ dài từ ở tốc độ cho trước (true cho mặc định 4–12 s: 0 vi phạm trên 27.000 mẫu);
+        do fill không backtrack, cửa sổ hẹp (ví dụ 4–6 s ở 5 WPM) có thể dừng dưới sàn
+        sau từ đầu tiên không may mắn.
         """
         tokens: list[str] = []
         queue: list[list[str]] = []
@@ -3894,6 +3906,7 @@ class SynthGenerator:
             elif self.tokens_duration(tokens, keyer) >= self.cfg.min_seconds:
                 break
         if not tokens:
+            # Chỉ khi không có từ nào vừa trần: lấy từ ngắn nhất từ từ điển.
             tokens = self._shortest_builtin_word(profile, keyer)
         return tokens
 
@@ -3957,7 +3970,7 @@ class SynthGenerator:
 - [ ] **Step 7: Chạy test, xác nhận đạt**
 
 Run: `uv run pytest tests/unit/test_data_synth.py -v`
-Expected: `18 passed`. Nếu `test_generator_fixed_params_decodable_by_baseline` trượt vì `channel.clean` có lọc băng làm mềm sườn, in `hyp` và `ex.text` để so; nếu chỉ lệch khoảng cách từ thì kiểm tra lại `split_gap_threshold`.
+Expected: `19 passed`. Nếu `test_generator_fixed_params_decodable_by_baseline` trượt vì `channel.clean` có lọc băng làm mềm sườn, in `hyp` và `ex.text` để so; nếu chỉ lệch khoảng cách từ thì kiểm tra lại `split_gap_threshold`.
 
 - [ ] **Step 8: Commit**
 

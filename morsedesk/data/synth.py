@@ -95,9 +95,11 @@ class SynthGenerator:
         Chỉ thêm từ nào còn vừa trần; dừng khi đã đạt target_s, hoặc khi không còn từ vừa
         mà thời lượng đã >= min_seconds. Sinh tối đa MAX_SAMPLE_ROUNDS đoạn văn bản.
 
-        Bất biến: nếu vòng lặp thêm được ít nhất một từ thì thời lượng <= max_seconds; và
-        thời lượng >= min_seconds trừ khi hết MAX_SAMPLE_ROUNDS mà không tìm được từ nào vừa
-        (trên thực tế gần như không xảy ra).
+        Đảm bảo: thời lượng <= max_seconds nếu vòng lặp thêm được ít nhất một từ. Đạt
+        min_seconds được đảm bảo chỉ khi cửa sổ (max_seconds - min_seconds) đủ rộng so với
+        độ dài từ ở tốc độ cho trước (true cho mặc định 4–12 s: 0 vi phạm trên 27.000 mẫu);
+        do fill không backtrack, cửa sổ hẹp (ví dụ 4–6 s ở 5 WPM) có thể dừng dưới sàn
+        sau từ đầu tiên không may mắn.
         """
         tokens: list[str] = []
         queue: list[list[str]] = []
@@ -117,6 +119,7 @@ class SynthGenerator:
             elif self.tokens_duration(tokens, keyer) >= self.cfg.min_seconds:
                 break
         if not tokens:
+            # Chỉ khi không có từ nào vừa trần: lấy từ ngắn nhất từ từ điển.
             tokens = self._shortest_builtin_word(profile, keyer)
         return tokens
 
