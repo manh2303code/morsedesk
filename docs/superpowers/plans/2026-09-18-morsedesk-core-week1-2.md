@@ -2079,6 +2079,7 @@ Thuật toán (theo ý tưởng ggmorse, MIT, viết lại): chuẩn hóa envelo
 
 ```python
 import numpy as np
+import pytest
 
 from morsedesk.dsp.baseline import (
     BaselineDecoder,
@@ -2194,17 +2195,33 @@ def test_timing_cost_ignores_boundary_off_runs():
     assert timing_cost(runs, 10.0) == 0.0
 
 
-def test_short_all_dit_message_prefers_plausible_speed():
+@pytest.mark.parametrize("wpm", [5, 8, 12, 20, 35, 50])
+def test_short_all_dit_message_across_speeds(wpm):
     for text in ("HI", "EE E", "SI"):
-        out, res, _ = _decode(text, wpm=20)
-        assert out == text, (text, out)
-        assert abs(res.wpm - 20) < 3.0
+        out, res, _ = _decode(text, wpm=wpm)
+        assert out == text, (wpm, text, out)
+        assert abs(res.wpm - wpm) < 0.15 * wpm + 1.0, (wpm, res.wpm)
 
 
-def test_short_all_dash_message_prefers_plausible_speed():
-    out, res, _ = _decode("TTT", wpm=20)
-    assert out == "TTT", out
-    assert abs(res.wpm - 20) < 3.0
+@pytest.mark.parametrize("wpm", [12, 20, 35])
+def test_short_all_dash_message_mid_speeds(wpm):
+    # "TTT" ở 60 WPM trùng hoàn toàn với "S" ở 20 WPM (không có manh mối), nên chỉ kiểm ở dải giữa
+    out, res, _ = _decode("TTT", wpm=wpm)
+    assert out == "TTT", (wpm, out)
+    assert abs(res.wpm - wpm) < 0.15 * wpm + 1.0
+
+
+def test_timing_cost_soft_cap_on_long_off_runs():
+    from morsedesk.dsp.baseline import OFF_LONG_CAP_UNITS, timing_cost
+
+    # bật 1u, tắt 9u, bật 1u: khoảng tắt 9u phải bị phạt (không còn kẹp về 7)
+    runs = [(True, 0, 10), (False, 10, 100), (True, 100, 110)]
+    assert timing_cost(runs, 10.0) > 0.0
+    # tắt 30u và tắt 12u phải cho cùng chi phí (kẹp mềm tại OFF_LONG_CAP_UNITS)
+    runs_30 = [(True, 0, 10), (False, 10, 310), (True, 310, 320)]
+    runs_12 = [(True, 0, 10), (False, 10, 130), (True, 130, 140)]
+    assert abs(timing_cost(runs_30, 10.0) - timing_cost(runs_12, 10.0)) < 1e-12
+    assert OFF_LONG_CAP_UNITS == 12.0
 ```
 
 - [ ] **Step 2: Chạy test, xác nhận thất bại**
@@ -2238,7 +2255,12 @@ IDEAL_ON = np.array([1.0, 3.0])
 IDEAL_OFF = np.array([1.0, 3.0, 7.0])
 
 SPEED_PRIOR_WPM = 20.0       # tốc độ tiên nghiệm khi timing mơ hồ
-SPEED_PRIOR_WEIGHT = 0.01    # nhỏ so với chi phí timing, chỉ phá thế hòa
+# Đo thực nghiệm: cửa sổ khả thi để "HI"/"SI" đúng ở 5-8 WPM (wpm giả thuyết đúng cách xa 20)
+# và "SI" đúng ở 50 WPM (giả thuyết sai có cost thô thấp hơn chút) là khoảng [0.0015, 0.0025];
+# 0.01 (giá trị cũ) đủ lớn để prior lấn át chênh lệch timing_cost thật ở tốc độ thấp.
+SPEED_PRIOR_WEIGHT = 0.002   # nhỏ so với chi phí timing, chỉ phá thế hòa
+
+OFF_LONG_CAP_UNITS = 12.0   # khoảng tắt dài hơn 12 dit coi như "12": chỉ phạt nhẹ, không loại giả thuyết
 
 
 @dataclass
@@ -2298,7 +2320,9 @@ def candidate_units(on_lengths: np.ndarray) -> list[float]:
 
 
 def timing_cost(runs: list[tuple[bool, int, int]], unit: float) -> float:
-    """Trung bình bình phương log-tỉ lệ so với mốc lý tưởng gần nhất; bỏ đoạn tắt đầu/cuối."""
+    """Trung bình bình phương log-tỉ lệ so với mốc lý tưởng gần nhất (bật: 1/3; tắt <=7u: 1/3/7);
+    đoạn tắt dài hơn 7u dùng kẹp mềm (so với OFF_LONG_CAP_UNITS) thay vì kẹp cứng về 7, để vẫn phạt
+    khoảng tắt quá dài mà không loại hẳn giả thuyết; bỏ đoạn tắt đầu/cuối."""
     inner = list(runs)
     if inner and not inner[0][0]:
         inner = inner[1:]
@@ -2307,10 +2331,12 @@ def timing_cost(runs: list[tuple[bool, int, int]], unit: float) -> float:
     costs = []
     for on, s, e in inner:
         r = (e - s) / unit
-        if not on:
-            r = min(r, 7.0)
-        ideals = IDEAL_ON if on else IDEAL_OFF
-        costs.append(float(np.min(np.abs(np.log(r) - np.log(ideals))) ** 2))
+        if on:
+            costs.append(float(np.min(np.abs(np.log(r) - np.log(IDEAL_ON))) ** 2))
+        elif r <= 7.0:
+            costs.append(float(np.min(np.abs(np.log(r) - np.log(IDEAL_OFF))) ** 2))
+        else:
+            costs.append(float(np.log(min(r, OFF_LONG_CAP_UNITS) / 7.0) ** 2))
     return float(np.mean(costs)) if costs else float("inf")
 
 
@@ -2394,7 +2420,7 @@ class BaselineDecoder:
 - [ ] **Step 4: Chạy test, xác nhận đạt**
 
 Run: `uv run pytest tests/unit/test_baseline.py -v`
-Expected: `15 passed`. Nếu `test_noisy_25wpm_10db` trượt, in `res.threshold`, `res.unit_frames` và thử thêm ngưỡng `0.75` vào `THRESHOLDS`; không nới ngưỡng CER của test.
+Expected: `23 passed`. Nếu `test_noisy_25wpm_10db` trượt, in `res.threshold`, `res.unit_frames` và thử thêm ngưỡng `0.75` vào `THRESHOLDS`; không nới ngưỡng CER của test.
 
 - [ ] **Step 5: Commit**
 
@@ -2514,6 +2540,21 @@ def test_cli_encode_lenient(tmp_path, capsys):
 def test_cli_encode_strict_error(capsys):
     assert main(["encode", "ABӘ", "--profile", "en"]) == 2
     assert "không hỗ trợ" in capsys.readouterr().err
+
+
+def test_cli_forces_utf8_streams(monkeypatch, tmp_path):
+    import io
+    import sys
+
+    from morsedesk.audio.io import save_audio
+
+    wav = tmp_path / "ru.wav"
+    save_audio(wav, Encoder("ru").to_audio("ПРИВЕТ", wpm=20), 8000)
+    buf = io.BytesIO()
+    monkeypatch.setattr(sys, "stdout", io.TextIOWrapper(buf, encoding="cp1252", write_through=True))
+    assert main(["decode", str(wav), "--profile", "ru"]) == 0
+    sys.stdout.flush()
+    assert "ПРИВЕТ" in buf.getvalue().decode("utf-8")
 ```
 
 - [ ] **Step 2: Chạy test, xác nhận thất bại**
@@ -2703,6 +2744,16 @@ from morsedesk.encode.text import UnsupportedCharacter
 from morsedesk.lm.profile import list_profiles
 
 
+def _force_utf8_streams() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):
+                pass
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="morsedesk", description="Giải mã và tạo mã Morse offline")
     p.add_argument("--version", action="version", version=__version__)
@@ -2770,6 +2821,7 @@ def cmd_devices(a: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8_streams()
     a = build_parser().parse_args(argv)
     return {"encode": cmd_encode, "decode": cmd_decode, "devices": cmd_devices}[a.cmd](a)
 
@@ -2781,7 +2833,7 @@ if __name__ == "__main__":
 - [ ] **Step 5: Chạy test, xác nhận đạt**
 
 Run: `uv run pytest tests/unit/test_api_cli.py -v`
-Expected: `10 passed`
+Expected: `11 passed`
 
 Run thử tay: `uv run morsedesk encode "СӘЛЕМ ӘЛЕМ" --profile kk-cyrl-ru --wpm 18 --out testdata/generated/kk.wav` rồi `uv run morsedesk decode testdata/generated/kk.wav --profile kk-cyrl-ru`
 Expected: in `САЛЕМ АЛЕМ` (chưa có LM nên chữ Kazakh chưa khôi phục). Tạo thư mục `testdata/generated` trước nếu chưa có.

@@ -21,7 +21,12 @@ IDEAL_ON = np.array([1.0, 3.0])
 IDEAL_OFF = np.array([1.0, 3.0, 7.0])
 
 SPEED_PRIOR_WPM = 20.0       # tốc độ tiên nghiệm khi timing mơ hồ
-SPEED_PRIOR_WEIGHT = 0.01    # nhỏ so với chi phí timing, chỉ phá thế hòa
+# Đo thực nghiệm: cửa sổ khả thi để "HI"/"SI" đúng ở 5-8 WPM (wpm giả thuyết đúng cách xa 20)
+# và "SI" đúng ở 50 WPM (giả thuyết sai có cost thô thấp hơn chút) là khoảng [0.0015, 0.0025];
+# 0.01 (giá trị cũ) đủ lớn để prior lấn át chênh lệch timing_cost thật ở tốc độ thấp.
+SPEED_PRIOR_WEIGHT = 0.002   # nhỏ so với chi phí timing, chỉ phá thế hòa
+
+OFF_LONG_CAP_UNITS = 12.0   # khoảng tắt dài hơn 12 dit coi như "12": chỉ phạt nhẹ, không loại giả thuyết
 
 
 @dataclass
@@ -81,7 +86,9 @@ def candidate_units(on_lengths: np.ndarray) -> list[float]:
 
 
 def timing_cost(runs: list[tuple[bool, int, int]], unit: float) -> float:
-    """Trung bình bình phương log-tỉ lệ so với mốc lý tưởng gần nhất; bỏ đoạn tắt đầu/cuối."""
+    """Trung bình bình phương log-tỉ lệ so với mốc lý tưởng gần nhất (bật: 1/3; tắt <=7u: 1/3/7);
+    đoạn tắt dài hơn 7u dùng kẹp mềm (so với OFF_LONG_CAP_UNITS) thay vì kẹp cứng về 7, để vẫn phạt
+    khoảng tắt quá dài mà không loại hẳn giả thuyết; bỏ đoạn tắt đầu/cuối."""
     inner = list(runs)
     if inner and not inner[0][0]:
         inner = inner[1:]
@@ -90,10 +97,12 @@ def timing_cost(runs: list[tuple[bool, int, int]], unit: float) -> float:
     costs = []
     for on, s, e in inner:
         r = (e - s) / unit
-        if not on:
-            r = min(r, 7.0)
-        ideals = IDEAL_ON if on else IDEAL_OFF
-        costs.append(float(np.min(np.abs(np.log(r) - np.log(ideals))) ** 2))
+        if on:
+            costs.append(float(np.min(np.abs(np.log(r) - np.log(IDEAL_ON))) ** 2))
+        elif r <= 7.0:
+            costs.append(float(np.min(np.abs(np.log(r) - np.log(IDEAL_OFF))) ** 2))
+        else:
+            costs.append(float(np.log(min(r, OFF_LONG_CAP_UNITS) / 7.0) ** 2))
     return float(np.mean(costs)) if costs else float("inf")
 
 

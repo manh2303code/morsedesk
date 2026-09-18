@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from morsedesk.dsp.baseline import (
     BaselineDecoder,
@@ -114,14 +115,30 @@ def test_timing_cost_ignores_boundary_off_runs():
     assert timing_cost(runs, 10.0) == 0.0
 
 
-def test_short_all_dit_message_prefers_plausible_speed():
+@pytest.mark.parametrize("wpm", [5, 8, 12, 20, 35, 50])
+def test_short_all_dit_message_across_speeds(wpm):
     for text in ("HI", "EE E", "SI"):
-        out, res, _ = _decode(text, wpm=20)
-        assert out == text, (text, out)
-        assert abs(res.wpm - 20) < 3.0
+        out, res, _ = _decode(text, wpm=wpm)
+        assert out == text, (wpm, text, out)
+        assert abs(res.wpm - wpm) < 0.15 * wpm + 1.0, (wpm, res.wpm)
 
 
-def test_short_all_dash_message_prefers_plausible_speed():
-    out, res, _ = _decode("TTT", wpm=20)
-    assert out == "TTT", out
-    assert abs(res.wpm - 20) < 3.0
+@pytest.mark.parametrize("wpm", [12, 20, 35])
+def test_short_all_dash_message_mid_speeds(wpm):
+    # "TTT" ở 60 WPM trùng hoàn toàn với "S" ở 20 WPM (không có manh mối), nên chỉ kiểm ở dải giữa
+    out, res, _ = _decode("TTT", wpm=wpm)
+    assert out == "TTT", (wpm, out)
+    assert abs(res.wpm - wpm) < 0.15 * wpm + 1.0
+
+
+def test_timing_cost_soft_cap_on_long_off_runs():
+    from morsedesk.dsp.baseline import OFF_LONG_CAP_UNITS, timing_cost
+
+    # bật 1u, tắt 9u, bật 1u: khoảng tắt 9u phải bị phạt (không còn kẹp về 7)
+    runs = [(True, 0, 10), (False, 10, 100), (True, 100, 110)]
+    assert timing_cost(runs, 10.0) > 0.0
+    # tắt 30u và tắt 12u phải cho cùng chi phí (kẹp mềm tại OFF_LONG_CAP_UNITS)
+    runs_30 = [(True, 0, 10), (False, 10, 310), (True, 310, 320)]
+    runs_12 = [(True, 0, 10), (False, 10, 130), (True, 130, 140)]
+    assert abs(timing_cost(runs_30, 10.0) - timing_cost(runs_12, 10.0)) < 1e-12
+    assert OFF_LONG_CAP_UNITS == 12.0

@@ -86,3 +86,18 @@ def test_cli_encode_lenient(tmp_path, capsys):
 def test_cli_encode_strict_error(capsys):
     assert main(["encode", "ABӘ", "--profile", "en"]) == 2
     assert "không hỗ trợ" in capsys.readouterr().err
+
+
+def test_cli_forces_utf8_streams(monkeypatch, tmp_path):
+    import io
+    import sys
+
+    from morsedesk.audio.io import save_audio
+
+    wav = tmp_path / "ru.wav"
+    save_audio(wav, Encoder("ru").to_audio("ПРИВЕТ", wpm=20), 8000)
+    buf = io.BytesIO()
+    monkeypatch.setattr(sys, "stdout", io.TextIOWrapper(buf, encoding="cp1252", write_through=True))
+    assert main(["decode", str(wav), "--profile", "ru"]) == 0
+    sys.stdout.flush()
+    assert "ПРИВЕТ" in buf.getvalue().decode("utf-8")
