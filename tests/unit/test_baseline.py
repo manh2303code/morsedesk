@@ -131,6 +131,13 @@ def test_short_all_dash_message_mid_speeds(wpm):
     assert abs(res.wpm - wpm) < 0.15 * wpm + 1.0
 
 
+@pytest.mark.xfail(reason="giới hạn đã biết: dit 4-6 khung ở tốc độ cao, mất manh mối 9 vs 7", strict=False)
+@pytest.mark.parametrize("wpm,text", [(40, "SI"), (48, "HI"), (60, "HI"), (60, "SI")])
+def test_short_low_contrast_high_speed_known_limitation(wpm, text):
+    out, _, _ = _decode(text, wpm=wpm)
+    assert out == text, (wpm, text, out)
+
+
 def test_timing_cost_soft_cap_on_long_off_runs():
     from morsedesk.dsp.baseline import OFF_LONG_CAP_UNITS, timing_cost
 

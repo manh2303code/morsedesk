@@ -2071,7 +2071,7 @@ git commit -m "feat(metrics): CER và WER" -m "Co-Authored-By: Claude Fable 5.1 
 - Consumes: `estimate_tone`, `ToneEstimate` (Task 7); `mix_envelope` (Task 8); `Profile.render` (Task 3); `SPACE`, `VOCAB`; `cer` (Task 9).
 - Produces: `baseline.Symbol(token: str, start_frame: int, end_frame: int)` (token là mẫu, có thể không thuộc từ vựng, hoặc `SPACE`); `baseline.BaselineResult(symbols: list[Symbol], unit_frames: float, threshold: float, cost: float)` với thuộc tính `tokens: list[str]`, `wpm: float`; `baseline.run_lengths(mask) -> list[tuple[bool, int, int]]`; `baseline.candidate_units(on_lengths) -> list[float]`; `baseline.timing_cost(runs, unit) -> float`; `baseline.split_gap_threshold(gap_units: np.ndarray) -> float`; `baseline.runs_to_symbols(runs, unit) -> list[Symbol]`; lớp `baseline.BaselineDecoder(thresholds=THRESHOLDS)` với `decode_envelope(env) -> BaselineResult` và `decode_audio(x, sample_rate=SAMPLE_RATE) -> tuple[BaselineResult, ToneEstimate]`.
 
-Thuật toán (theo ý tưởng ggmorse, MIT, viết lại): chuẩn hóa envelope theo phân vị 98, làm mượt 3 khung; với mỗi ngưỡng trong `THRESHOLDS = (0.15, 0.25, 0.35, 0.45, 0.55, 0.65)` lấy chuỗi bật/tắt; sinh ứng viên độ dài dit từ 2-means trên log độ dài đoạn bật; chi phí = trung bình bình phương log-tỉ lệ so với mốc lý tưởng gần nhất (bật 1 hay 3; tắt 1, 3, 7, tắt dài kẹp về 7); chọn cặp ngưỡng và dit chi phí thấp nhất. Ranh giới chữ/từ: khoảng tắt < 2 dit là trong chữ; các khoảng ≥ 2 dit chia hai cụm bằng 2-means trên log để tự thích nghi Farnsworth (nếu tỉ lệ max/min < 1.8 thì tất cả là khoảng giữa chữ).
+Thuật toán (theo ý tưởng ggmorse, MIT, viết lại): chuẩn hóa envelope theo phân vị 98, làm mượt 3 khung; với mỗi ngưỡng trong `THRESHOLDS = (0.15, 0.25, 0.35, 0.45, 0.55, 0.65)` lấy chuỗi bật/tắt; sinh ứng viên độ dài dit từ 2-means trên log độ dài đoạn bật; chi phí = trung bình bình phương log-tỉ lệ so với mốc lý tưởng gần nhất (bật 1 hay 3; tắt 1, 3, 7, tắt dài kẹp về 7); chọn cặp ngưỡng và dit chi phí thấp nhất. Ranh giới chữ/từ: khoảng tắt < 2 dit là trong chữ; các khoảng ≥ 2 dit chia hai cụm bằng 2-means trên log để tự thích nghi Farnsworth (nếu tỉ lệ max/min < 1.8 thì tất cả là khoảng giữa chữ). Giới hạn đã biết: bản tin ngắn không tương phản chấm/gạch có thể bị đọc thành alias 3× ở ngoài dải ~5–35 WPM; engine ONNX là bộ giải mã chính.
 
 - [ ] **Step 1: Viết test**
 
@@ -2209,6 +2209,13 @@ def test_short_all_dash_message_mid_speeds(wpm):
     out, res, _ = _decode("TTT", wpm=wpm)
     assert out == "TTT", (wpm, out)
     assert abs(res.wpm - wpm) < 0.15 * wpm + 1.0
+
+
+@pytest.mark.xfail(reason="giới hạn đã biết: dit 4-6 khung ở tốc độ cao, mất manh mối 9 vs 7", strict=False)
+@pytest.mark.parametrize("wpm,text", [(40, "SI"), (48, "HI"), (60, "HI"), (60, "SI")])
+def test_short_low_contrast_high_speed_known_limitation(wpm, text):
+    out, _, _ = _decode(text, wpm=wpm)
+    assert out == text, (wpm, text, out)
 
 
 def test_timing_cost_soft_cap_on_long_off_runs():

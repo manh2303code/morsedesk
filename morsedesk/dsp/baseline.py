@@ -3,6 +3,12 @@
 Dùng làm baseline đo lường và fallback khi mô hình nơ-ron kém tin cậy. Khi timing mơ hồ
 (bản tin ngắn không tương phản dot/dash), một prior tốc độ nhẹ quanh SPEED_PRIOR_WPM
 phá thế hòa giữa các giả thuyết (ngưỡng, độ dài dit) có timing_cost gần bằng nhau.
+
+Giới hạn đã biết: bản tin ngắn không tương phản chấm/gạch ("HI", "SI", "TTT") có thể bị
+đọc thành alias 3× ở ngoài dải ~5–35 WPM (quan sát thất bại ở 40, 48, 60 WPM cho HI/SI,
+và "TTT" ở 60 WPM trùng hoàn toàn với "S" ở 20 WPM không có manh mối); engine ONNX là
+bộ giải mã chính. Cải tiến tương lai có thể: nội suy sub-frame của ngưỡng crossing trong
+`run_lengths` để giảm nhiễu lượng tử hóa.
 """
 
 from __future__ import annotations
