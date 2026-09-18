@@ -151,19 +151,24 @@ def test_generator_reproducible_and_valid():
 
 def test_generator_duration_bounds_over_many_seeds():
     gen = SynthGenerator(SynthConfig(mp3_enabled=False))
-    n = 200
-    within_max = 0
-    for seed in range(1000, 1000 + n):
+    seeds = list(range(1000, 1200)) + [117, 816, 962, 1494, 1794, 1830, 2244, 2324, 2961, 861, 2462]
+    for seed in seeds:
         ex = gen.generate(seed)
-        signal_s = ex.seconds - 0.0  # gồm cả đệm 0.2–0.8 s mỗi đầu
-        assert ex.seconds >= 4.0, (seed, ex.seconds)
-        assert ex.seconds <= 12.0 * 1.5 + 1.6, (seed, ex.seconds)
-        within_max += ex.seconds <= 12.0 + 1.6 + 1e-6
-    # một từ đơn rất dài ở tốc độ chậm có thể vượt trần; phải hiếm
-    assert within_max >= 0.97 * n, within_max
-    for seed in (861, 2462):
-        ex = gen.generate(seed)
-        assert 4.0 <= ex.seconds <= 12.0 * 1.5 + 1.6, (seed, ex.seconds)
+        # tín hiệu trong [4, 12] s cộng đệm 0.2–0.8 s mỗi đầu
+        assert 4.0 + 0.4 - 1e-6 <= ex.seconds <= 12.0 + 1.6 + 1e-6, (seed, ex.seconds)
+
+
+def test_sample_tokens_never_exceeds_max_and_reaches_min():
+    gen = SynthGenerator(SynthConfig(min_seconds=4.0, max_seconds=6.0, mp3_enabled=False))
+    rng = np.random.default_rng(0)
+    for pid in ("en", "ru", "kk-cyrl-ru"):
+        for wpm in (5.0, 12.0, 30.0, 60.0):
+            keyer = machine(wpm)
+            toks = gen._sample_tokens(gen.profiles[pid], keyer, rng, target_s=5.0)
+            d = gen.tokens_duration(toks, keyer)
+            assert d <= 6.0 + 1e-9, (pid, wpm, d)
+            assert d >= 4.0 - 1e-9, (pid, wpm, d)
+            assert toks[0] != SPACE and toks[-1] != SPACE
 
 
 def test_generator_different_seeds_differ():

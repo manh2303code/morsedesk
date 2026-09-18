@@ -20,6 +20,23 @@ from morsedesk.lm.profile import Profile, load_profile
 from morsedesk.model.vocab import SPACE, VOCAB
 
 AMPLITUDE = 0.8
+MAX_SAMPLE_ROUNDS = 50
+
+
+def split_words(tokens: list[str]) -> list[list[str]]:
+    """Tách danh sách token trên SPACE thành các từ, bỏ qua từ rỗng."""
+    words: list[list[str]] = []
+    current: list[str] = []
+    for tok in tokens:
+        if tok == SPACE:
+            if current:
+                words.append(current)
+            current = []
+        else:
+            current.append(tok)
+    if current:
+        words.append(current)
+    return words
 
 
 def rescale_elements(elements: list[Element], target_seconds: float) -> list[Element]:
@@ -73,17 +90,41 @@ class SynthGenerator:
 
     def _sample_tokens(self, profile: Profile, keyer: KeyerParams, rng: np.random.Generator,
                        target_s: float) -> list[str]:
+        """Ghép từng từ cho tới khi đạt target_s, không bao giờ vượt max_seconds.
+
+        Chỉ thêm từ nào còn vừa trần; dừng khi đã đạt target_s, hoặc khi không còn từ vừa
+        mà thời lượng đã >= min_seconds. Sinh tối đa MAX_SAMPLE_ROUNDS đoạn văn bản.
+
+        Bất biến: nếu vòng lặp thêm được ít nhất một từ thì thời lượng <= max_seconds; và
+        thời lượng >= min_seconds trừ khi hết MAX_SAMPLE_ROUNDS mà không tìm được từ nào vừa
+        (trên thực tế gần như không xảy ra).
+        """
         tokens: list[str] = []
-        while self.tokens_duration(tokens, keyer) < target_s:
-            words = text_to_tokens(self.text.sample(profile.id, rng), profile)
-            if not words:
+        queue: list[list[str]] = []
+        rounds = 0
+        while rounds < MAX_SAMPLE_ROUNDS:
+            if not queue:
+                rounds += 1
+                queue = split_words(text_to_tokens(self.text.sample(profile.id, rng), profile))
                 continue
-            tokens = tokens + ([SPACE] if tokens else []) + words
-        while self.tokens_duration(tokens, keyer) > self.cfg.max_seconds and SPACE in tokens:
-            tokens = tokens[: len(tokens) - 1 - tokens[::-1].index(SPACE)]
-        if not tokens or self.tokens_duration(tokens, keyer) > self.cfg.max_seconds:
-            tokens = text_to_tokens(BUILTIN_WORDS[profile.id][0], profile)
+            word = queue.pop(0)
+            cand = tokens + ([SPACE] if tokens else []) + word
+            d = self.tokens_duration(cand, keyer)
+            if d <= self.cfg.max_seconds:
+                tokens = cand
+                if d >= target_s:
+                    break
+            elif self.tokens_duration(tokens, keyer) >= self.cfg.min_seconds:
+                break
+        if not tokens:
+            tokens = self._shortest_builtin_word(profile, keyer)
         return tokens
+
+    def _shortest_builtin_word(self, profile: Profile, keyer: KeyerParams) -> list[str]:
+        """Từ ngắn nhất (theo thời lượng) trong BUILTIN_WORDS của profile, dùng khi không tìm
+        được từ nào vừa trần trong _sample_tokens."""
+        words = [text_to_tokens(w, profile) for w in BUILTIN_WORDS[profile.id]]
+        return min(words, key=lambda w: self.tokens_duration(w, keyer))
 
     def _random_morse(self, n: int, f0: float, rng: np.random.Generator) -> np.ndarray:
         """Tín hiệu Morse ngẫu nhiên tiếng Anh dùng làm QRM."""

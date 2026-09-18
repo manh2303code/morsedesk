@@ -3386,19 +3386,24 @@ def test_generator_reproducible_and_valid():
 
 def test_generator_duration_bounds_over_many_seeds():
     gen = SynthGenerator(SynthConfig(mp3_enabled=False))
-    n = 200
-    within_max = 0
-    for seed in range(1000, 1000 + n):
+    seeds = list(range(1000, 1200)) + [117, 816, 962, 1494, 1794, 1830, 2244, 2324, 2961, 861, 2462]
+    for seed in seeds:
         ex = gen.generate(seed)
-        signal_s = ex.seconds - 0.0  # gồm cả đệm 0.2–0.8 s mỗi đầu
-        assert ex.seconds >= 4.0, (seed, ex.seconds)
-        assert ex.seconds <= 12.0 * 1.5 + 1.6, (seed, ex.seconds)
-        within_max += ex.seconds <= 12.0 + 1.6 + 1e-6
-    # một từ đơn rất dài ở tốc độ chậm có thể vượt trần; phải hiếm
-    assert within_max >= 0.97 * n, within_max
-    for seed in (861, 2462):
-        ex = gen.generate(seed)
-        assert 4.0 <= ex.seconds <= 12.0 * 1.5 + 1.6, (seed, ex.seconds)
+        # tín hiệu trong [4, 12] s cộng đệm 0.2–0.8 s mỗi đầu
+        assert 4.0 + 0.4 - 1e-6 <= ex.seconds <= 12.0 + 1.6 + 1e-6, (seed, ex.seconds)
+
+
+def test_sample_tokens_never_exceeds_max_and_reaches_min():
+    gen = SynthGenerator(SynthConfig(min_seconds=4.0, max_seconds=6.0, mp3_enabled=False))
+    rng = np.random.default_rng(0)
+    for pid in ("en", "ru", "kk-cyrl-ru"):
+        for wpm in (5.0, 12.0, 30.0, 60.0):
+            keyer = machine(wpm)
+            toks = gen._sample_tokens(gen.profiles[pid], keyer, rng, target_s=5.0)
+            d = gen.tokens_duration(toks, keyer)
+            assert d <= 6.0 + 1e-9, (pid, wpm, d)
+            assert d >= 4.0 - 1e-9, (pid, wpm, d)
+            assert toks[0] != SPACE and toks[-1] != SPACE
 
 
 def test_generator_different_seeds_differ():
@@ -3792,6 +3797,23 @@ from morsedesk.lm.profile import Profile, load_profile
 from morsedesk.model.vocab import SPACE, VOCAB
 
 AMPLITUDE = 0.8
+MAX_SAMPLE_ROUNDS = 50
+
+
+def split_words(tokens: list[str]) -> list[list[str]]:
+    """Tách danh sách token trên SPACE thành các từ, bỏ qua từ rỗng."""
+    words: list[list[str]] = []
+    current: list[str] = []
+    for tok in tokens:
+        if tok == SPACE:
+            if current:
+                words.append(current)
+            current = []
+        else:
+            current.append(tok)
+    if current:
+        words.append(current)
+    return words
 
 
 def rescale_elements(elements: list[Element], target_seconds: float) -> list[Element]:
@@ -3845,17 +3867,41 @@ class SynthGenerator:
 
     def _sample_tokens(self, profile: Profile, keyer: KeyerParams, rng: np.random.Generator,
                        target_s: float) -> list[str]:
+        """Ghép từng từ cho tới khi đạt target_s, không bao giờ vượt max_seconds.
+
+        Chỉ thêm từ nào còn vừa trần; dừng khi đã đạt target_s, hoặc khi không còn từ vừa
+        mà thời lượng đã >= min_seconds. Sinh tối đa MAX_SAMPLE_ROUNDS đoạn văn bản.
+
+        Bất biến: nếu vòng lặp thêm được ít nhất một từ thì thời lượng <= max_seconds; và
+        thời lượng >= min_seconds trừ khi hết MAX_SAMPLE_ROUNDS mà không tìm được từ nào vừa
+        (trên thực tế gần như không xảy ra).
+        """
         tokens: list[str] = []
-        while self.tokens_duration(tokens, keyer) < target_s:
-            words = text_to_tokens(self.text.sample(profile.id, rng), profile)
-            if not words:
+        queue: list[list[str]] = []
+        rounds = 0
+        while rounds < MAX_SAMPLE_ROUNDS:
+            if not queue:
+                rounds += 1
+                queue = split_words(text_to_tokens(self.text.sample(profile.id, rng), profile))
                 continue
-            tokens = tokens + ([SPACE] if tokens else []) + words
-        while self.tokens_duration(tokens, keyer) > self.cfg.max_seconds and SPACE in tokens:
-            tokens = tokens[: len(tokens) - 1 - tokens[::-1].index(SPACE)]
-        if not tokens or self.tokens_duration(tokens, keyer) > self.cfg.max_seconds:
-            tokens = text_to_tokens(BUILTIN_WORDS[profile.id][0], profile)
+            word = queue.pop(0)
+            cand = tokens + ([SPACE] if tokens else []) + word
+            d = self.tokens_duration(cand, keyer)
+            if d <= self.cfg.max_seconds:
+                tokens = cand
+                if d >= target_s:
+                    break
+            elif self.tokens_duration(tokens, keyer) >= self.cfg.min_seconds:
+                break
+        if not tokens:
+            tokens = self._shortest_builtin_word(profile, keyer)
         return tokens
+
+    def _shortest_builtin_word(self, profile: Profile, keyer: KeyerParams) -> list[str]:
+        """Từ ngắn nhất (theo thời lượng) trong BUILTIN_WORDS của profile, dùng khi không tìm
+        được từ nào vừa trần trong _sample_tokens."""
+        words = [text_to_tokens(w, profile) for w in BUILTIN_WORDS[profile.id]]
+        return min(words, key=lambda w: self.tokens_duration(w, keyer))
 
     def _random_morse(self, n: int, f0: float, rng: np.random.Generator) -> np.ndarray:
         """Tín hiệu Morse ngẫu nhiên tiếng Anh dùng làm QRM."""
@@ -3911,7 +3957,7 @@ class SynthGenerator:
 - [ ] **Step 7: Chạy test, xác nhận đạt**
 
 Run: `uv run pytest tests/unit/test_data_synth.py -v`
-Expected: `17 passed`. Nếu `test_generator_fixed_params_decodable_by_baseline` trượt vì `channel.clean` có lọc băng làm mềm sườn, in `hyp` và `ex.text` để so; nếu chỉ lệch khoảng cách từ thì kiểm tra lại `split_gap_threshold`.
+Expected: `18 passed`. Nếu `test_generator_fixed_params_decodable_by_baseline` trượt vì `channel.clean` có lọc băng làm mềm sườn, in `hyp` và `ex.text` để so; nếu chỉ lệch khoảng cách từ thì kiểm tra lại `split_gap_threshold`.
 
 - [ ] **Step 8: Commit**
 
