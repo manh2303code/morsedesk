@@ -70,3 +70,20 @@ def test_t1_gate_onnx():
     results = bench.evaluate(bench.load_rows(manifest), engine="onnx", model_path=Path("models/acoustic.onnx"))
     ok, mean_cer, n = bench.gate(results)
     assert ok, f"CER vùng gate = {mean_cer:.4f} trên {n} clip, ngưỡng 0.02"
+
+
+def test_evaluate_isolates_decode_errors(tmp_path):
+    from tools.make_t2_manifest import write_jsonl
+
+    bad = tmp_path / "bad.wav"
+    bad.write_text("không phải audio", encoding="utf-8")
+    rows = [{"path": str(bad), "text": "CQ DE K", "profile": "en", "snr": 20.0, "wpm": 20.0,
+             "keying": "machine", "channel": "clean", "channel_actual": "clean", "seed": 0}]
+    manifest = tmp_path / "m.jsonl"
+    write_jsonl(rows, manifest)
+    results = bench.evaluate(bench.load_rows(manifest), engine="baseline")
+    assert len(results) == 1
+    assert results[0]["hyp"] == "" and results[0]["cer"] == 1.0
+    assert results[0]["error"]
+    summary, _ = bench.run(manifest, "baseline", None, tmp_path / "r", None, False, 0.02)
+    assert summary["errors"] == 1

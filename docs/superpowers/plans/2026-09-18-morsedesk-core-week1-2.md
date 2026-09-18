@@ -4073,6 +4073,23 @@ def test_t1_gate_onnx():
     results = bench.evaluate(bench.load_rows(manifest), engine="onnx", model_path=Path("models/acoustic.onnx"))
     ok, mean_cer, n = bench.gate(results)
     assert ok, f"CER vùng gate = {mean_cer:.4f} trên {n} clip, ngưỡng 0.02"
+
+
+def test_evaluate_isolates_decode_errors(tmp_path):
+    from tools.make_t2_manifest import write_jsonl
+
+    bad = tmp_path / "bad.wav"
+    bad.write_text("không phải audio", encoding="utf-8")
+    rows = [{"path": str(bad), "text": "CQ DE K", "profile": "en", "snr": 20.0, "wpm": 20.0,
+             "keying": "machine", "channel": "clean", "channel_actual": "clean", "seed": 0}]
+    manifest = tmp_path / "m.jsonl"
+    write_jsonl(rows, manifest)
+    results = bench.evaluate(bench.load_rows(manifest), engine="baseline")
+    assert len(results) == 1
+    assert results[0]["hyp"] == "" and results[0]["cer"] == 1.0
+    assert results[0]["error"]
+    summary, _ = bench.run(manifest, "baseline", None, tmp_path / "r", None, False, 0.02)
+    assert summary["errors"] == 1
 ```
 
 - [ ] **Step 2: Chạy test, xác nhận thất bại**
@@ -4225,11 +4242,20 @@ def evaluate(rows: list[dict], engine: str = "baseline", model_path: Path | None
         if pid not in decoders:
             decoders[pid] = Decoder(pid, engine=engine, model_path=model_path)
         t0 = time.time()
-        r = decoders[pid].decode_file(row["path"])
         out = dict(row)
+        try:
+            r = decoders[pid].decode_file(row["path"])
+        except Exception as e:  # một file hỏng không được làm mất cả lô
+            out.update({
+                "hyp": "", "cer": cer(row["text"], ""), "wer": wer(row["text"], ""),
+                "wpm_est": None, "seconds": time.time() - t0, "warnings": [],
+                "error": f"{type(e).__name__}: {e}",
+            })
+            results.append(out)
+            continue
         out.update({
             "hyp": r.text, "cer": cer(row["text"], r.text), "wer": wer(row["text"], r.text),
-            "wpm_est": r.wpm, "seconds": time.time() - t0, "warnings": r.warnings,
+            "wpm_est": r.wpm, "seconds": time.time() - t0, "warnings": r.warnings, "error": None,
         })
         results.append(out)
     return results
@@ -4280,6 +4306,7 @@ def run(manifest: Path, engine: str, model_path: Path | None, out_dir: Path,
         "engine": engine, "manifest": str(manifest), "n": len(results),
         "mean_cer": sum(r["cer"] for r in results) / max(1, len(results)),
         "mean_wer": sum(r["wer"] for r in results) / max(1, len(results)),
+        "errors": sum(1 for r in results if r.get("error")),
         "gate": {"ok": ok, "cer": gate_cer, "n": gate_n, "max_cer": max_cer},
         "by_snr": aggregate(results, "snr"), "by_wpm": aggregate(results, "wpm"),
         "by_keying": aggregate(results, "keying"), "by_channel": aggregate(results, "channel_actual"),
@@ -4291,7 +4318,7 @@ def run(manifest: Path, engine: str, model_path: Path | None, out_dir: Path,
     print(pivot_snr_wpm(results))
     for key in ("by_keying", "by_channel", "by_profile"):
         print(key + ": " + ", ".join(f"{k}={100 * v['cer']:.2f}%" for k, v in summary[key].items()))
-    print(f"n={len(results)} CER={100 * summary['mean_cer']:.2f}% WER={100 * summary['mean_wer']:.2f}% -> {out}")
+    print(f"n={len(results)} CER={100 * summary['mean_cer']:.2f}% WER={100 * summary['mean_wer']:.2f}% lỗi={summary['errors']} -> {out}")
     if do_gate:
         print(f"gate (SNR>=0, 10-35 WPM, n={gate_n}): CER={100 * gate_cer:.2f}% "
               f"{'ĐẠT' if ok else 'TRƯỢT'} (ngưỡng {100 * max_cer:.2f}%)")
@@ -4333,7 +4360,7 @@ Và trong `main()` đổi dict thành:
 - [ ] **Step 6: Chạy test, xác nhận đạt**
 
 Run: `uv run pytest tests/regression/test_t1.py -v`
-Expected: `4 passed, 1 skipped` (gate ONNX bỏ qua vì chưa có model)
+Expected: `5 passed, 1 skipped` (gate ONNX bỏ qua vì chưa có model)
 
 Sinh ma trận gate thật và đo baseline để có số đối chứng tuần 1:
 
