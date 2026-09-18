@@ -11,13 +11,18 @@ import numpy as np
 from morsedesk.audio.io import load_audio, resample
 from morsedesk.constants import FRAME_RATE, SAMPLE_RATE
 from morsedesk.dsp.baseline import BaselineDecoder, Symbol
+from morsedesk.dsp.frontend import compute_features, mix_envelope
+from morsedesk.dsp.tone import estimate_tone
 from morsedesk.encode.synth import add_noise, elements_to_audio, tone_power
 from morsedesk.encode.text import text_to_tokens
 from morsedesk.encode.timing import TimingParams, tokens_to_elements
 from morsedesk.lm.profile import Profile, load_profile
-from morsedesk.model.vocab import SPACE
+from morsedesk.model.ctc import greedy_decode_with_frames
+from morsedesk.model.vocab import SPACE, VOCAB
 
 LOW_CONFIDENCE = 0.6
+FALLBACK_CONFIDENCE = 0.5
+DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[1] / "models" / "acoustic.onnx"
 
 
 @dataclass
@@ -39,6 +44,7 @@ class DecodeResult:
     language_scores: dict[str, float]
     warnings: list[str]
     engine: str
+    fallback_text: str | None = None
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False, indent=2)
@@ -113,16 +119,61 @@ def symbols_to_words(
     return words
 
 
+def pattern_units(token: str) -> float:
+    """Số dit của một mẫu: dot 1, dash 3, khoảng trong chữ 1."""
+    return sum(1.0 if c == "." else 3.0 for c in token) + (len(token) - 1)
+
+
+def estimate_wpm_from_emissions(emissions: list[tuple[str, int, float]], frame_rate: int) -> float | None:
+    """emissions: (token, khung đầu vào lúc phát ra, xác suất). Chia số khung cho tổng dit lý thuyết."""
+    items = [(t, f) for t, f, _ in emissions]
+    if len([t for t, _ in items if t != SPACE]) < 2:
+        return None
+    units = 0.0
+    for t, _ in items[:-1]:
+        units += 4.0 if t == SPACE else pattern_units(t) + 3.0
+    span = items[-1][1] - items[0][1]
+    if units <= 0 or span <= 0:
+        return None
+    return 1.2 * frame_rate / (span / units)
+
+
+def emissions_to_words(
+    emissions: list[tuple[str, int, float]], profile: Profile, frame_rate: int, end_frame: int
+) -> list[Word]:
+    words: list[Word] = []
+    cur: list[str] = []
+    probs: list[float] = []
+    start = 0
+    for tok, f, p in list(emissions) + [(SPACE, end_frame, 1.0)]:
+        if tok == SPACE:
+            if cur:
+                conf = float(np.exp(np.mean(np.log(np.maximum(probs, 1e-6)))))
+                words.append(Word(profile.render(cur), start / frame_rate, f / frame_rate, conf))
+                cur, probs = [], []
+            continue
+        if not cur:
+            start = f
+        cur.append(tok)
+        probs.append(p)
+    return words
+
+
 class Decoder:
     def __init__(
         self, profile: str | Profile = "en", engine: str = "baseline", model_path: Path | None = None
     ) -> None:
         self.profile = _resolve_profile(profile)
         self.engine = engine
-        self.model_path = model_path
-        if engine != "baseline":
-            raise NotImplementedError(f"engine chưa hỗ trợ: {engine}")
         self._baseline = BaselineDecoder()
+        self._model = None
+        if engine == "onnx":
+            from morsedesk.model.onnx_runner import OnnxAcousticModel
+
+            self.model_path = Path(model_path) if model_path else DEFAULT_MODEL_PATH
+            self._model = OnnxAcousticModel(self.model_path)
+        elif engine != "baseline":
+            raise NotImplementedError(f"engine chưa hỗ trợ: {engine}")
 
     def _empty(self, warnings: list[str]) -> DecodeResult:
         return DecodeResult("", [], None, None, None, self.profile.id, {}, warnings, self.engine)
@@ -130,7 +181,7 @@ class Decoder:
     def decode_array(self, x: np.ndarray, sample_rate: int = SAMPLE_RATE) -> DecodeResult:
         if sample_rate != SAMPLE_RATE:
             x = resample(np.asarray(x, dtype=np.float32), sample_rate, SAMPLE_RATE)
-        res, est = self._baseline.decode_audio(x)
+        est = estimate_tone(x)
         if not est.has_signal or est.f0_hz is None:
             return self._empty(["không có tín hiệu Morse trong đoạn âm thanh"])
         warnings: list[str] = []
@@ -138,21 +189,45 @@ class Decoder:
             warnings.append(
                 f"phát hiện tone thứ hai tại {est.second_peak_hz:.0f} Hz, đang bám {est.f0_hz:.0f} Hz"
             )
+        if self.engine == "baseline":
+            return self._decode_baseline(x, est, warnings)
+        return self._decode_onnx(x, est, warnings)
+
+    def _baseline_tokens(self, x: np.ndarray, f0_hz: float):
+        return self._baseline.decode_envelope(mix_envelope(x, f0_hz))
+
+    def _decode_baseline(self, x, est, warnings: list[str]) -> DecodeResult:
+        res = self._baseline_tokens(x, est.f0_hz)
         confidence = float(np.exp(-res.cost)) if np.isfinite(res.cost) else 0.0
         if confidence < LOW_CONFIDENCE:
             warnings.append("độ tin cậy thấp")
         words = symbols_to_words(res.symbols, self.profile, FRAME_RATE, confidence)
-        return DecodeResult(
-            text=" ".join(w.text for w in words),
-            words=words,
-            wpm=res.wpm,
-            tone_hz=est.f0_hz,
-            snr_db=est.snr_db,
-            language=self.profile.id,
-            language_scores={},
-            warnings=warnings,
-            engine=self.engine,
-        )
+        return DecodeResult(" ".join(w.text for w in words), words, res.wpm, est.f0_hz, est.snr_db,
+                            self.profile.id, {}, warnings, "baseline")
+
+    def _decode_onnx(self, x, est, warnings: list[str]) -> DecodeResult:
+        from morsedesk.model.chunker import run_chunked
+
+        feats = compute_features(x, est.f0_hz)
+        logp = run_chunked(self._model, feats)
+        stride = self._model.time_stride
+        emissions = [(VOCAB.token(i), f * stride, p)
+                     for i, f, p in greedy_decode_with_frames(logp, VOCAB.blank_id)]
+        while emissions and emissions[0][0] == SPACE:
+            emissions.pop(0)
+        while emissions and emissions[-1][0] == SPACE:
+            emissions.pop()
+        words = emissions_to_words(emissions, self.profile, FRAME_RATE, len(feats))
+        confidence = float(np.mean([w.confidence for w in words])) if words else 0.0
+        fallback_text = None
+        if confidence < FALLBACK_CONFIDENCE:
+            warnings.append("độ tin cậy thấp, kèm kết quả bộ giải mã DSP")
+            fallback_text = self.profile.render(self._baseline_tokens(x, est.f0_hz).tokens)
+        elif confidence < LOW_CONFIDENCE:
+            warnings.append("độ tin cậy thấp")
+        return DecodeResult(" ".join(w.text for w in words), words,
+                            estimate_wpm_from_emissions(emissions, FRAME_RATE), est.f0_hz, est.snr_db,
+                            self.profile.id, {}, warnings, "onnx", fallback_text)
 
     def decode_file(self, path: str | Path) -> DecodeResult:
         x, sr = load_audio(path)

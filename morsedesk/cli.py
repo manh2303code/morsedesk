@@ -68,7 +68,7 @@ def cmd_encode(a: argparse.Namespace) -> int:
 
 def cmd_decode(a: argparse.Namespace) -> int:
     try:
-        dec = Decoder(a.profile, engine=a.engine, model_path=a.model)
+        dec = Decoder(a.profile, engine=a.engine, model_path=a.model if a.engine == "onnx" else None)
         r = dec.decode_file(a.file)
     except (NotImplementedError, UnsupportedAudio, FileNotFoundError) as e:
         print(f"lỗi: {e}", file=sys.stderr)
