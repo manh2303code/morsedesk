@@ -77,7 +77,11 @@ def candidate_units(on_lengths: np.ndarray) -> list[float]:
 
 def timing_cost(runs: list[tuple[bool, int, int]], unit: float) -> float:
     """Trung bình bình phương log-tỉ lệ so với mốc lý tưởng gần nhất; bỏ đoạn tắt đầu/cuối."""
-    inner = runs[1:-1] if len(runs) > 2 else runs
+    inner = list(runs)
+    if inner and not inner[0][0]:
+        inner = inner[1:]
+    if inner and not inner[-1][0]:
+        inner = inner[:-1]
     costs = []
     for on, s, e in inner:
         r = (e - s) / unit

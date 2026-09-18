@@ -2173,6 +2173,25 @@ def test_symbols_have_frames_and_no_trailing_space():
     assert res.symbols[-1].token != SPACE
     for a, b in zip(res.symbols, res.symbols[1:]):
         assert a.end_frame <= b.start_frame
+
+
+def test_timing_cost_scores_boundary_on_runs():
+    from morsedesk.dsp.baseline import timing_cost
+
+    # bắt đầu và kết thúc bằng đoạn bật: dot 1u, tắt 3u, dash 3u -> khớp lý tưởng, chi phí 0
+    runs = [(True, 0, 10), (False, 10, 40), (True, 40, 70)]
+    assert timing_cost(runs, 10.0) == 0.0
+    # đoạn bật đầu dài 2u (không khớp 1 hay 3) phải làm chi phí > 0 vì không được bỏ qua
+    runs_bad = [(True, 0, 20), (False, 20, 50), (True, 50, 80)]
+    assert timing_cost(runs_bad, 10.0) > 0.0
+
+
+def test_timing_cost_ignores_boundary_off_runs():
+    from morsedesk.dsp.baseline import timing_cost
+
+    # đoạn tắt đầu 10u và tắt cuối 2u đều bị bỏ qua -> chi phí 0
+    runs = [(False, 0, 100), (True, 100, 110), (False, 110, 140), (True, 140, 170), (False, 170, 190)]
+    assert timing_cost(runs, 10.0) == 0.0
 ```
 
 - [ ] **Step 2: Chạy test, xác nhận thất bại**
@@ -2262,7 +2281,11 @@ def candidate_units(on_lengths: np.ndarray) -> list[float]:
 
 def timing_cost(runs: list[tuple[bool, int, int]], unit: float) -> float:
     """Trung bình bình phương log-tỉ lệ so với mốc lý tưởng gần nhất; bỏ đoạn tắt đầu/cuối."""
-    inner = runs[1:-1] if len(runs) > 2 else runs
+    inner = list(runs)
+    if inner and not inner[0][0]:
+        inner = inner[1:]
+    if inner and not inner[-1][0]:
+        inner = inner[:-1]
     costs = []
     for on, s, e in inner:
         r = (e - s) / unit
@@ -2351,7 +2374,7 @@ class BaselineDecoder:
 - [ ] **Step 4: Chạy test, xác nhận đạt**
 
 Run: `uv run pytest tests/unit/test_baseline.py -v`
-Expected: `11 passed`. Nếu `test_noisy_25wpm_10db` trượt, in `res.threshold`, `res.unit_frames` và thử thêm ngưỡng `0.75` vào `THRESHOLDS`; không nới ngưỡng CER của test.
+Expected: `13 passed`. Nếu `test_noisy_25wpm_10db` trượt, in `res.threshold`, `res.unit_frames` và thử thêm ngưỡng `0.75` vào `THRESHOLDS`; không nới ngưỡng CER của test.
 
 - [ ] **Step 5: Commit**
 

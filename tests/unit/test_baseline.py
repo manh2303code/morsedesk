@@ -93,3 +93,22 @@ def test_symbols_have_frames_and_no_trailing_space():
     assert res.symbols[-1].token != SPACE
     for a, b in zip(res.symbols, res.symbols[1:]):
         assert a.end_frame <= b.start_frame
+
+
+def test_timing_cost_scores_boundary_on_runs():
+    from morsedesk.dsp.baseline import timing_cost
+
+    # bắt đầu và kết thúc bằng đoạn bật: dot 1u, tắt 3u, dash 3u -> khớp lý tưởng, chi phí 0
+    runs = [(True, 0, 10), (False, 10, 40), (True, 40, 70)]
+    assert timing_cost(runs, 10.0) == 0.0
+    # đoạn bật đầu dài 2u (không khớp 1 hay 3) phải làm chi phí > 0 vì không được bỏ qua
+    runs_bad = [(True, 0, 20), (False, 20, 50), (True, 50, 80)]
+    assert timing_cost(runs_bad, 10.0) > 0.0
+
+
+def test_timing_cost_ignores_boundary_off_runs():
+    from morsedesk.dsp.baseline import timing_cost
+
+    # đoạn tắt đầu 10u và tắt cuối 2u đều bị bỏ qua -> chi phí 0
+    runs = [(False, 0, 100), (True, 100, 110), (False, 110, 140), (True, 140, 170), (False, 170, 190)]
+    assert timing_cost(runs, 10.0) == 0.0
