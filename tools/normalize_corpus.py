@@ -10,6 +10,7 @@ import argparse
 import json
 import re
 from collections import Counter
+from collections.abc import Iterator
 from pathlib import Path
 
 from morsedesk.encode.text import normalize
@@ -19,13 +20,20 @@ from morsedesk.textio import force_utf8_streams
 
 TYPO_MAP = {
     "’": "'", "‘": "'", "“": '"', "”": '"', "«": '"', "»": '"',
-    "„": '"', "—": "-", "–": "-", "…": "...", " ": " ",
+    "„": '"', "—": "-", "–": "-", "…": "...", " ": " ",
 }
 _SENT_RE = re.compile(r"(?<=[.!?])\s+")
 
 
 def split_sentences(text: str) -> list[str]:
     return [s.strip() for s in _SENT_RE.split(text) if s.strip()]
+
+
+def _iter_sentences(paths: list[Path]) -> Iterator[str]:
+    """Sinh câu từ mọi file, gộp cả ba vòng lặp thành một để max_lines dừng đúng chỗ."""
+    for path in paths:
+        for raw in Path(path).read_text(encoding="utf-8", errors="replace").splitlines():
+            yield from split_sentences(raw)
 
 
 def normalize_line(line: str, profile: Profile, alphabet: LMAlphabet,
@@ -55,27 +63,23 @@ def normalize_paths(paths: list[Path], profile_id: str, out_plain: Path, out_cha
     kept_index = 0
     with open(out_plain, "w", encoding="utf-8") as fp, open(out_chars, "w", encoding="utf-8") as fc, \
             open(out_holdout, "w", encoding="utf-8") as fh:
-        for path in paths:
-            for raw in Path(path).read_text(encoding="utf-8", errors="replace").splitlines():
-                for sent in split_sentences(raw) or [raw]:
-                    if not sent.strip():
-                        continue
-                    stats["lines_in"] += 1
-                    norm = normalize_line(sent, profile, alphabet)
-                    if norm is None:
-                        continue
-                    kept_index += 1
-                    if kept_index % holdout_every == 0:
-                        fh.write(norm + "\n")
-                        stats["holdout"] += 1
-                        continue
-                    fp.write(norm + "\n")
-                    fc.write(alphabet.to_tokens_line(norm) + "\n")
-                    stats["lines_out"] += 1
-                    stats["chars"] += len(norm)
-                    hist.update(norm)
-                    if max_lines and stats["lines_out"] >= max_lines:
-                        break
+        for sent in _iter_sentences(paths):
+            stats["lines_in"] += 1
+            norm = normalize_line(sent, profile, alphabet)
+            if norm is None:
+                continue
+            kept_index += 1
+            if kept_index % holdout_every == 0:
+                fh.write(norm + "\n")
+                stats["holdout"] += 1
+                continue
+            fp.write(norm + "\n")
+            fc.write(alphabet.to_tokens_line(norm) + "\n")
+            stats["lines_out"] += 1
+            stats["chars"] += len(norm)
+            hist.update(norm)
+            if max_lines and stats["lines_out"] >= max_lines:
+                break
     stats["top_chars"] = hist.most_common(20)
     return stats
 

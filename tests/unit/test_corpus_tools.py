@@ -2,6 +2,7 @@ import json
 
 from morsedesk.lm.alphabet import LMAlphabet
 from morsedesk.lm.profile import load_profile
+from tools import fetch_corpus
 from tools.fetch_corpus import detokenize, gutenberg_ids_from_html, strip_gutenberg, write_ham_lines
 from tools.normalize_corpus import normalize_line, normalize_paths, split_sentences
 
@@ -64,3 +65,51 @@ def test_normalize_paths_writes_plain_chars_holdout(tmp_path):
     assert c[0] == LMAlphabet.for_profile(load_profile("en")).to_tokens_line(p[0])
     assert "LINE NUMBER 0 IS HERE." in p
     assert isinstance(json.dumps(stats), str)
+
+
+def test_normalize_paths_max_lines_caps_output(tmp_path):
+    src = tmp_path / "raw.txt"
+    lines = [f"Line number {i} is here." for i in range(50)]
+    src.write_text("\n".join(lines), encoding="utf-8")
+    plain, chars, hold = tmp_path / "en.txt", tmp_path / "en.chars.txt", tmp_path / "en.holdout.txt"
+    stats = normalize_paths([src], "en", plain, chars, hold, holdout_every=1000, max_lines=5)
+    assert stats["lines_out"] == 5
+    assert len(plain.read_text(encoding="utf-8").splitlines()) == 5
+
+
+def test_fetch_lang_survives_failing_source(tmp_path, monkeypatch):
+    gutenberg_html = '<a href="/ebooks/1342">Pride</a><a href="/ebooks/84">Frank</a>'
+    book_body = ("header\n*** START OF THE PROJECT GUTENBERG EBOOK X ***\n"
+                 "body line\n*** END OF THE PROJECT GUTENBERG EBOOK X ***\nfooter")
+
+    def fake_get(url, timeout=60.0):
+        if url == fetch_corpus.GUTENBERG_TOP:
+            return gutenberg_html.encode("utf-8")
+        if url.startswith("https://www.gutenberg.org/cache/epub/"):
+            return book_body.encode("utf-8")
+        raise OSError("offline")  # ví dụ HF parquet API
+
+    monkeypatch.setattr(fetch_corpus, "_get", fake_get)
+    fetch_corpus.fetch_lang("en", tmp_path, limit_books=2, sleep_s=0.0, ham_lines=5)
+
+    en_dir = tmp_path / "en"
+    sources = json.loads((en_dir / "SOURCES.json").read_text(encoding="utf-8"))
+    assert len(sources) == 3
+    assert (en_dir / "gutenberg_1342.txt").exists()
+    assert (en_dir / "gutenberg_84.txt").exists()
+    assert (en_dir / "ham_synthetic.txt").exists()
+
+
+def test_fetch_gutenberg_skip_existing_keeps_source_entry(tmp_path, monkeypatch):
+    (tmp_path / "gutenberg_1342.txt").write_text("one\ntwo\n", encoding="utf-8")
+
+    def fail_get(url, timeout=60.0):
+        raise OSError("should not be called")
+
+    monkeypatch.setattr(fetch_corpus, "_get", fail_get)
+    sources: list = []
+    n = fetch_corpus.fetch_gutenberg([1342], tmp_path, sleep_s=0.0, sources=sources)
+    assert n == 1
+    assert len(sources) == 1
+    assert sources[0]["lines"] == 2
+    assert "Public domain" in sources[0]["license"]

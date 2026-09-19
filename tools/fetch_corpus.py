@@ -11,6 +11,7 @@ import io
 import json
 import re
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -74,11 +75,14 @@ def fetch_gutenberg(ids: list[int], out_dir: Path, sleep_s: float, sources: list
     for i in ids:
         dest = out_dir / f"gutenberg_{i}.txt"
         if dest.exists():
+            sources.append({"name": f"Project Gutenberg #{i}", "url": GUTENBERG_TXT.format(id=i),
+                             "license": "Public domain (Project Gutenberg License)",
+                             "lines": dest.read_text(encoding="utf-8").count("\n")})
             n += 1
             continue
         try:
             text = _get(GUTENBERG_TXT.format(id=i)).decode("utf-8", errors="replace")
-        except Exception as e:  # nguồn lẻ lỗi không chặn cả lô
+        except (OSError, urllib.error.URLError, ValueError, KeyError) as e:  # nguồn lẻ lỗi không chặn cả lô
             print(f"bỏ qua Gutenberg {i}: {e}")
             continue
         body = strip_gutenberg(text)
@@ -119,49 +123,62 @@ def _write_lines(path: Path, lines: list[str]) -> int:
     return len(lines)
 
 
+_NET_ERRORS = (OSError, urllib.error.URLError, ValueError, KeyError)
+
+
 def fetch_lang(lang: str, out_dir: Path, limit_books: int, sleep_s: float, ham_lines: int = 20000) -> None:
     dest = out_dir / lang
     dest.mkdir(parents=True, exist_ok=True)
     sources: list[dict] = []
-    if lang == "en":
-        ids = gutenberg_ids_from_html(_get(GUTENBERG_TOP).decode("utf-8", errors="replace"))[:limit_books]
-        fetch_gutenberg(ids, dest, sleep_s, sources)
-        lines: list[str] = []
-        for url in fetch_parquet_urls("michaellin/morse-translate-transcribe-100k"):
-            lines += parquet_column_lines(url, "english")
-        n = _write_lines(dest / "morse_100k_english.txt", lines)
-        sources.append({"name": "michaellin/morse-translate-transcribe-100k (english)",
-                         "url": "https://huggingface.co/datasets/michaellin/morse-translate-transcribe-100k",
-                         "license": "Apache-2.0", "lines": n})
-    elif lang == "ru":
-        ids = gutenberg_ids_from_html(_get(GUTENBERG_RU).decode("utf-8", errors="replace"))[:limit_books]
-        fetch_gutenberg(ids, dest, sleep_s, sources)
-    elif lang == "kk":
-        lines = []
-        for url in fetch_parquet_urls("yeshpanovrustem/kaznerd"):
-            lines += parquet_column_lines(url, "tokens", join_tokens=True)
-        n = _write_lines(dest / "kaznerd.txt", lines)
-        sources.append({"name": "KazNERD (yeshpanovrustem/kaznerd)",
-                         "url": "https://huggingface.co/datasets/yeshpanovrustem/kaznerd",
-                         "license": "CC BY 4.0", "lines": n})
-        try:
-            tree = json.loads(_get(HF_TREE_API.format(repo="issai/Kazakh_Speech_Corpus_2")))
-            texts = [t for t in tree if t.get("type") == "file"
-                     and t["path"].lower().endswith((".txt", ".tsv", ".csv")) and t.get("size", 0) < 50_000_000]
-            for t in texts:
-                data = _get(HF_RESOLVE.format(repo="issai/Kazakh_Speech_Corpus_2", path=t["path"]), 600.0)
-                (dest / ("ksc2_" + Path(t["path"]).name)).write_bytes(data)
-                sources.append({"name": f"KSC2 {t['path']}", "license": "MIT",
-                                 "url": HF_RESOLVE.format(repo="issai/Kazakh_Speech_Corpus_2", path=t["path"]),
-                                 "lines": data.count(b"\n")})
-        except Exception as e:
-            print(f"KSC2: không tải được phần text ({e}); dùng KazNERD")
-    else:
-        raise SystemExit(f"ngôn ngữ lạ: {lang}")
-    if ham_lines > 0:
-        n = write_ham_lines(LANG_PROFILE[lang], ham_lines, dest / "ham_synthetic.txt")
-        sources.append({"name": "Radiogram tự sinh từ HAM_TEMPLATES của dự án", "url": "", "license": "Tự tạo", "lines": n})
-    (dest / "SOURCES.json").write_text(json.dumps(sources, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        if lang == "en":
+            ids = gutenberg_ids_from_html(_get(GUTENBERG_TOP).decode("utf-8", errors="replace"))[:limit_books]
+            fetch_gutenberg(ids, dest, sleep_s, sources)
+            try:
+                lines: list[str] = []
+                for url in fetch_parquet_urls("michaellin/morse-translate-transcribe-100k"):
+                    lines += parquet_column_lines(url, "english")
+                n = _write_lines(dest / "morse_100k_english.txt", lines)
+                sources.append({"name": "michaellin/morse-translate-transcribe-100k (english)",
+                                 "url": "https://huggingface.co/datasets/michaellin/morse-translate-transcribe-100k",
+                                 "license": "Apache-2.0", "lines": n})
+            except _NET_ERRORS as e:  # nguồn lẻ lỗi không chặn cả ngôn ngữ
+                print(f"bỏ qua morse-translate-transcribe-100k: {e}")
+        elif lang == "ru":
+            ids = gutenberg_ids_from_html(_get(GUTENBERG_RU).decode("utf-8", errors="replace"))[:limit_books]
+            fetch_gutenberg(ids, dest, sleep_s, sources)
+        elif lang == "kk":
+            try:
+                lines = []
+                for url in fetch_parquet_urls("yeshpanovrustem/kaznerd"):
+                    lines += parquet_column_lines(url, "tokens", join_tokens=True)
+                n = _write_lines(dest / "kaznerd.txt", lines)
+                sources.append({"name": "KazNERD (yeshpanovrustem/kaznerd)",
+                                 "url": "https://huggingface.co/datasets/yeshpanovrustem/kaznerd",
+                                 "license": "CC BY 4.0", "lines": n})
+            except _NET_ERRORS as e:  # nguồn lẻ lỗi không chặn cả ngôn ngữ
+                print(f"bỏ qua KazNERD: {e}")
+            try:
+                tree = json.loads(_get(HF_TREE_API.format(repo="issai/Kazakh_Speech_Corpus_2")))
+                texts = [t for t in tree if t.get("type") == "file"
+                         and t["path"].lower().endswith((".txt", ".tsv", ".csv")) and t.get("size", 0) < 50_000_000]
+                for t in texts:
+                    data = _get(HF_RESOLVE.format(repo="issai/Kazakh_Speech_Corpus_2", path=t["path"]), 600.0)
+                    (dest / ("ksc2_" + Path(t["path"]).name)).write_bytes(data)
+                    sources.append({"name": f"KSC2 {t['path']}", "license": "MIT",
+                                     "url": HF_RESOLVE.format(repo="issai/Kazakh_Speech_Corpus_2", path=t["path"]),
+                                     "lines": data.count(b"\n")})
+            except _NET_ERRORS as e:
+                print(f"KSC2: không tải được phần text ({e}); dùng KazNERD")
+        else:
+            raise SystemExit(f"ngôn ngữ lạ: {lang}")
+        if ham_lines > 0:
+            n = write_ham_lines(LANG_PROFILE[lang], ham_lines, dest / "ham_synthetic.txt")
+            sources.append({"name": "Radiogram tự sinh từ HAM_TEMPLATES của dự án",
+                             "url": "", "license": "Tự tạo", "lines": n})
+    finally:
+        # luôn ghi SOURCES.json để phản ánh đúng những gì đã tải được, kể cả khi có nguồn lỗi
+        (dest / "SOURCES.json").write_text(json.dumps(sources, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"{lang}: {len(sources)} nguồn -> {dest}")
 
 
