@@ -20,3 +20,6 @@ runs/
 models/*.onnx
 models/*.npz
 models/eval_*.json
+corpus/
+models/lm/*.bin
+models/lm/*.arpa
