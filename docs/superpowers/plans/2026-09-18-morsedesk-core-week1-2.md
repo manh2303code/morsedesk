@@ -5173,7 +5173,12 @@ def frame_windows(n_frames: int, window: int = WINDOW_FRAMES, step: int = STEP_F
     last -= last % 2
     if not starts or starts[-1] != last:
         starts.append(last)
-    return [(s, s + window) for s in starts]
+    windows = [(s, s + window) for s in starts]
+    # Cửa sổ cuối: làm tròn xuống số chẵn cho start có thể hụt 1 khung so với n_frames
+    # (khi n_frames - window lẻ); kéo dài điểm cuối tới n_frames để không bỏ sót khung
+    # cuối cùng (start luôn <= n_frames - window nên chỉ nới rộng, không bao giờ co lại).
+    windows[-1] = (windows[-1][0], n_frames)
+    return windows
 
 
 def run_chunked(model, feats: np.ndarray, window: int = WINDOW_FRAMES, step: int = STEP_FRAMES) -> np.ndarray:
