@@ -207,11 +207,16 @@ class Decoder:
         return DecodeResult(" ".join(w.text for w in words), words, res.wpm, est.f0_hz, est.snr_db,
                             self.profile.id, {}, warnings, "baseline")
 
-    def _decode_onnx(self, x, est, warnings: list[str]) -> DecodeResult:
-        from morsedesk.model.chunker import run_chunked
+    def _log_probs(self, x: np.ndarray, f0_hz: float) -> tuple[np.ndarray, int]:
+        from morsedesk.model.chunker import run_chunked, run_chunked_audio
 
-        feats = compute_features(x, est.f0_hz)
-        logp = run_chunked(self._model, feats)
+        if getattr(self._model, "feature_mode", "clip") == "window":
+            return run_chunked_audio(self._model, x, f0_hint=f0_hz)
+        feats = compute_features(x, f0_hz)
+        return run_chunked(self._model, feats), len(feats)
+
+    def _decode_onnx(self, x, est, warnings: list[str]) -> DecodeResult:
+        logp, n_in = self._log_probs(x, est.f0_hz)
         stride = self._model.time_stride
         emissions = [(VOCAB.token(i), f * stride, p)
                      for i, f, p in greedy_decode_with_frames(logp, VOCAB.blank_id)]
@@ -219,7 +224,7 @@ class Decoder:
             emissions.pop(0)
         while emissions and emissions[-1][0] == SPACE:
             emissions.pop()
-        words = emissions_to_words(emissions, self.profile, FRAME_RATE, len(feats))
+        words = emissions_to_words(emissions, self.profile, FRAME_RATE, n_in)
         confidence = float(np.mean([w.confidence for w in words])) if words else 0.0
         fallback_text = None
         if confidence < FALLBACK_CONFIDENCE:

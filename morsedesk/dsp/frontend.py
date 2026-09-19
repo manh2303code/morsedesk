@@ -12,6 +12,8 @@ from scipy.signal import butter, lfilter, lfilter_zi, sosfiltfilt
 
 from morsedesk.constants import FEAT_DIM, FRAME_RATE, HOP, SAMPLE_RATE
 from morsedesk.dsp.stft import stft_power
+from morsedesk.dsp.tone import estimate_tone
+from morsedesk.dsp.windowing import STEP_FRAMES, WINDOW_FRAMES, frame_windows
 
 
 @dataclass(frozen=True)
@@ -19,6 +21,10 @@ class FrontendConfig:
     lowpass_hz: float = 200.0
     agc_tau_s: float = 1.0
     n_bins: int = 9
+    agc_init_s: float = 1.0     # đoạn đầu dùng khởi tạo mức nền AGC
+
+
+WINDOW_CFG = FrontendConfig(agc_init_s=0.5)
 
 
 def mix_envelope(
@@ -53,13 +59,13 @@ def _ema(v: np.ndarray, alpha: float, init: float) -> np.ndarray:
     return out
 
 
-def agc_log(env: np.ndarray, frame_rate: int = FRAME_RATE, tau_s: float = 1.0) -> np.ndarray:
+def agc_log(env: np.ndarray, frame_rate: int = FRAME_RATE, tau_s: float = 1.0, init_s: float = 1.0) -> np.ndarray:
     """log(envelope) trừ mức nền trượt, chia độ lệch chuẩn trượt; kẹp về [-6, 6]."""
     if len(env) == 0:
         return np.zeros(0)
     log_env = np.log(env + 1e-6)
     alpha = 1.0 / (tau_s * frame_rate)
-    head = log_env[: max(1, min(len(log_env), frame_rate))]
+    head = log_env[: max(1, min(len(log_env), int(round(init_s * frame_rate))))]
     mean = _ema(log_env, alpha, float(np.mean(head)))
     dev = log_env - mean
     var = _ema(dev * dev, alpha, float(np.mean(dev[: len(head)] ** 2)))
@@ -96,9 +102,71 @@ def compute_features(
     if n_frames == 0:
         return np.zeros((0, FEAT_DIM), dtype=np.float32)
     env = mix_envelope(x, f0_hz, sample_rate, cfg.lowpass_hz)
-    a = agc_log(env, FRAME_RATE, cfg.agc_tau_s)
+    a = agc_log(env, FRAME_RATE, cfg.agc_tau_s, cfg.agc_init_s)
     d = np.diff(a, prepend=a[0] if len(a) else 0.0)
     bins = spectral_bins(x, f0_hz, cfg.n_bins, sample_rate)
     feats = np.concatenate([a[:, None], d[:, None], bins], axis=1).astype(np.float32)
     assert feats.shape == (n_frames, FEAT_DIM), feats.shape
     return feats
+
+
+DEFAULT_F0_HZ = 700.0
+
+
+@dataclass
+class Window:
+    start_sample: int
+    end_sample: int
+    f0_hz: float
+    feats: np.ndarray
+    has_signal: bool
+
+    @property
+    def start_frame(self) -> int:
+        return self.start_sample // HOP
+
+    @property
+    def end_frame(self) -> int:
+        return self.end_sample // HOP
+
+
+def compute_features_windowed(
+    x: np.ndarray,
+    f0_hint: float | None = None,
+    sample_rate: int = SAMPLE_RATE,
+    window_frames: int = WINDOW_FRAMES,
+    step_frames: int = STEP_FRAMES,
+    cfg: FrontendConfig | None = None,
+) -> list[Window]:
+    """Dò tone và chuẩn hóa đặc trưng trong từng cửa sổ; tone cửa sổ không có tín hiệu lấy từ
+    cửa sổ trước, rồi f0_hint, rồi DEFAULT_F0_HZ. Chỉ dùng với sample_rate = SAMPLE_RATE."""
+    cfg = cfg or WINDOW_CFG
+    n_frames = len(x) // HOP
+    if n_frames == 0:
+        return []
+    x = np.asarray(x, dtype=np.float32)
+    windows: list[Window] = []
+    carry = f0_hint
+    for s, e in frame_windows(n_frames, window_frames, step_frames):
+        seg = x[s * HOP:e * HOP]
+        est = estimate_tone(seg, sample_rate)
+        has_signal = bool(est.has_signal and est.f0_hz is not None)
+        if has_signal:
+            carry = float(est.f0_hz)
+        f0 = carry if carry is not None else DEFAULT_F0_HZ
+        windows.append(Window(s * HOP, e * HOP, f0, compute_features(seg, f0, sample_rate, cfg), has_signal))
+    return windows
+
+
+def stitch_windows(windows: list[Window], n_frames: int) -> np.ndarray:
+    """Ghép đặc trưng các cửa sổ theo khung: khung t lấy từ cửa sổ có tâm gần t + 0,5 nhất."""
+    out = np.zeros((n_frames, FEAT_DIM), dtype=np.float32)
+    best = np.full(n_frames, np.inf)
+    for w in windows:
+        s, e = w.start_frame, w.end_frame
+        idx = np.arange(s, min(e, n_frames))
+        dist = np.abs(idx + 0.5 - (s + e) / 2.0)
+        better = dist < best[idx]
+        out[idx[better]] = w.feats[: len(idx)][better]
+        best[idx[better]] = dist[better]
+    return out

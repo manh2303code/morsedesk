@@ -31,8 +31,8 @@ def _onnx_export(model: torch.nn.Module, dummy: torch.Tensor, out: Path) -> None
 
 def export(checkpoint: Path, out_onnx: Path, version: str = "0.1.0", n_golden: int = 20) -> tuple[Path, Path]:
     ckpt = torch.load(checkpoint, map_location="cpu", weights_only=True)
-    config = ckpt.get("config", CONFIG_DEFAULT)
-    model = MorseNet(**config)
+    config = dict(ckpt.get("config", CONFIG_DEFAULT))
+    model = MorseNet(config["feat_dim"], config["n_classes"], config["hidden"])
     model.load_state_dict(ckpt["state_dict"])
     model.eval()
 
@@ -45,6 +45,7 @@ def export(checkpoint: Path, out_onnx: Path, version: str = "0.1.0", n_golden: i
         "space_id": VOCAB.space_id, "unk_id": VOCAB.unk_id, "input_name": "features",
         "output_name": "log_probs", "time_stride": 2, "opset": OPSET,
         "train_step": ckpt.get("step"), "val_ter": ckpt.get("val_ter"), "config": config,
+        "feature_mode": config.get("feature_mode", "clip"),
     }
     meta_path = out_onnx.with_suffix(".json")
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
