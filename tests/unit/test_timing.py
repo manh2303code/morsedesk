@@ -30,7 +30,7 @@ def test_paris_is_50_units():
 def test_elements_alternate_and_start_on():
     els = tokens_to_elements(["-.-.", "--.-"], TimingParams(wpm=25))
     assert els[0].on
-    for a, b in zip(els, els[1:]):
+    for a, b in zip(els, els[1:], strict=False):
         assert a.on != b.on
 
 
@@ -74,6 +74,6 @@ def test_segments_no_drift():
     els = tokens_to_elements(PARIS + [SPACE] * 1, TimingParams(wpm=20)) * 40
     segs = elements_to_segments(els, 8000)
     assert segs[0][1] == 0
-    for (_, s0, e0), (_, s1, _) in zip(segs, segs[1:]):
+    for (_, _s0, e0), (_, s1, _) in zip(segs, segs[1:], strict=False):
         assert e0 == s1
     assert abs(segs[-1][2] - round(total_seconds(els) * 8000)) <= 1

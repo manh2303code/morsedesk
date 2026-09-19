@@ -72,3 +72,19 @@ def test_run_manifest_records_stderr(tmp_path):
     assert result["rows"][0]["cer"] == 0.0
     assert "warn: xyz" in result["rows"][0]["stderr"]
     assert result["rows"][0]["error"] is None
+
+
+def test_run_manifest_handles_paths_with_spaces(tmp_path):
+    import sys
+
+    d = tmp_path / "dir with space"
+    d.mkdir()
+    x = Encoder("en").to_audio("CQ", wpm=20)
+    save_audio(d / "a.wav", x, 8000)
+    (d / "a.txt").write_text("CQ")
+    manifest = d / "m.jsonl"
+    write_jsonl(build_manifest(d, source="x", profile_id="en"), manifest)
+    script = d / "echo tool.py"
+    script.write_text("import sys; print('CQ')\n")
+    result = run_manifest(manifest, f'"{sys.executable}" "{script}" {{path}}', to_wav=False)
+    assert result["rows"][0]["cer"] == 0.0 and result["rows"][0]["error"] is None

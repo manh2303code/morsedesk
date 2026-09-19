@@ -3179,7 +3179,7 @@ uv run python tools/bench_external.py --manifest testdata/manifests/t2_arrl.json
   --cmd "python /tmp/deepcw-engine/examples/python/decode.py /tmp/deepcw-engine/model.onnx /tmp/deepcw-engine/model.onnx.json {path}" --name deepcw
 ```
 
-Baseline nội bộ đo bằng `uv run morsedesk bench --set t2 --manifest testdata/manifests/t2_arrl.jsonl --engine baseline` (Task 14).
+Baseline nội bộ đo bằng `uv run morsedesk bench --manifest testdata/manifests/t2_arrl.jsonl --engine baseline` (Task 14).
 ```
 
 Thêm vào `.gitignore` các dòng:
@@ -4606,6 +4606,9 @@ def example_features(ex: Example) -> np.ndarray:
     return compute_features(ex.audio, f0)
 
 
+VAL_SEED_BASE = 2_000_000_000  # seed validation tách hẳn khỏi dải seed train (seed*1e6 + steps*batch)
+
+
 class SynthDataset(IterableDataset):
     def __init__(self, gen: SynthGenerator, seed_start: int, n_items: int) -> None:
         self.gen, self.seed_start, self.n_items = gen, seed_start, n_items
@@ -4701,9 +4704,11 @@ def main(argv: list[str] | None = None) -> int:
         model.load_state_dict(torch.load(a.resume, map_location="cpu", weights_only=True)["state_dict"])
     print(f"tham số: {count_params(model):,}")
 
+    assert a.seed * 1_000_000 + a.steps * a.batch < VAL_SEED_BASE, "seed/steps quá lớn: trùng dải seed validation"
+
     val_items = []
     for i in range(a.val_clips):
-        ex = gen.generate(10_000_000 + i)
+        ex = gen.generate(VAL_SEED_BASE + i)
         val_items.append((torch.from_numpy(example_features(ex)), ex.tokens))
 
     ds = SynthDataset(gen, seed_start=a.seed * 1_000_000, n_items=a.steps * a.batch)
@@ -5409,5 +5414,5 @@ git commit -m "feat(decoder): engine ONNX với cửa sổ trượt, fallback DS
 
 **Nhất quán kiểu:** `Element(on, duration)` dùng xuyên suốt Task 4, 5, 13; `KeyerParams.timing()` trả `TimingParams`; `Example.labels` là id từ `VOCAB.id`; `OnnxAcousticModel.time_stride`/`output_length`/`meta["vocab"]` được `run_chunked` dùng đúng tên; `DecodeResult` chỉ thêm trường có mặc định nên test Task 11 không đổi; `write_jsonl` từ Task 12 được Task 14 tái dùng.
 
-**Lệch nhỏ so với spec, có chủ đích:** profile đặt trong package (`morsedesk/profiles/`) thay vì gốc repo; logic bench nằm ở `morsedesk/bench.py` thay vì `tools/bench.py` để CLI gói được; mạng khoảng 140 nghìn tham số với `hidden=96` (spec ghi "khoảng 300 nghìn"), có lối nâng lên 128 nếu gate trượt.
+**Lệch nhỏ so với spec, có chủ đích:** profile đặt trong package (`morsedesk/profiles/`) thay vì gốc repo; logic bench nằm ở `morsedesk/bench.py` thay vì `tools/bench.py` để CLI gói được; mạng khoảng 140 nghìn tham số với `hidden=96` (spec ghi "khoảng 300 nghìn"), có lối nâng lên 128 nếu gate trượt. CLI bench dùng `--manifest` thay cho `--set t1|t2` của spec §8; xử lý file dài hơn 1 giờ theo kiểu streaming (spec §7) và bám tone trôi theo thời gian (spec §2.3) để lại cho kế hoạch tuần 4–5 (live mode); drift tay gõ hiện chỉ tuyến tính.
 

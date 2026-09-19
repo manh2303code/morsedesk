@@ -44,13 +44,24 @@ def evaluate(rows: list[dict], engine: str = "baseline", model_path: Path | None
     return results
 
 
+def _is_number(s: str) -> bool:
+    try:
+        float(s)
+    except ValueError:
+        return False
+    return True
+
+
 def aggregate(results: list[dict], key: str) -> dict[str, dict]:
     groups: dict[str, list[dict]] = defaultdict(list)
     for r in results:
         groups[str(r.get(key, "n/a"))].append(r)
     return {
         k: {"n": len(v), "cer": sum(x["cer"] for x in v) / len(v), "wer": sum(x["wer"] for x in v) / len(v)}
-        for k, v in sorted(groups.items())
+        for k, v in sorted(
+            groups.items(),
+            key=lambda kv: (0, float(kv[0])) if _is_number(kv[0]) else (1, kv[0]),
+        )
     }
 
 

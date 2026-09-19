@@ -37,6 +37,8 @@ def normalize(x: np.ndarray, peak: float = 0.9) -> np.ndarray:
 def load_audio(path: str | Path, target_sr: int = SAMPLE_RATE) -> tuple[np.ndarray, int]:
     """Đọc file bất kỳ libsndfile hỗ trợ (WAV/FLAC/OGG/MP3), trả (mono float32 8 kHz, 8000)."""
     path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"không tìm thấy file: {path}")
     try:
         data, sr = sf.read(str(path), dtype="float32", always_2d=True)
     except sf.LibsndfileError as e:

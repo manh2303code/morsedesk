@@ -35,7 +35,9 @@ def build_parser() -> argparse.ArgumentParser:
     dec.add_argument("file", type=Path)
     dec.add_argument("--profile", default="en", choices=list_profiles() + ["auto"])
     dec.add_argument("--engine", default="baseline", choices=["baseline", "onnx"])
-    dec.add_argument("--model", type=Path, default=Path("models/acoustic.onnx"))
+    dec.add_argument("--model", type=Path, default=None, help="mặc định: models/acoustic.onnx trong repo")
+    dec.add_argument("--no-fallback", action="store_true",
+                     help="tắt fallback DSP khi độ tin cậy engine onnx thấp (spec §8)")
     dec.add_argument("--json", action="store_true")
 
     sub.add_parser("devices", help="liệt kê thiết bị âm thanh")
@@ -43,7 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     b = sub.add_parser("bench", help="đo CER/WER trên manifest JSONL")
     b.add_argument("--manifest", type=Path, required=True)
     b.add_argument("--engine", default="baseline", choices=["baseline", "onnx"])
-    b.add_argument("--model", type=Path, default=Path("models/acoustic.onnx"))
+    b.add_argument("--model", type=Path, default=None, help="mặc định: models/acoustic.onnx trong repo")
     b.add_argument("--out-dir", type=Path, default=Path("bench_results"))
     b.add_argument("--limit", type=int, default=None)
     b.add_argument("--gate", action="store_true", help="kiểm tra vùng SNR>=0, 10-35 WPM")
@@ -68,9 +70,10 @@ def cmd_encode(a: argparse.Namespace) -> int:
 
 def cmd_decode(a: argparse.Namespace) -> int:
     try:
-        dec = Decoder(a.profile, engine=a.engine, model_path=a.model if a.engine == "onnx" else None)
+        dec = Decoder(a.profile, engine=a.engine, model_path=a.model if a.engine == "onnx" else None,
+                      fallback=not a.no_fallback)
         r = dec.decode_file(a.file)
-    except (NotImplementedError, UnsupportedAudio, FileNotFoundError) as e:
+    except (NotImplementedError, UnsupportedAudio, FileNotFoundError, ValueError) as e:
         print(f"lỗi: {e}", file=sys.stderr)
         return 2
     print(r.to_json() if a.json else r.text)

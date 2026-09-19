@@ -1,14 +1,14 @@
-import numpy as np
 import pytest
 
 torch = pytest.importorskip("torch")
 
-from morsedesk.data.channel import clean
-from morsedesk.data.keyer import machine
-from morsedesk.data.synth import SynthConfig, SynthGenerator
-from morsedesk.model.vocab import VOCAB
-from tools.net_torch import CONFIG_DEFAULT, MorseNet, count_params, output_length
-from tools.train import SynthDataset, collate, example_features, token_error_rate
+import tools.train as train  # noqa: E402
+from morsedesk.data.channel import clean  # noqa: E402
+from morsedesk.data.keyer import machine  # noqa: E402
+from morsedesk.data.synth import SynthConfig, SynthGenerator  # noqa: E402
+from morsedesk.model.vocab import VOCAB  # noqa: E402
+from tools.net_torch import CONFIG_DEFAULT, MorseNet, count_params, output_length  # noqa: E402
+from tools.train import SynthDataset, collate, example_features, token_error_rate  # noqa: E402
 
 
 def test_output_length_matches_conv():
@@ -59,3 +59,7 @@ def test_overfit_tiny_batch_reduces_loss():
     assert losses[-1] < 0.7 * losses[0], losses[::10]
     ter = token_error_rate(model, [(f, t) for f, _, t in items])
     assert 0.0 <= ter <= 1.5
+
+
+def test_val_seed_base_is_far_above_train_seed_range():
+    assert train.VAL_SEED_BASE > 60 * 1_000_000

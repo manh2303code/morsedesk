@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 import onnxruntime as ort
 
+from morsedesk.constants import FEAT_DIM, HOP, SAMPLE_RATE
 from morsedesk.model.vocab import VOCAB
 
 
@@ -16,11 +17,19 @@ class OnnxAcousticModel:
     def __init__(self, model_path: Path, meta_path: Path | None = None) -> None:
         model_path = Path(model_path)
         meta_path = Path(meta_path) if meta_path else model_path.with_suffix(".json")
-        if not model_path.exists() or not meta_path.exists():
-            raise FileNotFoundError(f"thiếu model hoặc metadata: {model_path}, {meta_path}")
+        if not model_path.exists():
+            raise FileNotFoundError(f"không tìm thấy model: {model_path}")
+        if not meta_path.exists():
+            raise FileNotFoundError(f"không tìm thấy metadata: {meta_path}")
         self.meta = json.loads(meta_path.read_text(encoding="utf-8"))
         if self.meta.get("vocab") != VOCAB.tokens:
             raise ValueError("từ vựng trong metadata model không khớp phần mềm; cần xuất lại model")
+        for field, expected in (("feat_dim", FEAT_DIM), ("sample_rate", SAMPLE_RATE), ("hop", HOP)):
+            if self.meta.get(field) != expected:
+                raise ValueError(
+                    f"{field} trong metadata model ({self.meta.get(field)}) không khớp phần mềm "
+                    f"({expected}); cần xuất lại model"
+                )
         so = ort.SessionOptions()
         so.intra_op_num_threads = max(1, (os.cpu_count() or 2) // 2)
         self.session = ort.InferenceSession(str(model_path), so, providers=["CPUExecutionProvider"])

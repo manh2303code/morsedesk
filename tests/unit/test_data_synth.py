@@ -2,14 +2,19 @@ import numpy as np
 import pytest
 
 from morsedesk.data.channel import (
-    ChannelParams, apply_channel, clean, ffmpeg_available, mp3_roundtrip, sample_channel_params,
+    ChannelParams,
+    apply_channel,
+    clean,
+    ffmpeg_available,
+    mp3_roundtrip,
+    sample_channel_params,
 )
 from morsedesk.data.keyer import KeyerParams, apply_keyer, machine, sample_keyer_params
 from morsedesk.data.synth import SynthConfig, SynthGenerator
 from morsedesk.data.text import BUILTIN_WORDS, TextSampler, translit_via_patterns
 from morsedesk.dsp.baseline import BaselineDecoder
 from morsedesk.encode.text import text_to_tokens
-from morsedesk.encode.timing import Element, TimingParams, tokens_to_elements
+from morsedesk.encode.timing import TimingParams, tokens_to_elements
 from morsedesk.lm.profile import load_profile
 from morsedesk.metrics import cer
 from morsedesk.model.vocab import SPACE, VOCAB
@@ -94,7 +99,7 @@ def test_jitter_changes_but_keeps_positive():
     out = apply_keyer(els, k, np.random.default_rng(0))
     assert len(out) == len(els)
     assert all(e.duration > 0 for e in out)
-    assert any(abs(a.duration - b.duration) > 1e-6 for a, b in zip(els, out))
+    assert any(abs(a.duration - b.duration) > 1e-6 for a, b in zip(els, out, strict=True))
 
 
 # ---- channel ----
@@ -144,7 +149,7 @@ def test_generator_reproducible_and_valid():
     assert np.array_equal(a.audio, b.audio) and a.labels == b.labels and a.text == b.text
     assert a.tokens[0] != SPACE and a.tokens[-1] != SPACE
     assert all(0 <= i < len(VOCAB) for i in a.labels)
-    assert all(VOCAB.token(i) == t for i, t in zip(a.labels, a.tokens))
+    assert all(VOCAB.token(i) == t for i, t in zip(a.labels, a.tokens, strict=True))
     assert 4.0 <= a.seconds <= 12.0 + 1.6 + 1e-6
     assert a.profile_id in ("en", "ru", "kk-cyrl-ru")
 
@@ -192,3 +197,19 @@ def test_generator_fixed_params_decodable_by_baseline():
     res, est = BaselineDecoder().decode_audio(ex.audio)
     hyp = load_profile("en").render(res.tokens)
     assert cer(ex.text, hyp) < 0.05
+
+
+def test_mp3_roundtrip_tolerates_ffmpeg_failure(monkeypatch):
+    import subprocess
+
+    from morsedesk.data import channel
+
+    monkeypatch.setattr(channel, "ffmpeg_available", lambda: True)
+
+    def boom(*a, **k):
+        raise subprocess.CalledProcessError(1, ["ffmpeg"], stderr=b"encoder not found")
+
+    monkeypatch.setattr(channel.subprocess, "run", boom)
+    x = np.linspace(-0.5, 0.5, 8000, dtype=np.float32)
+    y = channel.mp3_roundtrip(x, 8000, 64)
+    assert np.array_equal(x, y)

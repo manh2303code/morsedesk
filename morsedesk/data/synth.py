@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -9,7 +10,10 @@ import numpy as np
 
 from morsedesk.constants import SAMPLE_RATE
 from morsedesk.data.channel import (
-    ChannelParams, apply_channel, ffmpeg_available, sample_channel_params,
+    ChannelParams,
+    apply_channel,
+    ffmpeg_available,
+    sample_channel_params,
 )
 from morsedesk.data.keyer import KeyerParams, apply_keyer, machine, sample_keyer_params
 from morsedesk.data.text import BUILTIN_WORDS, TextSampler
@@ -77,12 +81,16 @@ class SynthConfig:
 
 
 class SynthGenerator:
-    def __init__(self, cfg: SynthConfig = SynthConfig()) -> None:
+    def __init__(self, cfg: SynthConfig | None = None) -> None:
+        if cfg is None:
+            cfg = SynthConfig()
         self.cfg = cfg
         ids = set(cfg.profile_ids) | {"en"}
         self.profiles: dict[str, Profile] = {pid: load_profile(pid) for pid in ids}
         self.text = TextSampler(self.profiles, cfg.corpus)
         self._mp3 = cfg.mp3_enabled and ffmpeg_available()
+        if cfg.mp3_enabled and not self._mp3:
+            logging.getLogger(__name__).warning("không có ffmpeg: bỏ tăng cường MP3")
 
     @staticmethod
     def tokens_duration(tokens: list[str], keyer: KeyerParams) -> float:

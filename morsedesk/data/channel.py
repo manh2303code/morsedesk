@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 import tempfile
@@ -75,11 +76,17 @@ def mp3_roundtrip(x: np.ndarray, sample_rate: int, kbps: int) -> np.ndarray:
     with tempfile.TemporaryDirectory() as tmp:
         wav, mp3 = Path(tmp) / "in.wav", Path(tmp) / "out.mp3"
         sf.write(wav, x / scale, sample_rate, subtype="PCM_16")
-        subprocess.run(
-            ["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav), "-codec:a", "libmp3lame",
-             "-b:a", f"{kbps}k", str(mp3)],
-            check=True, capture_output=True,
-        )
+        try:
+            subprocess.run(
+                ["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav), "-codec:a", "libmp3lame",
+                 "-b:a", f"{kbps}k", str(mp3)],
+                check=True, capture_output=True,
+            )
+        except (subprocess.CalledProcessError, OSError) as e:
+            logging.getLogger(__name__).warning(
+                "ffmpeg thất bại, bỏ qua MP3: %s", (getattr(e, "stderr", b"") or b"")[-300:]
+            )
+            return x
         y, sr = sf.read(mp3, dtype="float32", always_2d=True)
     y = y.mean(axis=1) * scale
     if len(y) >= len(x):

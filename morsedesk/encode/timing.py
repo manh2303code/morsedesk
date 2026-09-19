@@ -48,7 +48,9 @@ def gap_seconds(params: TimingParams) -> tuple[float, float]:
     return 3.0 * t_a / 19.0, 7.0 * t_a / 19.0
 
 
-def tokens_to_elements(tokens: list[str], params: TimingParams = TimingParams()) -> list[Element]:
+def tokens_to_elements(tokens: list[str], params: TimingParams | None = None) -> list[Element]:
+    if params is None:
+        params = TimingParams()
     u = unit_seconds(params.wpm)
     dash = params.weight * u
     inter_char, inter_word = gap_seconds(params)

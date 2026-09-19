@@ -6,10 +6,10 @@ import pytest
 torch = pytest.importorskip("torch")
 pytest.importorskip("onnxruntime")
 
-from morsedesk.model.onnx_runner import OnnxAcousticModel, check_parity
-from morsedesk.model.vocab import VOCAB
-from tools.export_onnx import export
-from tools.net_torch import CONFIG_DEFAULT, MorseNet, output_length
+from morsedesk.model.onnx_runner import OnnxAcousticModel, check_parity  # noqa: E402
+from morsedesk.model.vocab import VOCAB  # noqa: E402
+from tools.export_onnx import export  # noqa: E402
+from tools.net_torch import CONFIG_DEFAULT, MorseNet, output_length  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -56,3 +56,14 @@ def test_vocab_mismatch_rejected(exported, tmp_path):
     bad.write_text(json.dumps(meta), encoding="utf-8")
     with pytest.raises(ValueError):
         OnnxAcousticModel(onnx_path, bad)
+
+
+def test_metadata_field_mismatch_rejected(exported, tmp_path):
+    onnx_path, meta_path, _ = exported
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["sample_rate"] = 16000
+    bad = tmp_path / "bad_sr.json"
+    bad.write_text(json.dumps(meta), encoding="utf-8")
+    with pytest.raises(ValueError, match="sample_rate"):
+        OnnxAcousticModel(onnx_path, bad)
+

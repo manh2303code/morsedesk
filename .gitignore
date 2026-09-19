@@ -19,3 +19,4 @@ runs/
 *.ckpt
 models/*.onnx
 models/*.npz
+models/eval_*.json

@@ -15,6 +15,7 @@ from morsedesk.audio.io import save_audio
 from morsedesk.data.channel import ChannelParams, clean
 from morsedesk.data.keyer import KeyerParams, machine
 from morsedesk.data.synth import SynthConfig, SynthGenerator
+from morsedesk.textio import force_utf8_streams
 from tools.make_t2_manifest import write_jsonl
 
 SNR_FULL = [-6.0, -3.0, 0.0, 3.0, 6.0, 10.0, 20.0]
@@ -96,6 +97,7 @@ def generate_matrix(out_dir: Path, full: bool = False, clips: int = 1, seed_base
 
 
 def main(argv: list[str] | None = None) -> int:
+    force_utf8_streams()
     ap = argparse.ArgumentParser(description="Sinh ma trận T1")
     ap.add_argument("--out", type=Path, default=Path("testdata/generated/t1"))
     ap.add_argument("--full", action="store_true", help="toàn bộ SNR/WPM thay vì chỉ vùng gate")

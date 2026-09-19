@@ -29,6 +29,9 @@ def example_features(ex: Example) -> np.ndarray:
     return compute_features(ex.audio, f0)
 
 
+VAL_SEED_BASE = 2_000_000_000  # seed validation tách hẳn khỏi dải seed train (seed*1e6 + steps*batch)
+
+
 class SynthDataset(IterableDataset):
     def __init__(self, gen: SynthGenerator, seed_start: int, n_items: int) -> None:
         self.gen, self.seed_start, self.n_items = gen, seed_start, n_items
@@ -116,6 +119,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--resume", type=Path, default=None)
     a = ap.parse_args(argv)
 
+    assert a.seed * 1_000_000 + a.steps * a.batch < VAL_SEED_BASE, "seed/steps quá lớn: trùng dải seed validation"
+
     torch.manual_seed(a.seed)
     torch.set_num_threads(max(1, torch.get_num_threads()))
     gen = SynthGenerator(SynthConfig(mp3_enabled=not a.no_mp3))
@@ -126,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
 
     val_items = []
     for i in range(a.val_clips):
-        ex = gen.generate(10_000_000 + i)
+        ex = gen.generate(VAL_SEED_BASE + i)
         val_items.append((torch.from_numpy(example_features(ex)), ex.tokens))
 
     ds = SynthDataset(gen, seed_start=a.seed * 1_000_000, n_items=a.steps * a.batch)

@@ -161,10 +161,12 @@ def emissions_to_words(
 
 class Decoder:
     def __init__(
-        self, profile: str | Profile = "en", engine: str = "baseline", model_path: Path | None = None
+        self, profile: str | Profile = "en", engine: str = "baseline", model_path: Path | None = None,
+        fallback: bool = True,
     ) -> None:
         self.profile = _resolve_profile(profile)
         self.engine = engine
+        self.fallback = fallback
         self._baseline = BaselineDecoder()
         self._model = None
         if engine == "onnx":
@@ -222,7 +224,8 @@ class Decoder:
         fallback_text = None
         if confidence < FALLBACK_CONFIDENCE:
             warnings.append("độ tin cậy thấp, kèm kết quả bộ giải mã DSP")
-            fallback_text = self.profile.render(self._baseline_tokens(x, est.f0_hz).tokens)
+            if self.fallback:
+                fallback_text = self.profile.render(self._baseline_tokens(x, est.f0_hz).tokens)
         elif confidence < LOW_CONFIDENCE:
             warnings.append("độ tin cậy thấp")
         return DecodeResult(" ".join(w.text for w in words), words,

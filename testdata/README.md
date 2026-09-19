@@ -35,4 +35,4 @@ uv run python tools/bench_external.py --manifest testdata/manifests/t2_arrl.json
   --cmd "python /tmp/deepcw-engine/examples/python/decode.py /tmp/deepcw-engine/model.onnx /tmp/deepcw-engine/model.onnx.json {path}" --name deepcw
 ```
 
-Baseline nội bộ đo bằng `uv run morsedesk bench --set t2 --manifest testdata/manifests/t2_arrl.jsonl --engine baseline` (Task 14).
+Baseline nội bộ đo bằng `uv run morsedesk bench --manifest testdata/manifests/t2_arrl.jsonl --engine baseline` (Task 14).

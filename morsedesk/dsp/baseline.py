@@ -67,7 +67,7 @@ def run_lengths(mask: np.ndarray) -> list[tuple[bool, int, int]]:
     change = np.flatnonzero(np.diff(mask.astype(np.int8))) + 1
     starts = np.concatenate([[0], change])
     ends = np.concatenate([change, [len(mask)]])
-    return [(bool(mask[s]), int(s), int(e)) for s, e in zip(starts, ends)]
+    return [(bool(mask[s]), int(s), int(e)) for s, e in zip(starts, ends, strict=True)]
 
 
 def _two_means_log(values: np.ndarray) -> tuple[float, float]:

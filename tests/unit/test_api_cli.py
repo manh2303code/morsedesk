@@ -3,7 +3,7 @@ import json
 import numpy as np
 import pytest
 
-from morsedesk.api import DecodeResult, Decoder, Encoder
+from morsedesk.api import Decoder, DecodeResult, Encoder
 from morsedesk.cli import main
 from morsedesk.encode.synth import add_noise
 
@@ -24,7 +24,7 @@ def test_encoder_decoder_roundtrip_english():
     assert abs(r.tone_hz - 700) < 10
     assert r.warnings == []
     assert [w.text for w in r.words] == text.split()
-    for a, b in zip(r.words, r.words[1:]):
+    for a, b in zip(r.words, r.words[1:], strict=False):
         assert a.end_s <= b.start_s
     assert all(0.0 <= w.confidence <= 1.0 for w in r.words)
 
@@ -101,3 +101,18 @@ def test_cli_forces_utf8_streams(monkeypatch, tmp_path):
     assert main(["decode", str(wav), "--profile", "ru"]) == 0
     sys.stdout.flush()
     assert "ПРИВЕТ" in buf.getvalue().decode("utf-8")
+
+
+def test_cli_model_default_is_none():
+    from morsedesk.cli import build_parser
+
+    a = build_parser().parse_args(["decode", "x.wav", "--engine", "onnx"])
+    assert a.model is None
+    b = build_parser().parse_args(["bench", "--manifest", "m.jsonl"])
+    assert b.model is None
+
+
+def test_cli_missing_file_reports_not_found(tmp_path, capsys):
+    assert main(["decode", str(tmp_path / "nope.wav"), "--profile", "en"]) == 2
+    assert "không tìm thấy" in capsys.readouterr().err
+

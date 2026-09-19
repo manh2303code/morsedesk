@@ -92,7 +92,7 @@ def test_noise_only_returns_nothing():
 def test_symbols_have_frames_and_no_trailing_space():
     _, res, _ = _decode("AB CD", wpm=20)
     assert res.symbols[-1].token != SPACE
-    for a, b in zip(res.symbols, res.symbols[1:]):
+    for a, b in zip(res.symbols, res.symbols[1:], strict=False):
         assert a.end_frame <= b.start_frame
 
 

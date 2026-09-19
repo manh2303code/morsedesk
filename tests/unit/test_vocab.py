@@ -1,7 +1,7 @@
 import pytest
 
 from morsedesk.model import vocab
-from morsedesk.model.vocab import VOCAB, BLANK, SPACE, UNK
+from morsedesk.model.vocab import BLANK, SPACE, UNK, VOCAB
 
 
 def test_size_is_65():

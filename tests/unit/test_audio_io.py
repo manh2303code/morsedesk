@@ -2,7 +2,14 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from morsedesk.audio.io import UnsupportedAudio, audio_info, load_audio, normalize, resample, save_audio
+from morsedesk.audio.io import (
+    UnsupportedAudio,
+    audio_info,
+    load_audio,
+    normalize,
+    resample,
+    save_audio,
+)
 
 
 def _sine(sr, seconds, hz, ch=1):
@@ -64,3 +71,9 @@ def test_resample_identity_and_ratio():
 def test_normalize_zero_signal():
     z = np.zeros(100, dtype=np.float32)
     assert np.all(normalize(z) == 0)
+
+
+def test_load_missing_file_raises_file_not_found(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        load_audio(tmp_path / "missing.wav")
+

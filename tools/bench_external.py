@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
 import subprocess
 import tempfile
@@ -36,13 +37,17 @@ def run_manifest(manifest: Path, cmd_template: str, strip_prefix: str = "", to_w
                 save_audio(wav, x, sr)
             else:
                 wav = src
-            # posix=False giữ dấu ngoặc kép nguyên trong token (để tách đúng theo khoảng
-            # trắng) nhưng subprocess.run trên Windows cần argv không còn dấu ngoặc kép
-            # bao ngoài, nếu không list2cmdline sẽ escape chúng thành literal và
-            # CreateProcess không tìm thấy file (WinError 2). Bóc dấu ngoặc kép bao ngoài
-            # từng token trước khi truyền cho subprocess.
-            raw_parts = shlex.split(cmd_template.replace("{path}", str(wav)), posix=False)
-            cmd = [p[1:-1] if len(p) >= 2 and p[0] == p[-1] == '"' else p for p in raw_parts]
+            # Tách token TRƯỚC rồi mới thay {path}: nếu thay path (có thể chứa khoảng
+            # trắng) vào chuỗi mẫu rồi mới shlex.split thì đường dẫn sẽ bị tách thành
+            # nhiều token. posix=False trên Windows giữ dấu ngoặc kép nguyên trong token
+            # (để tách đúng theo khoảng trắng) nhưng subprocess.run trên Windows cần argv
+            # không còn dấu ngoặc kép bao ngoài, nếu không list2cmdline sẽ escape chúng
+            # thành literal và CreateProcess không tìm thấy file (WinError 2). Bóc dấu
+            # ngoặc kép bao ngoài từng token sau khi thay path.
+            tokens = shlex.split(cmd_template, posix=(os.name != "nt"))
+            cmd = [t.replace("{path}", str(wav)) for t in tokens]
+            if os.name == "nt":
+                cmd = [t[1:-1] if len(t) >= 2 and t[0] == t[-1] == '"' else t for t in cmd]
             t0 = time.time()
             try:
                 proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
@@ -53,7 +58,7 @@ def run_manifest(manifest: Path, cmd_template: str, strip_prefix: str = "", to_w
                 rows_out.append({
                     "path": row["path"], "ref": row["text"], "hyp": "",
                     "cer": cer(row["text"], ""), "seconds": time.time() - t0,
-                    "returncode": None, "error": f"{type(e).__name__}: {e}",
+                    "returncode": None, "stderr": "", "error": f"{type(e).__name__}: {e}",
                 })
                 continue
             lines = []
@@ -61,7 +66,7 @@ def run_manifest(manifest: Path, cmd_template: str, strip_prefix: str = "", to_w
                 if strip_prefix and line.startswith(strip_prefix):
                     line = line[len(strip_prefix):]
                 lines.append(line.strip())
-            hyp = " ".join(l for l in lines if l)
+            hyp = " ".join(ln for ln in lines if ln)
             rows_out.append({
                 "path": row["path"], "ref": row["text"], "hyp": hyp,
                 "cer": cer(row["text"], hyp), "seconds": time.time() - t0,

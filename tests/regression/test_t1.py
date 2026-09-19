@@ -62,6 +62,7 @@ def test_cli_bench(tmp_path, monkeypatch, capsys):
     assert "CER" in capsys.readouterr().out
 
 
+@pytest.mark.gate
 @pytest.mark.skipif(not Path("models/acoustic.onnx").exists(), reason="chưa có model ONNX (Task 17)")
 def test_t1_gate_onnx():
     manifest = Path("testdata/generated/t1/manifest.jsonl")
@@ -87,3 +88,8 @@ def test_evaluate_isolates_decode_errors(tmp_path):
     assert results[0]["error"]
     summary, _ = bench.run(manifest, "baseline", None, tmp_path / "r", None, False, 0.02)
     assert summary["errors"] == 1
+
+
+def test_aggregate_sorts_numeric_keys():
+    rows = [{"snr": s, "cer": 0.1, "wer": 0.2} for s in (10.0, 3.0, 0.0, 20.0)]
+    assert list(bench.aggregate(rows, "snr").keys()) == ["0.0", "3.0", "10.0", "20.0"]

@@ -88,8 +88,10 @@ def compute_features(
     x: np.ndarray,
     f0_hz: float,
     sample_rate: int = SAMPLE_RATE,
-    cfg: FrontendConfig = FrontendConfig(),
+    cfg: FrontendConfig | None = None,
 ) -> np.ndarray:
+    if cfg is None:
+        cfg = FrontendConfig()
     n_frames = len(x) // HOP
     if n_frames == 0:
         return np.zeros((0, FEAT_DIM), dtype=np.float32)

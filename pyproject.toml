@@ -29,11 +29,18 @@ packages = ["morsedesk"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q -m 'not gate'"
+markers = [
+  "gate: chạy model đã huấn luyện trên T1/roundtrip; cần models/acoustic.onnx; chạy bằng -m gate",
+]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501"]
 
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu" }]

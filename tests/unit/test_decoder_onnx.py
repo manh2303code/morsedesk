@@ -1,10 +1,13 @@
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 from morsedesk.api import (
-    Decoder, Encoder, emissions_to_words, estimate_wpm_from_emissions, pattern_units,
+    Decoder,
+    Encoder,
+    emissions_to_words,
+    estimate_wpm_from_emissions,
+    pattern_units,
 )
 from morsedesk.cli import main
 from morsedesk.lm.profile import load_profile
@@ -79,6 +82,7 @@ def test_cli_missing_model_exit_2(tmp_path, capsys):
     assert "lỗi" in capsys.readouterr().err
 
 
+@pytest.mark.gate
 @pytest.mark.skipif(not Path("models/acoustic.onnx").exists(), reason="chưa có model đã huấn luyện")
 def test_trained_model_roundtrip():
     text = "CQ CQ DE R1ABC R1ABC K"
@@ -89,3 +93,10 @@ def test_trained_model_roundtrip():
     x2 = Encoder("ru").to_audio("ПРИВЕТ МИР", wpm=25, snr_db=6.0, seed=2)
     r2 = Decoder("ru", engine="onnx").decode_array(x2)
     assert cer("ПРИВЕТ МИР", r2.text) < 0.1, r2.text
+
+
+def test_no_fallback_disables_baseline_text(tmp_model):
+    x = Encoder("en").to_audio("CQ CQ DE R1ABC", wpm=20)
+    r = Decoder("en", engine="onnx", model_path=tmp_model, fallback=False).decode_array(x)
+    assert r.fallback_text is None
+

@@ -1,6 +1,6 @@
 import pytest
 
-from morsedesk.lm.profile import Profile, list_profiles, load_profile, UNK_DISPLAY
+from morsedesk.lm.profile import UNK_DISPLAY, Profile, list_profiles, load_profile
 from morsedesk.model.vocab import SPACE, UNK, VOCAB
 
 
@@ -42,7 +42,8 @@ def test_en_letters_digits_punct(en):
     assert en.prosign_to_pattern["<SOS>"] == "...---..."
 
 
-def test_ru_covers_31_letters(ru):
+def test_ru_covers_32_letters_with_hard_sign(ru):
+    # Ь (mềm) và Ъ (cứng) dùng chung mẫu -..-, nên 32 chữ cái ánh xạ trên 31 mẫu.
     letters = {L for ls in ru.map.values() for L in ls if L.isalpha()}
     assert len(letters) == 32
     assert ru.letter_to_pattern["Ш"] == "----"
