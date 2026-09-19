@@ -45,3 +45,23 @@ gate (SNR>=0, 10-35 WPM, n=500): CER=296.48% TRƯỢT (ngưỡng 2.00%)
 - Số liệu này là đối chứng tuần 1 cho baseline DSP; sẽ so sánh với engine ONNX ở Task 17 sau khi có
   `models/acoustic.onnx` (bài test `test_t1_gate_onnx` trong `tests/regression/test_t1.py` hiện bị
   skip vì chưa có model).
+
+## Engine ONNX v1 (checkpoint runs/v1/best.pt, 8000 bước, TER validation 38.0%)
+
+Ngày đo: 2026-09-19. Model xuất tạm sang models/eval_v1.onnx (không commit). Cùng manifest T1 vùng gate, 500 clip.
+
+```
+CER % theo SNR (hàng) x WPM (cột)
+SNR\WPM    12.0    18.0    25.0    35.0
+    0.0   55.01   56.63   53.57   60.71
+    3.0   39.63   41.82   35.39   36.56
+    6.0   32.56   29.55   25.91   24.08
+   10.0   29.06   23.57   20.64   30.10
+   20.0   26.69   16.22   19.65   14.68
+by_keying: bug=33.72%, drift=31.50%, farnsworth=37.16%, jitter=34.46%, machine=31.17%
+by_channel: clean=24.62%, qrm=24.43%, qrn=26.12%, qsb=68.23%
+by_profile: en=35.31%, kk-cyrl-ru=31.39%, ru=34.09%
+n=500 CER=33.60% WER=75.45% -> gate TRƯỢT (ngưỡng 2%)
+```
+
+Nhận xét: sau 8000 bước model đã vượt xa baseline (33.6% so với 296%) nhưng còn thiếu huấn luyện (TER validation 100% tới bước 1000, 38% ở bước 7500 và vẫn giảm). QSB là kênh yếu nhất (68%). Bước tiếp: train tiếp v1b (resume, 16000 bước, seed 2), rồi cân nhắc hidden 128, lịch learning rate và tăng tỉ lệ mẫu QSB; mục tiêu gate CER < 2% thuộc vòng lặp tuần 3.
