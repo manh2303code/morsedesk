@@ -1,0 +1,33 @@
+id: en
+script: Latin
+display_name: English
+lm: lm/en.bin
+encode_aliases: {}
+lexicon_bonus: [CQ, DE, PSE, K, KN, TU, RST, QTH, QRZ, QSL, QRM, QRN, QSB, "73", "88", AGN, HW, TNX, GM, GA, GE]
+map:
+  ".-": [A]
+  "-...": [B]
+  "-.-.": [C]
+  "-..": [D]
+  ".": [E]
+  "..-.": [F]
+  "--.": [G]
+  "....": [H]
+  "..": [I]
+  ".---": [J]
+  "-.-": [K]
+  ".-..": [L]
+  "--": [M]
+  "-.": [N]
+  "---": [O]
+  ".--.": [P]
+  "--.-": [Q]
+  ".-.": [R]
+  "...": [S]
+  "-": [T]
+  "..-": [U]
+  "...-": [V]
+  ".--": [W]
+  "-..-": [X]
+  "-.--": [Y]
+  "--..": [Z]

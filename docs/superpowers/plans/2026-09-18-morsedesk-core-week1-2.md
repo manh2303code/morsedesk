@@ -13,6 +13,7 @@
 - Python `>=3.11,<3.12`; tạo môi trường bằng `uv sync --all-extras` (uv tự tải Python 3.11). Không dùng Python 3.14 của hệ thống.
 - `numpy>=1.26,<2` (pyctcdecode ở tuần 3 cần numpy < 2).
 - Chỉ thêm phụ thuộc có license Apache-2.0, MIT, BSD hoặc LGPL liên kết động. Không nhúng GPL/AGPL; `ffmpeg` chỉ được gọi như tiến trình ngoài và phải là tùy chọn.
+- `torch` (extra `train`, chỉ dùng trên máy dev) lấy từ index CPU `https://download.pytorch.org/whl/cpu` qua `[tool.uv.sources]` để `uv.lock` không kéo gói NVIDIA CUDA.
 - Âm thanh nội bộ: mono float32, `SAMPLE_RATE = 8000`, `HOP = 40` mẫu (200 khung/giây), `N_FFT = 256`, đặc trưng `FEAT_DIM = 11` mỗi khung 5 ms.
 - Từ vựng đầu ra đúng 65 lớp: index 0 `<blank>`, 1 `<space>`, 2 `<unk>`, rồi 62 mẫu (31 chữ, 10 số, 18 dấu, 3 prosign) theo thứ tự cố định trong `morsedesk/model/vocab.py`.
 - Timing chuẩn PARIS: dit = 1.2/WPM giây; dash = weight × dit (mặc định 3); khoảng trong chữ 1 dit; giữa chữ 3; giữa từ 7. Farnsworth theo ARRL: `t_a = (60c − 37.2s)/(s·c)`, khoảng giữa chữ `3·t_a/19`, giữa từ `7·t_a/19`.
@@ -46,6 +47,7 @@
 | `morsedesk/metrics.py` | CER, WER |
 | `morsedesk/api.py` | `Encoder`, `Decoder`, `DecodeResult`, `Word` |
 | `morsedesk/cli.py` | `morsedesk encode/decode/devices/bench` |
+| `morsedesk/textio.py` | ép UTF-8 cho stdout/stderr |
 | `morsedesk/data/text.py` | lấy mẫu văn bản ba ngôn ngữ |
 | `morsedesk/data/keyer.py` | mô hình tay gõ ngẫu nhiên |
 | `morsedesk/data/channel.py` | kênh: trôi tone, AWGN, QSB, QRM, QRN, băng, mức, clipping, DC, MP3 |
@@ -117,6 +119,14 @@ addopts = "-q"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 ```
 
 - [ ] **Step 2: Viết README.md**
@@ -527,6 +537,10 @@ prosigns:
   "...-.-": "<SK>"
   "...---...": "<SOS>"
   "........": "<ERR>"
+  ".-.-.": "<AR>"
+  "-...-": "<BT>"
+  "-.--.": "<KN>"
+  ".-...": "<AS>"
 ```
 
 `morsedesk/profiles/en.yaml`:
@@ -1471,7 +1485,7 @@ def load_audio(path: str | Path, target_sr: int = SAMPLE_RATE) -> tuple[np.ndarr
     path = Path(path)
     try:
         data, sr = sf.read(str(path), dtype="float32", always_2d=True)
-    except (RuntimeError, sf.LibsndfileError) as e:  # pragma: no cover - thông điệp phụ thuộc libsndfile
+    except sf.LibsndfileError as e:
         raise UnsupportedAudio(
             f"không đọc được {path.name}: {e}. Định dạng hỗ trợ: {', '.join(SUPPORTED_EXT)}"
         ) from e
@@ -1802,6 +1816,30 @@ def test_derivative_column_is_diff_of_agc():
     feats = compute_features(x, 700.0)
     d = np.diff(feats[:, 0], prepend=feats[0, 0])
     assert np.allclose(feats[:, 1], d, atol=1e-5)
+
+
+def test_short_input_returns_empty_without_warnings():
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        for n in (0, 5, 39):
+            x = np.zeros(n, dtype=np.float32)
+            assert compute_features(x, 700.0).shape == (0, FEAT_DIM)
+            assert mix_envelope(x, 700.0).shape == (0,)
+            assert spectral_bins(x, 700.0).shape == (0, 9)
+
+
+def test_envelope_frames_centered_like_stft():
+    # tone bật từ mẫu 400 đến 800: khung 10 (tâm 400) phải nằm nửa chừng giữa tắt và bật
+    x = np.zeros(1600, dtype=np.float32)
+    t = np.arange(400) / SAMPLE_RATE
+    x[400:800] = 0.8 * np.sin(2 * np.pi * 700.0 * t)
+    env = mix_envelope(x, 700.0)
+    full = env[12:18].mean()
+    assert env[8] < 0.15 * full
+    assert 0.3 * full < env[10] < 0.7 * full
+    assert env[12] > 0.85 * full
 ```
 
 - [ ] **Step 2: Chạy test, xác nhận thất bại**
@@ -1838,8 +1876,16 @@ class FrontendConfig:
 def mix_envelope(
     x: np.ndarray, f0_hz: float, sample_rate: int = SAMPLE_RATE, lowpass_hz: float = 200.0
 ) -> np.ndarray:
-    """Trộn xuống băng gốc phức tại f0, lọc thấp, |I+jQ|, trung bình mỗi HOP mẫu."""
+    """Trộn xuống băng gốc phức tại f0, lọc thấp, |I+jQ|, trung bình mỗi HOP mẫu.
+
+    Khung t được căn giữa tại mẫu t*HOP, giống stft_power: pad env với HOP//2 mẫu 0
+    ở đầu (và HOP mẫu 0 ở cuối để đủ cho khung cuối) rồi lấy trung bình từng khung
+    HOP mẫu, sao cho khung t phủ [t*HOP - HOP//2, t*HOP + HOP//2).
+    """
     n = len(x)
+    n_frames = n // HOP
+    if n_frames == 0:
+        return np.zeros(0)
     t = np.arange(n) / sample_rate
     lo = np.exp(-2j * np.pi * f0_hz * t)
     y = x.astype(np.float64) * lo
@@ -1847,8 +1893,8 @@ def mix_envelope(
     yi = sosfiltfilt(sos, y.real)
     yq = sosfiltfilt(sos, y.imag)
     env = np.sqrt(yi * yi + yq * yq)
-    n_frames = n // HOP
-    return env[: n_frames * HOP].reshape(n_frames, HOP).mean(axis=1)
+    env_p = np.pad(env, (HOP // 2, HOP))
+    return env_p[: n_frames * HOP].reshape(n_frames, HOP).mean(axis=1)
 
 
 def _ema(v: np.ndarray, alpha: float, init: float) -> np.ndarray:
@@ -1876,6 +1922,9 @@ def agc_log(env: np.ndarray, frame_rate: int = FRAME_RATE, tau_s: float = 1.0) -
 def spectral_bins(
     x: np.ndarray, f0_hz: float, n_bins: int = 9, sample_rate: int = SAMPLE_RATE
 ) -> np.ndarray:
+    n_frames = len(x) // HOP
+    if n_frames == 0:
+        return np.zeros((0, n_bins), dtype=np.float32)
     power, freqs = stft_power(x, sample_rate=sample_rate)
     bin_hz = float(freqs[1] - freqs[0])
     k0 = int(round(f0_hz / bin_hz))
@@ -1894,6 +1943,8 @@ def compute_features(
     cfg: FrontendConfig = FrontendConfig(),
 ) -> np.ndarray:
     n_frames = len(x) // HOP
+    if n_frames == 0:
+        return np.zeros((0, FEAT_DIM), dtype=np.float32)
     env = mix_envelope(x, f0_hz, sample_rate, cfg.lowpass_hz)
     a = agc_log(env, FRAME_RATE, cfg.agc_tau_s)
     d = np.diff(a, prepend=a[0] if len(a) else 0.0)
@@ -1906,7 +1957,7 @@ def compute_features(
 - [ ] **Step 4: Chạy test, xác nhận đạt**
 
 Run: `uv run pytest tests/unit/test_frontend.py -v`
-Expected: `6 passed`
+Expected: `8 passed`
 
 - [ ] **Step 5: Commit**
 
@@ -2025,7 +2076,7 @@ git commit -m "feat(metrics): CER và WER" -m "Co-Authored-By: Claude Fable 5.1 
 - Consumes: `estimate_tone`, `ToneEstimate` (Task 7); `mix_envelope` (Task 8); `Profile.render` (Task 3); `SPACE`, `VOCAB`; `cer` (Task 9).
 - Produces: `baseline.Symbol(token: str, start_frame: int, end_frame: int)` (token là mẫu, có thể không thuộc từ vựng, hoặc `SPACE`); `baseline.BaselineResult(symbols: list[Symbol], unit_frames: float, threshold: float, cost: float)` với thuộc tính `tokens: list[str]`, `wpm: float`; `baseline.run_lengths(mask) -> list[tuple[bool, int, int]]`; `baseline.candidate_units(on_lengths) -> list[float]`; `baseline.timing_cost(runs, unit) -> float`; `baseline.split_gap_threshold(gap_units: np.ndarray) -> float`; `baseline.runs_to_symbols(runs, unit) -> list[Symbol]`; lớp `baseline.BaselineDecoder(thresholds=THRESHOLDS)` với `decode_envelope(env) -> BaselineResult` và `decode_audio(x, sample_rate=SAMPLE_RATE) -> tuple[BaselineResult, ToneEstimate]`.
 
-Thuật toán (theo ý tưởng ggmorse, MIT, viết lại): chuẩn hóa envelope theo phân vị 98, làm mượt 3 khung; với mỗi ngưỡng trong `THRESHOLDS = (0.15, 0.25, 0.35, 0.45, 0.55, 0.65)` lấy chuỗi bật/tắt; sinh ứng viên độ dài dit từ 2-means trên log độ dài đoạn bật; chi phí = trung bình bình phương log-tỉ lệ so với mốc lý tưởng gần nhất (bật 1 hay 3; tắt 1, 3, 7, tắt dài kẹp về 7); chọn cặp ngưỡng và dit chi phí thấp nhất. Ranh giới chữ/từ: khoảng tắt < 2 dit là trong chữ; các khoảng ≥ 2 dit chia hai cụm bằng 2-means trên log để tự thích nghi Farnsworth (nếu tỉ lệ max/min < 1.8 thì tất cả là khoảng giữa chữ).
+Thuật toán (theo ý tưởng ggmorse, MIT, viết lại): chuẩn hóa envelope theo phân vị 98, làm mượt 3 khung; với mỗi ngưỡng trong `THRESHOLDS = (0.15, 0.25, 0.35, 0.45, 0.55, 0.65)` lấy chuỗi bật/tắt; sinh ứng viên độ dài dit từ 2-means trên log độ dài đoạn bật; chi phí = trung bình bình phương log-tỉ lệ so với mốc lý tưởng gần nhất (bật 1 hay 3; tắt 1, 3, 7, tắt dài kẹp về 7); chọn cặp ngưỡng và dit chi phí thấp nhất. Ranh giới chữ/từ: khoảng tắt < 2 dit là trong chữ; các khoảng ≥ 2 dit chia hai cụm bằng 2-means trên log để tự thích nghi Farnsworth (nếu tỉ lệ max/min < 1.8 thì tất cả là khoảng giữa chữ). Giới hạn đã biết: bản tin ngắn không có tương phản chấm/gạch (HI, SI, TTT) có thể bị đọc thành alias 3× tại một số tốc độ cao khi một dit chỉ dài 4–6 khung (200 khung/s) và độ lượng tử hóa át manh mối khoảng tắt 9 so với 7 dit. Đã quan sát lỗi ở 40 WPM (SI), 48 WPM (HI) và 60 WPM (HI, SI); dải 5–35 WPM và 50 WPM hiện đúng theo test. "TTT" ở 60 WPM trùng hoàn toàn với "S" ở 20 WPM nên không có manh mối. Engine ONNX là bộ giải mã chính; baseline chỉ là đối chứng và dự phòng. Hướng cải tiến sau: nội suy ranh giới dưới khung trong run_lengths để giảm nhiễu lượng tử.
 
 - [ ] **Step 1: Viết test**
 
@@ -2033,6 +2084,7 @@ Thuật toán (theo ý tưởng ggmorse, MIT, viết lại): chuẩn hóa envelo
 
 ```python
 import numpy as np
+import pytest
 
 from morsedesk.dsp.baseline import (
     BaselineDecoder,
@@ -2127,6 +2179,61 @@ def test_symbols_have_frames_and_no_trailing_space():
     assert res.symbols[-1].token != SPACE
     for a, b in zip(res.symbols, res.symbols[1:]):
         assert a.end_frame <= b.start_frame
+
+
+def test_timing_cost_scores_boundary_on_runs():
+    from morsedesk.dsp.baseline import timing_cost
+
+    # bắt đầu và kết thúc bằng đoạn bật: dot 1u, tắt 3u, dash 3u -> khớp lý tưởng, chi phí 0
+    runs = [(True, 0, 10), (False, 10, 40), (True, 40, 70)]
+    assert timing_cost(runs, 10.0) == 0.0
+    # đoạn bật đầu dài 2u (không khớp 1 hay 3) phải làm chi phí > 0 vì không được bỏ qua
+    runs_bad = [(True, 0, 20), (False, 20, 50), (True, 50, 80)]
+    assert timing_cost(runs_bad, 10.0) > 0.0
+
+
+def test_timing_cost_ignores_boundary_off_runs():
+    from morsedesk.dsp.baseline import timing_cost
+
+    # đoạn tắt đầu 10u và tắt cuối 2u đều bị bỏ qua -> chi phí 0
+    runs = [(False, 0, 100), (True, 100, 110), (False, 110, 140), (True, 140, 170), (False, 170, 190)]
+    assert timing_cost(runs, 10.0) == 0.0
+
+
+@pytest.mark.parametrize("wpm", [5, 8, 12, 20, 35, 50])
+def test_short_all_dit_message_across_speeds(wpm):
+    for text in ("HI", "EE E", "SI"):
+        out, res, _ = _decode(text, wpm=wpm)
+        assert out == text, (wpm, text, out)
+        assert abs(res.wpm - wpm) < 0.15 * wpm + 1.0, (wpm, res.wpm)
+
+
+@pytest.mark.parametrize("wpm", [12, 20, 35])
+def test_short_all_dash_message_mid_speeds(wpm):
+    # "TTT" ở 60 WPM trùng hoàn toàn với "S" ở 20 WPM (không có manh mối), nên chỉ kiểm ở dải giữa
+    out, res, _ = _decode("TTT", wpm=wpm)
+    assert out == "TTT", (wpm, out)
+    assert abs(res.wpm - wpm) < 0.15 * wpm + 1.0
+
+
+@pytest.mark.xfail(reason="giới hạn đã biết: dit 4-6 khung ở tốc độ cao, mất manh mối 9 vs 7", strict=False)
+@pytest.mark.parametrize("wpm,text", [(40, "SI"), (48, "HI"), (60, "HI"), (60, "SI")])
+def test_short_low_contrast_high_speed_known_limitation(wpm, text):
+    out, _, _ = _decode(text, wpm=wpm)
+    assert out == text, (wpm, text, out)
+
+
+def test_timing_cost_soft_cap_on_long_off_runs():
+    from morsedesk.dsp.baseline import OFF_LONG_CAP_UNITS, timing_cost
+
+    # bật 1u, tắt 9u, bật 1u: khoảng tắt 9u phải bị phạt (không còn kẹp về 7)
+    runs = [(True, 0, 10), (False, 10, 100), (True, 100, 110)]
+    assert timing_cost(runs, 10.0) > 0.0
+    # tắt 30u và tắt 12u phải cho cùng chi phí (kẹp mềm tại OFF_LONG_CAP_UNITS)
+    runs_30 = [(True, 0, 10), (False, 10, 310), (True, 310, 320)]
+    runs_12 = [(True, 0, 10), (False, 10, 130), (True, 130, 140)]
+    assert abs(timing_cost(runs_30, 10.0) - timing_cost(runs_12, 10.0)) < 1e-12
+    assert OFF_LONG_CAP_UNITS == 12.0
 ```
 
 - [ ] **Step 2: Chạy test, xác nhận thất bại**
@@ -2139,7 +2246,9 @@ Expected: FAIL với `ModuleNotFoundError: No module named 'morsedesk.dsp.baseli
 ```python
 """Bộ giải mã DSP thích nghi: thử nhiều cặp (ngưỡng, độ dài dit), chọn cặp khớp timing nhất.
 
-Dùng làm baseline đo lường và fallback khi mô hình nơ-ron kém tin cậy.
+Dùng làm baseline đo lường và fallback khi mô hình nơ-ron kém tin cậy. Khi timing mơ hồ
+(bản tin ngắn không tương phản dot/dash), một prior tốc độ nhẹ quanh SPEED_PRIOR_WPM
+phá thế hòa giữa các giả thuyết (ngưỡng, độ dài dit) có timing_cost gần bằng nhau.
 """
 
 from __future__ import annotations
@@ -2156,6 +2265,14 @@ from morsedesk.model.vocab import SPACE
 THRESHOLDS = (0.15, 0.25, 0.35, 0.45, 0.55, 0.65)
 IDEAL_ON = np.array([1.0, 3.0])
 IDEAL_OFF = np.array([1.0, 3.0, 7.0])
+
+SPEED_PRIOR_WPM = 20.0       # tốc độ tiên nghiệm khi timing mơ hồ
+# Đo thực nghiệm: cửa sổ khả thi để "HI"/"SI" đúng ở 5-8 WPM (wpm giả thuyết đúng cách xa 20)
+# và "SI" đúng ở 50 WPM (giả thuyết sai có cost thô thấp hơn chút) là khoảng [0.0015, 0.0025];
+# 0.01 (giá trị cũ) đủ lớn để prior lấn át chênh lệch timing_cost thật ở tốc độ thấp.
+SPEED_PRIOR_WEIGHT = 0.002   # nhỏ so với chi phí timing, chỉ phá thế hòa
+
+OFF_LONG_CAP_UNITS = 12.0   # khoảng tắt dài hơn 12 dit coi như "12": chỉ phạt nhẹ, không loại giả thuyết
 
 
 @dataclass
@@ -2215,15 +2332,23 @@ def candidate_units(on_lengths: np.ndarray) -> list[float]:
 
 
 def timing_cost(runs: list[tuple[bool, int, int]], unit: float) -> float:
-    """Trung bình bình phương log-tỉ lệ so với mốc lý tưởng gần nhất; bỏ đoạn tắt đầu/cuối."""
-    inner = runs[1:-1] if len(runs) > 2 else runs
+    """Trung bình bình phương log-tỉ lệ so với mốc lý tưởng gần nhất (bật: 1/3; tắt <=7u: 1/3/7);
+    đoạn tắt dài hơn 7u dùng kẹp mềm (so với OFF_LONG_CAP_UNITS) thay vì kẹp cứng về 7, để vẫn phạt
+    khoảng tắt quá dài mà không loại hẳn giả thuyết; bỏ đoạn tắt đầu/cuối."""
+    inner = list(runs)
+    if inner and not inner[0][0]:
+        inner = inner[1:]
+    if inner and not inner[-1][0]:
+        inner = inner[:-1]
     costs = []
     for on, s, e in inner:
         r = (e - s) / unit
-        if not on:
-            r = min(r, 7.0)
-        ideals = IDEAL_ON if on else IDEAL_OFF
-        costs.append(float(np.min(np.abs(np.log(r) - np.log(ideals))) ** 2))
+        if on:
+            costs.append(float(np.min(np.abs(np.log(r) - np.log(IDEAL_ON))) ** 2))
+        elif r <= 7.0:
+            costs.append(float(np.min(np.abs(np.log(r) - np.log(IDEAL_OFF))) ** 2))
+        else:
+            costs.append(float(np.log(min(r, OFF_LONG_CAP_UNITS) / 7.0) ** 2))
     return float(np.mean(costs)) if costs else float("inf")
 
 
@@ -2277,7 +2402,7 @@ class BaselineDecoder:
             return BaselineResult([], 0.0, 0.0, float("inf"))
         env = env / (np.percentile(env, 98) + 1e-9)
         env = np.convolve(env, np.ones(3) / 3.0, mode="same")
-        best: tuple[float, float, float, list[tuple[bool, int, int]]] | None = None
+        best: tuple[float, float, float, float, list[tuple[bool, int, int]]] | None = None
         for thr in self.thresholds:
             runs = run_lengths(env > thr)
             on_lengths = np.array([e - s for on, s, e in runs if on])
@@ -2285,11 +2410,13 @@ class BaselineDecoder:
                 continue
             for unit in candidate_units(on_lengths):
                 cost = timing_cost(runs, unit)
-                if best is None or cost < best[0]:
-                    best = (cost, thr, unit, runs)
+                wpm = 1.2 * FRAME_RATE / unit
+                total = cost + SPEED_PRIOR_WEIGHT * float(np.log(wpm / SPEED_PRIOR_WPM)) ** 2
+                if best is None or total < best[0]:
+                    best = (total, cost, thr, unit, runs)
         if best is None:
             return BaselineResult([], 0.0, 0.0, float("inf"))
-        cost, thr, unit, runs = best
+        _total, cost, thr, unit, runs = best
         return BaselineResult(runs_to_symbols(runs, unit), unit, thr, cost)
 
     def decode_audio(
@@ -2305,7 +2432,7 @@ class BaselineDecoder:
 - [ ] **Step 4: Chạy test, xác nhận đạt**
 
 Run: `uv run pytest tests/unit/test_baseline.py -v`
-Expected: `11 passed`. Nếu `test_noisy_25wpm_10db` trượt, in `res.threshold`, `res.unit_frames` và thử thêm ngưỡng `0.75` vào `THRESHOLDS`; không nới ngưỡng CER của test.
+Expected: `23 passed`. Nếu `test_noisy_25wpm_10db` trượt, in `res.threshold`, `res.unit_frames` và thử thêm ngưỡng `0.75` vào `THRESHOLDS`; không nới ngưỡng CER của test.
 
 - [ ] **Step 5: Commit**
 
@@ -2425,6 +2552,21 @@ def test_cli_encode_lenient(tmp_path, capsys):
 def test_cli_encode_strict_error(capsys):
     assert main(["encode", "ABӘ", "--profile", "en"]) == 2
     assert "không hỗ trợ" in capsys.readouterr().err
+
+
+def test_cli_forces_utf8_streams(monkeypatch, tmp_path):
+    import io
+    import sys
+
+    from morsedesk.audio.io import save_audio
+
+    wav = tmp_path / "ru.wav"
+    save_audio(wav, Encoder("ru").to_audio("ПРИВЕТ", wpm=20), 8000)
+    buf = io.BytesIO()
+    monkeypatch.setattr(sys, "stdout", io.TextIOWrapper(buf, encoding="cp1252", write_through=True))
+    assert main(["decode", str(wav), "--profile", "ru"]) == 0
+    sys.stdout.flush()
+    assert "ПРИВЕТ" in buf.getvalue().decode("utf-8")
 ```
 
 - [ ] **Step 2: Chạy test, xác nhận thất bại**
@@ -2612,6 +2754,7 @@ from morsedesk.api import Decoder, Encoder
 from morsedesk.audio.io import UnsupportedAudio, save_audio
 from morsedesk.encode.text import UnsupportedCharacter
 from morsedesk.lm.profile import list_profiles
+from morsedesk.textio import force_utf8_streams
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -2681,6 +2824,7 @@ def cmd_devices(a: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    force_utf8_streams()
     a = build_parser().parse_args(argv)
     return {"encode": cmd_encode, "decode": cmd_decode, "devices": cmd_devices}[a.cmd](a)
 
@@ -2692,7 +2836,7 @@ if __name__ == "__main__":
 - [ ] **Step 5: Chạy test, xác nhận đạt**
 
 Run: `uv run pytest tests/unit/test_api_cli.py -v`
-Expected: `10 passed`
+Expected: `11 passed`
 
 Run thử tay: `uv run morsedesk encode "СӘЛЕМ ӘЛЕМ" --profile kk-cyrl-ru --wpm 18 --out testdata/generated/kk.wav` rồi `uv run morsedesk decode testdata/generated/kk.wav --profile kk-cyrl-ru`
 Expected: in `САЛЕМ АЛЕМ` (chưa có LM nên chữ Kazakh chưa khôi phục). Tạo thư mục `testdata/generated` trước nếu chưa có.
@@ -2779,6 +2923,36 @@ def test_run_manifest_with_fake_tool(tmp_path):
     assert result["n"] == 1
     assert abs(result["mean_cer"] - 2 / 7) < 1e-9
     assert result["rows"][0]["hyp"] == "CQ DE"
+
+
+def test_run_manifest_isolates_tool_errors(tmp_path):
+    x = Encoder("en").to_audio("CQ DE K", wpm=20)
+    save_audio(tmp_path / "a.wav", x, 8000)
+    (tmp_path / "a.txt").write_text("CQ DE K")
+    rows = build_manifest(tmp_path, source="x", profile_id="en")
+    manifest = tmp_path / "m.jsonl"
+    write_jsonl(rows, manifest)
+    result = run_manifest(manifest, "definitely-not-a-real-tool-xyz {path}")
+    assert result["n"] == 1
+    assert result["rows"][0]["hyp"] == ""
+    assert result["rows"][0]["cer"] == 1.0
+    assert result["rows"][0]["error"]
+
+
+def test_run_manifest_records_stderr(tmp_path):
+    import sys
+
+    x = Encoder("en").to_audio("CQ", wpm=20)
+    save_audio(tmp_path / "a.wav", x, 8000)
+    (tmp_path / "a.txt").write_text("CQ")
+    manifest = tmp_path / "m.jsonl"
+    write_jsonl(build_manifest(tmp_path, source="x", profile_id="en"), manifest)
+    script = tmp_path / "noisy.py"
+    script.write_text("import sys; print('CQ'); print('warn: xyz', file=sys.stderr)\n")
+    result = run_manifest(manifest, f'"{sys.executable}" "{script}" {{path}}')
+    assert result["rows"][0]["cer"] == 0.0
+    assert "warn: xyz" in result["rows"][0]["stderr"]
+    assert result["rows"][0]["error"] is None
 ```
 
 - [ ] **Step 2: Chạy test, xác nhận thất bại**
@@ -2804,6 +2978,7 @@ from pathlib import Path
 
 from morsedesk.encode.text import text_to_tokens
 from morsedesk.lm.profile import load_profile
+from morsedesk.textio import force_utf8_streams
 
 AUDIO_EXT = (".wav", ".mp3", ".ogg", ".flac", ".oga")
 _WPM_RE = re.compile(r"_(\d+(?:\.\d+)?)WPM", re.IGNORECASE)
@@ -2845,6 +3020,7 @@ def write_jsonl(rows: list[dict], out: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    force_utf8_streams()
     ap = argparse.ArgumentParser(description="Tạo manifest T2 từ thư mục audio + txt")
     ap.add_argument("audio_dir", type=Path)
     ap.add_argument("--source", required=True, help="nhãn nguồn, ví dụ arrl, commons, sraa")
@@ -2882,6 +3058,7 @@ from pathlib import Path
 
 from morsedesk.audio.io import load_audio, save_audio
 from morsedesk.metrics import cer
+from morsedesk.textio import force_utf8_streams
 
 
 def read_manifest(path: Path) -> list[dict]:
@@ -2901,9 +3078,26 @@ def run_manifest(manifest: Path, cmd_template: str, strip_prefix: str = "", to_w
                 save_audio(wav, x, sr)
             else:
                 wav = src
-            cmd = shlex.split(cmd_template.replace("{path}", str(wav)), posix=False)
+            # posix=False giữ dấu ngoặc kép nguyên trong token (để tách đúng theo khoảng
+            # trắng) nhưng subprocess.run trên Windows cần argv không còn dấu ngoặc kép
+            # bao ngoài, nếu không list2cmdline sẽ escape chúng thành literal và
+            # CreateProcess không tìm thấy file (WinError 2). Bóc dấu ngoặc kép bao ngoài
+            # từng token trước khi truyền cho subprocess.
+            raw_parts = shlex.split(cmd_template.replace("{path}", str(wav)), posix=False)
+            cmd = [p[1:-1] if len(p) >= 2 and p[0] == p[-1] == '"' else p for p in raw_parts]
             t0 = time.time()
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
+            try:
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
+            except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+                # Cô lập lỗi từng file: một công cụ ngoài bị thiếu, treo, hoặc lỗi hệ
+                # điều hành không được làm hỏng cả lượt đo; ghi nhận như một hyp rỗng
+                # (CER = 1.0 với ref không rỗng) và tiếp tục file kế tiếp.
+                rows_out.append({
+                    "path": row["path"], "ref": row["text"], "hyp": "",
+                    "cer": cer(row["text"], ""), "seconds": time.time() - t0,
+                    "returncode": None, "error": f"{type(e).__name__}: {e}",
+                })
+                continue
             lines = []
             for line in proc.stdout.splitlines():
                 if strip_prefix and line.startswith(strip_prefix):
@@ -2913,13 +3107,14 @@ def run_manifest(manifest: Path, cmd_template: str, strip_prefix: str = "", to_w
             rows_out.append({
                 "path": row["path"], "ref": row["text"], "hyp": hyp,
                 "cer": cer(row["text"], hyp), "seconds": time.time() - t0,
-                "returncode": proc.returncode,
+                "returncode": proc.returncode, "stderr": proc.stderr[-500:], "error": None,
             })
     mean = sum(r["cer"] for r in rows_out) / max(1, len(rows_out))
     return {"name": cmd_template.split()[0], "n": len(rows_out), "mean_cer": mean, "rows": rows_out}
 
 
 def main(argv: list[str] | None = None) -> int:
+    force_utf8_streams()
     ap = argparse.ArgumentParser(description="Đo công cụ giải mã ngoài trên manifest")
     ap.add_argument("--manifest", type=Path, required=True)
     ap.add_argument("--cmd", required=True, help='ví dụ: "multimon-ng -a MORSE_CW -t wav {path}"')
@@ -2933,7 +3128,8 @@ def main(argv: list[str] | None = None) -> int:
     a.out_dir.mkdir(parents=True, exist_ok=True)
     out = a.out_dir / f"external_{a.name}.json"
     out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"{a.name}: n={result['n']} CER trung bình={result['mean_cer']:.3f} -> {out}")
+    n_err = sum(1 for r in result["rows"] if r.get("error"))
+    print(f"{a.name}: n={result['n']} CER trung bình={result['mean_cer']:.3f} lỗi={n_err} -> {out}")
     return 0
 
 
@@ -2983,7 +3179,7 @@ uv run python tools/bench_external.py --manifest testdata/manifests/t2_arrl.json
   --cmd "python /tmp/deepcw-engine/examples/python/decode.py /tmp/deepcw-engine/model.onnx /tmp/deepcw-engine/model.onnx.json {path}" --name deepcw
 ```
 
-Baseline nội bộ đo bằng `uv run morsedesk bench --set t2 --manifest testdata/manifests/t2_arrl.jsonl --engine baseline` (Task 14).
+Baseline nội bộ đo bằng `uv run morsedesk bench --manifest testdata/manifests/t2_arrl.jsonl --engine baseline` (Task 14).
 ```
 
 Thêm vào `.gitignore` các dòng:
@@ -2998,7 +3194,7 @@ bench_results/
 - [ ] **Step 6: Chạy test, xác nhận đạt**
 
 Run: `uv run pytest tests/unit/test_tools_t2.py -v`
-Expected: `3 passed`
+Expected: `5 passed`
 
 - [ ] **Step 7: Commit**
 
@@ -3082,6 +3278,18 @@ def test_sampler_corpus(tmp_path, profiles):
     ts = TextSampler(profiles, corpus={"en": corpus}, ham_ratio=0.0, random_ratio=0.0)
     s = ts.sample("en", np.random.default_rng(1))
     assert "CORPUS" in s or "LINE" in s
+
+
+def test_sampler_fallback_is_profile_native(tmp_path, profiles):
+    corpus = tmp_path / "ru.txt"
+    corpus.write_text("ONLY LATIN LINE\n", encoding="utf-8")   # không mã hóa được trong profile ru
+    ts = TextSampler(profiles, corpus={"ru": corpus}, ham_ratio=0.0, random_ratio=0.0)
+    s = ts.sample("ru", np.random.default_rng(0))
+    assert s == BUILTIN_WORDS["ru"][0]
+    assert text_to_tokens(s, profiles["ru"])                     # strict không lỗi
+    gen = SynthGenerator(SynthConfig(mp3_enabled=False, corpus={"ru": corpus}))
+    ex = gen.generate(3, profile_id="ru")
+    assert ex.text and ex.profile_id == "ru"
 
 
 # ---- keyer ----
@@ -3168,8 +3376,40 @@ def test_generator_reproducible_and_valid():
     assert a.tokens[0] != SPACE and a.tokens[-1] != SPACE
     assert all(0 <= i < len(VOCAB) for i in a.labels)
     assert all(VOCAB.token(i) == t for i, t in zip(a.labels, a.tokens))
-    assert 4.0 <= a.seconds <= 12.0 + 1.6 + 0.5
+    assert 4.0 <= a.seconds <= 12.0 + 1.6 + 1e-6
     assert a.profile_id in ("en", "ru", "kk-cyrl-ru")
+
+
+def test_generator_duration_bounds_over_many_seeds():
+    gen = SynthGenerator(SynthConfig(mp3_enabled=False))
+    seeds = list(range(1000, 1200)) + [117, 816, 962, 1494, 1794, 1830, 2244, 2324, 2961, 861, 2462]
+    for seed in seeds:
+        ex = gen.generate(seed)
+        # tín hiệu trong [4, 12] s cộng đệm 0.2–0.8 s mỗi đầu
+        assert 4.0 + 0.4 - 1e-6 <= ex.seconds <= 12.0 + 1.6 + 1e-6, (seed, ex.seconds)
+
+
+def test_sample_tokens_bounds_with_default_window():
+    gen = SynthGenerator(SynthConfig(mp3_enabled=False))     # min 4 s, max 12 s
+    for seed in range(20):
+        rng = np.random.default_rng(seed)
+        for pid in ("en", "ru", "kk-cyrl-ru"):
+            for wpm in (5.0, 12.0, 30.0, 60.0):
+                keyer = machine(wpm)
+                toks = gen._sample_tokens(gen.profiles[pid], keyer, rng, target_s=8.0)
+                d = gen.tokens_duration(toks, keyer)
+                assert 4.0 - 1e-9 <= d <= 12.0 + 1e-9, (seed, pid, wpm, d)
+                assert toks[0] != SPACE and toks[-1] != SPACE
+
+
+def test_sample_tokens_tight_window_never_exceeds_max():
+    # cửa sổ hẹp: chỉ đảm bảo trần; sàn là nỗ lực tốt nhất (xem docstring _sample_tokens)
+    gen = SynthGenerator(SynthConfig(min_seconds=4.0, max_seconds=6.0, mp3_enabled=False))
+    for seed in range(20):
+        rng = np.random.default_rng(seed)
+        for pid in ("en", "ru", "kk-cyrl-ru"):
+            toks = gen._sample_tokens(gen.profiles[pid], machine(5.0), rng, target_s=5.0)
+            assert gen.tokens_duration(toks, machine(5.0)) <= 6.0 + 1e-9, (seed, pid)
 
 
 def test_generator_different_seeds_differ():
@@ -3313,7 +3553,7 @@ class TextSampler:
         else:
             raw = self._words(profile_id, profile, rng, n)
         cleaned = profile.render(text_to_tokens(raw, profile, strict=False)).strip()
-        return cleaned or "TEST"
+        return cleaned or BUILTIN_WORDS[profile_id][0]
 ```
 
 - [ ] **Step 4: Viết keyer.py**
@@ -3555,14 +3795,40 @@ from morsedesk.data.channel import (
     ChannelParams, apply_channel, ffmpeg_available, sample_channel_params,
 )
 from morsedesk.data.keyer import KeyerParams, apply_keyer, machine, sample_keyer_params
-from morsedesk.data.text import TextSampler
+from morsedesk.data.text import BUILTIN_WORDS, TextSampler
 from morsedesk.encode.synth import elements_to_audio, tone_power
 from morsedesk.encode.text import text_to_tokens
-from morsedesk.encode.timing import elements_to_segments, tokens_to_elements, total_seconds
+from morsedesk.encode.timing import Element, elements_to_segments, tokens_to_elements, total_seconds
 from morsedesk.lm.profile import Profile, load_profile
 from morsedesk.model.vocab import SPACE, VOCAB
 
 AMPLITUDE = 0.8
+MAX_SAMPLE_ROUNDS = 50
+
+
+def split_words(tokens: list[str]) -> list[list[str]]:
+    """Tách danh sách token trên SPACE thành các từ, bỏ qua từ rỗng."""
+    words: list[list[str]] = []
+    current: list[str] = []
+    for tok in tokens:
+        if tok == SPACE:
+            if current:
+                words.append(current)
+            current = []
+        else:
+            current.append(tok)
+    if current:
+        words.append(current)
+    return words
+
+
+def rescale_elements(elements: list[Element], target_seconds: float) -> list[Element]:
+    """Co giãn đều mọi phần tử để tổng thời lượng bằng target_seconds (giữ nguyên hình dạng jitter/drift)."""
+    total = total_seconds(elements)
+    if total <= 0 or target_seconds <= 0:
+        return elements
+    k = target_seconds / total
+    return [Element(e.on, e.duration * k) for e in elements]
 
 
 @dataclass
@@ -3607,17 +3873,44 @@ class SynthGenerator:
 
     def _sample_tokens(self, profile: Profile, keyer: KeyerParams, rng: np.random.Generator,
                        target_s: float) -> list[str]:
+        """Ghép từng từ cho tới khi đạt target_s, không bao giờ vượt max_seconds.
+
+        Chỉ thêm từ nào còn vừa trần; dừng khi đã đạt target_s, hoặc khi không còn từ vừa
+        mà thời lượng đã >= min_seconds. Sinh tối đa MAX_SAMPLE_ROUNDS đoạn văn bản.
+
+        Đảm bảo: thời lượng <= max_seconds nếu vòng lặp thêm được ít nhất một từ. Đạt
+        min_seconds được đảm bảo chỉ khi cửa sổ (max_seconds - min_seconds) đủ rộng so với
+        độ dài từ ở tốc độ cho trước (true cho mặc định 4–12 s: 0 vi phạm trên 27.000 mẫu);
+        do fill không backtrack, cửa sổ hẹp (ví dụ 4–6 s ở 5 WPM) có thể dừng dưới sàn
+        sau từ đầu tiên không may mắn.
+        """
         tokens: list[str] = []
-        while self.tokens_duration(tokens, keyer) < target_s:
-            words = text_to_tokens(self.text.sample(profile.id, rng), profile)
-            if not words:
+        queue: list[list[str]] = []
+        rounds = 0
+        while rounds < MAX_SAMPLE_ROUNDS:
+            if not queue:
+                rounds += 1
+                queue = split_words(text_to_tokens(self.text.sample(profile.id, rng), profile))
                 continue
-            tokens = tokens + ([SPACE] if tokens else []) + words
-        while self.tokens_duration(tokens, keyer) > self.cfg.max_seconds and SPACE in tokens:
-            tokens = tokens[: len(tokens) - 1 - tokens[::-1].index(SPACE)]
-        if not tokens or self.tokens_duration(tokens, keyer) > self.cfg.max_seconds:
-            tokens = text_to_tokens("TEST", self.profiles["en"])
+            word = queue.pop(0)
+            cand = tokens + ([SPACE] if tokens else []) + word
+            d = self.tokens_duration(cand, keyer)
+            if d <= self.cfg.max_seconds:
+                tokens = cand
+                if d >= target_s:
+                    break
+            elif self.tokens_duration(tokens, keyer) >= self.cfg.min_seconds:
+                break
+        if not tokens:
+            # Chỉ khi không có từ nào vừa trần: lấy từ ngắn nhất từ từ điển.
+            tokens = self._shortest_builtin_word(profile, keyer)
         return tokens
+
+    def _shortest_builtin_word(self, profile: Profile, keyer: KeyerParams) -> list[str]:
+        """Từ ngắn nhất (theo thời lượng) trong BUILTIN_WORDS của profile, dùng khi không tìm
+        được từ nào vừa trần trong _sample_tokens."""
+        words = [text_to_tokens(w, profile) for w in BUILTIN_WORDS[profile.id]]
+        return min(words, key=lambda w: self.tokens_duration(w, keyer))
 
     def _random_morse(self, n: int, f0: float, rng: np.random.Generator) -> np.ndarray:
         """Tín hiệu Morse ngẫu nhiên tiếng Anh dùng làm QRM."""
@@ -3645,7 +3938,8 @@ class SynthGenerator:
 
         target = float(rng.uniform(self.cfg.min_seconds, self.cfg.max_seconds))
         tokens = self._sample_tokens(profile, keyer, rng, target)
-        elements = apply_keyer(tokens_to_elements(tokens, keyer.timing()), keyer, rng)
+        nominal = tokens_to_elements(tokens, keyer.timing())
+        elements = rescale_elements(apply_keyer(nominal, keyer, rng), total_seconds(nominal))
         n_sig = elements_to_segments(elements, SAMPLE_RATE)[-1][2]
         t = np.arange(n_sig) / SAMPLE_RATE
         freq = channel.tone_hz + channel.tone_drift_hz_per_s * t
@@ -3672,7 +3966,7 @@ class SynthGenerator:
 - [ ] **Step 7: Chạy test, xác nhận đạt**
 
 Run: `uv run pytest tests/unit/test_data_synth.py -v`
-Expected: `16 passed`. Nếu `test_generator_fixed_params_decodable_by_baseline` trượt vì `channel.clean` có lọc băng làm mềm sườn, in `hyp` và `ex.text` để so; nếu chỉ lệch khoảng cách từ thì kiểm tra lại `split_gap_threshold`.
+Expected: `19 passed`. Nếu `test_generator_fixed_params_decodable_by_baseline` trượt vì `channel.clean` có lọc băng làm mềm sườn, in `hyp` và `ex.text` để so; nếu chỉ lệch khoảng cách từ thì kiểm tra lại `split_gap_threshold`.
 
 - [ ] **Step 8: Commit**
 
@@ -3775,6 +4069,23 @@ def test_t1_gate_onnx():
     results = bench.evaluate(bench.load_rows(manifest), engine="onnx", model_path=Path("models/acoustic.onnx"))
     ok, mean_cer, n = bench.gate(results)
     assert ok, f"CER vùng gate = {mean_cer:.4f} trên {n} clip, ngưỡng 0.02"
+
+
+def test_evaluate_isolates_decode_errors(tmp_path):
+    from tools.make_t2_manifest import write_jsonl
+
+    bad = tmp_path / "bad.wav"
+    bad.write_text("không phải audio", encoding="utf-8")
+    rows = [{"path": str(bad), "text": "CQ DE K", "profile": "en", "snr": 20.0, "wpm": 20.0,
+             "keying": "machine", "channel": "clean", "channel_actual": "clean", "seed": 0}]
+    manifest = tmp_path / "m.jsonl"
+    write_jsonl(rows, manifest)
+    results = bench.evaluate(bench.load_rows(manifest), engine="baseline")
+    assert len(results) == 1
+    assert results[0]["hyp"] == "" and results[0]["cer"] == 1.0
+    assert results[0]["error"]
+    summary, _ = bench.run(manifest, "baseline", None, tmp_path / "r", None, False, 0.02)
+    assert summary["errors"] == 1
 ```
 
 - [ ] **Step 2: Chạy test, xác nhận thất bại**
@@ -3927,11 +4238,20 @@ def evaluate(rows: list[dict], engine: str = "baseline", model_path: Path | None
         if pid not in decoders:
             decoders[pid] = Decoder(pid, engine=engine, model_path=model_path)
         t0 = time.time()
-        r = decoders[pid].decode_file(row["path"])
         out = dict(row)
+        try:
+            r = decoders[pid].decode_file(row["path"])
+        except Exception as e:  # một file hỏng không được làm mất cả lô
+            out.update({
+                "hyp": "", "cer": cer(row["text"], ""), "wer": wer(row["text"], ""),
+                "wpm_est": None, "seconds": time.time() - t0, "warnings": [],
+                "error": f"{type(e).__name__}: {e}",
+            })
+            results.append(out)
+            continue
         out.update({
             "hyp": r.text, "cer": cer(row["text"], r.text), "wer": wer(row["text"], r.text),
-            "wpm_est": r.wpm, "seconds": time.time() - t0, "warnings": r.warnings,
+            "wpm_est": r.wpm, "seconds": time.time() - t0, "warnings": r.warnings, "error": None,
         })
         results.append(out)
     return results
@@ -3982,6 +4302,7 @@ def run(manifest: Path, engine: str, model_path: Path | None, out_dir: Path,
         "engine": engine, "manifest": str(manifest), "n": len(results),
         "mean_cer": sum(r["cer"] for r in results) / max(1, len(results)),
         "mean_wer": sum(r["wer"] for r in results) / max(1, len(results)),
+        "errors": sum(1 for r in results if r.get("error")),
         "gate": {"ok": ok, "cer": gate_cer, "n": gate_n, "max_cer": max_cer},
         "by_snr": aggregate(results, "snr"), "by_wpm": aggregate(results, "wpm"),
         "by_keying": aggregate(results, "keying"), "by_channel": aggregate(results, "channel_actual"),
@@ -3993,7 +4314,7 @@ def run(manifest: Path, engine: str, model_path: Path | None, out_dir: Path,
     print(pivot_snr_wpm(results))
     for key in ("by_keying", "by_channel", "by_profile"):
         print(key + ": " + ", ".join(f"{k}={100 * v['cer']:.2f}%" for k, v in summary[key].items()))
-    print(f"n={len(results)} CER={100 * summary['mean_cer']:.2f}% WER={100 * summary['mean_wer']:.2f}% -> {out}")
+    print(f"n={len(results)} CER={100 * summary['mean_cer']:.2f}% WER={100 * summary['mean_wer']:.2f}% lỗi={summary['errors']} -> {out}")
     if do_gate:
         print(f"gate (SNR>=0, 10-35 WPM, n={gate_n}): CER={100 * gate_cer:.2f}% "
               f"{'ĐẠT' if ok else 'TRƯỢT'} (ngưỡng {100 * max_cer:.2f}%)")
@@ -4035,7 +4356,7 @@ Và trong `main()` đổi dict thành:
 - [ ] **Step 6: Chạy test, xác nhận đạt**
 
 Run: `uv run pytest tests/regression/test_t1.py -v`
-Expected: `4 passed, 1 skipped` (gate ONNX bỏ qua vì chưa có model)
+Expected: `5 passed, 1 skipped` (gate ONNX bỏ qua vì chưa có model)
 
 Sinh ma trận gate thật và đo baseline để có số đối chứng tuần 1:
 
@@ -4160,7 +4481,7 @@ def test_overfit_tiny_batch_reduces_loss():
         opt.zero_grad()
         loss.backward()
         opt.step()
-        losses.append(float(loss))
+        losses.append(loss.item())
     assert losses[-1] < 0.7 * losses[0], losses[::10]
     ter = token_error_rate(model, [(f, t) for f, _, t in items])
     assert 0.0 <= ter <= 1.5
@@ -4274,6 +4595,7 @@ from morsedesk.dsp.tone import estimate_tone
 from morsedesk.metrics import edit_distance
 from morsedesk.model.ctc import greedy_decode
 from morsedesk.model.vocab import VOCAB
+from morsedesk.textio import force_utf8_streams
 from tools.net_torch import CONFIG_DEFAULT, MorseNet, count_params, output_length
 
 
@@ -4282,6 +4604,9 @@ def example_features(ex: Example) -> np.ndarray:
     est = estimate_tone(ex.audio)
     f0 = est.f0_hz if est.has_signal and est.f0_hz is not None else ex.f0_hz
     return compute_features(ex.audio, f0)
+
+
+VAL_SEED_BASE = 2_000_000_000  # seed validation tách hẳn khỏi dải seed train (seed*1e6 + steps*batch)
 
 
 class SynthDataset(IterableDataset):
@@ -4341,10 +4666,10 @@ def train_loop(model, loader, opt, ctc, steps, val_items, run_dir: Path, log_eve
         opt.step()
         step += 1
         if step % log_every == 0:
-            print(f"step {step} loss {float(loss):.4f} ({time.time() - t0:.0f}s)", flush=True)
+            print(f"step {step} loss {loss.item():.4f} ({time.time() - t0:.0f}s)", flush=True)
         if step % val_every == 0 or step == steps:
             ter = token_error_rate(model, val_items)
-            history.append({"step": step, "loss": float(loss), "val_ter": ter})
+            history.append({"step": step, "loss": loss.item(), "val_ter": ter})
             save_ckpt(run_dir / "last.pt", model, step, ter)
             if ter < best:
                 best = ter
@@ -4357,6 +4682,7 @@ def train_loop(model, loader, opt, ctc, steps, val_items, run_dir: Path, log_eve
 
 
 def main(argv: list[str] | None = None) -> int:
+    force_utf8_streams()
     ap = argparse.ArgumentParser(description="Huấn luyện MorseNet bằng dữ liệu tổng hợp")
     ap.add_argument("--name", default="v1")
     ap.add_argument("--steps", type=int, default=20000)
@@ -4378,9 +4704,11 @@ def main(argv: list[str] | None = None) -> int:
         model.load_state_dict(torch.load(a.resume, map_location="cpu", weights_only=True)["state_dict"])
     print(f"tham số: {count_params(model):,}")
 
+    assert a.seed * 1_000_000 + a.steps * a.batch < VAL_SEED_BASE, "seed/steps quá lớn: trùng dải seed validation"
+
     val_items = []
     for i in range(a.val_clips):
-        ex = gen.generate(10_000_000 + i)
+        ex = gen.generate(VAL_SEED_BASE + i)
         val_items.append((torch.from_numpy(example_features(ex)), ex.tokens))
 
     ds = SynthDataset(gen, seed_start=a.seed * 1_000_000, n_items=a.steps * a.batch)
@@ -4850,7 +5178,12 @@ def frame_windows(n_frames: int, window: int = WINDOW_FRAMES, step: int = STEP_F
     last -= last % 2
     if not starts or starts[-1] != last:
         starts.append(last)
-    return [(s, s + window) for s in starts]
+    windows = [(s, s + window) for s in starts]
+    # Cửa sổ cuối: làm tròn xuống số chẵn cho start có thể hụt 1 khung so với n_frames
+    # (khi n_frames - window lẻ); kéo dài điểm cuối tới n_frames để không bỏ sót khung
+    # cuối cùng (start luôn <= n_frames - window nên chỉ nới rộng, không bao giờ co lại).
+    windows[-1] = (windows[-1][0], n_frames)
+    return windows
 
 
 def run_chunked(model, feats: np.ndarray, window: int = WINDOW_FRAMES, step: int = STEP_FRAMES) -> np.ndarray:
@@ -5081,5 +5414,5 @@ git commit -m "feat(decoder): engine ONNX với cửa sổ trượt, fallback DS
 
 **Nhất quán kiểu:** `Element(on, duration)` dùng xuyên suốt Task 4, 5, 13; `KeyerParams.timing()` trả `TimingParams`; `Example.labels` là id từ `VOCAB.id`; `OnnxAcousticModel.time_stride`/`output_length`/`meta["vocab"]` được `run_chunked` dùng đúng tên; `DecodeResult` chỉ thêm trường có mặc định nên test Task 11 không đổi; `write_jsonl` từ Task 12 được Task 14 tái dùng.
 
-**Lệch nhỏ so với spec, có chủ đích:** profile đặt trong package (`morsedesk/profiles/`) thay vì gốc repo; logic bench nằm ở `morsedesk/bench.py` thay vì `tools/bench.py` để CLI gói được; mạng khoảng 140 nghìn tham số với `hidden=96` (spec ghi "khoảng 300 nghìn"), có lối nâng lên 128 nếu gate trượt.
+**Lệch nhỏ so với spec, có chủ đích:** profile đặt trong package (`morsedesk/profiles/`) thay vì gốc repo; logic bench nằm ở `morsedesk/bench.py` thay vì `tools/bench.py` để CLI gói được; mạng khoảng 140 nghìn tham số với `hidden=96` (spec ghi "khoảng 300 nghìn"), có lối nâng lên 128 nếu gate trượt. CLI bench dùng `--manifest` thay cho `--set t1|t2` của spec §8; xử lý file dài hơn 1 giờ theo kiểu streaming (spec §7) và bám tone trôi theo thời gian (spec §2.3) để lại cho kế hoạch tuần 4–5 (live mode); drift tay gõ hiện chỉ tuyến tính.
 

@@ -1,5 +1,7 @@
 # dữ liệu test có bản quyền, không commit
 testdata/private/
+testdata/generated/
+bench_results/
 
 # build
 build/
@@ -15,3 +17,6 @@ __pycache__/
 # model lớn sinh ra khi train
 runs/
 *.ckpt
+models/*.onnx
+models/*.npz
+models/eval_*.json
