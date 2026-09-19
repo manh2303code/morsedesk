@@ -50,6 +50,25 @@ def test_convert_arpa_to_bin_reports_stats(tmp_path):
     assert a.symbols == alpha.symbols
 
 
+def test_convert_empty_holdout_gives_none(tmp_path):
+    lm, _ = _tiny_lm("en")
+    arpa = tmp_path / "en.arpa"
+    save_arpa(lm, arpa)
+
+    empty_hold = tmp_path / "empty.holdout.txt"
+    empty_hold.write_text("", encoding="utf-8")
+    stats = convert(arpa, "en", tmp_path / "en1.bin", empty_hold)
+    assert stats["perplexity"] is None
+
+    blank_hold = tmp_path / "blank.holdout.txt"
+    blank_hold.write_text("\n   \n\t\n", encoding="utf-8")
+    stats = convert(arpa, "en", tmp_path / "en2.bin", blank_hold)
+    assert stats["perplexity"] is None
+
+    stats = convert(arpa, "en", tmp_path / "en3.bin")
+    assert stats["perplexity"] is None
+
+
 def test_register_custom_profile(tmp_path):
     from dataclasses import replace
     custom = replace(load_profile("en"), id="my-en", lm="lm/my.bin")

@@ -31,7 +31,8 @@ def convert(
     }
     if holdout and Path(holdout).exists():
         lines = Path(holdout).read_text(encoding="utf-8").splitlines()[:holdout_lines]
-        stats["perplexity"] = round(lm.perplexity([ln for ln in lines if ln.strip()]), 3)
+        filtered = [ln for ln in lines if ln.strip()]
+        stats["perplexity"] = round(lm.perplexity(filtered), 3) if filtered else None
     return stats
 
 

@@ -92,6 +92,14 @@ def test_bin_roundtrip(tmp_path, lm):
     assert math.isclose(lm2.score((a,), b), lm.score((a,), b), rel_tol=1e-6)
 
 
+def test_perplexity_rejects_empty(lm):
+    with pytest.raises(ValueError):
+        lm.perplexity([])
+    with pytest.raises(ValueError):
+        lm.perplexity(["", "  "])
+    assert lm.perplexity(["AB", ""]) == lm.perplexity(["AB"])
+
+
 def test_train_small_empty_lines_and_order_one():
     lm1 = train_small(["A A B"], ALPHA, order=1)
     assert isinstance(lm1, CharNGramLM) and lm1.order == 1

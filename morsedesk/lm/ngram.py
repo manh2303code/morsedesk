@@ -129,9 +129,12 @@ class CharNGramLM:
         return total
 
     def perplexity(self, lines: list[str]) -> float:
+        non_blank = [ln for ln in lines if ln.strip()]
+        if not non_blank:
+            raise ValueError("không có dòng nào để tính perplexity")
         total_lp = 0.0
         n = 0
-        for ln in lines:
+        for ln in non_blank:
             total_lp += self.sentence_logprob(ln)
             n += len(ln) + 1
         return math.exp(-total_lp / max(1, n))
