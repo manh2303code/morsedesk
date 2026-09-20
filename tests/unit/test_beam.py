@@ -139,3 +139,27 @@ def test_empty_and_blank_only_lattices():
     blank_only = lattice_from_tokens([], gap=0, lead=50)
     h = beam_search(blank_only, EN, None)[0]
     assert h.text == "" and h.n_chars == 0 and h.acoustic_logp > math.log(0.9) * 50 - 1e-3
+
+
+def test_blank_shortcut_fires_on_confident_lattice():
+    tokens = text_to_tokens("CQ DE K", EN)
+    lat99 = lattice_from_tokens(tokens, gap=20, peak=0.99)
+    st = BeamState(EN, None).step(lat99)
+    assert st.n_shortcut >= 0.8 * len(lat99)
+    assert st.hypotheses()[0].text == "CQ DE K"
+    # đường tắt là xấp xỉ: trên lưới này nó không đổi kết quả giải mã so với không có đường tắt
+    no_shortcut = beam_search(lat99, EN, None, BeamParams(min_prob=0.0))[0]
+    assert no_shortcut.text == st.hypotheses()[0].text
+    assert no_shortcut.frames == st.hypotheses()[0].frames
+    lat90 = lattice_from_tokens(tokens, gap=20, peak=0.9)                 # peak=0.9: dưới ngưỡng crossover
+    assert BeamState(EN, None).step(lat90).n_shortcut == 0
+
+
+def test_prosign_does_not_close_word():
+    tokens = ["--...", "...--", SPACE, "...-.-", SPACE]                  # 73 <SK>
+    lm = tiny_lm(EN, ["73 DE K"])
+    h = beam_search(lattice_from_tokens(tokens), EN, lm)[0]
+    assert h.text == "73 <SK> "                                         # dấu cách cuối vẫn render " "
+    assert h.n_words == 1                                                # prosign không đóng từ rỗng
+    p = BeamParams()
+    assert math.isclose(h.score - h.acoustic_logp - p.alpha * h.lm_logp, p.beta + p.lexicon_bonus)

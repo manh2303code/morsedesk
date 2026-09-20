@@ -117,6 +117,13 @@ class _Prefix:
 
 
 class BeamState:
+    """Trạng thái beam search nối tiếp qua nhiều khối `log_probs`.
+
+    `n_shortcut` là bộ đếm chẩn đoán (diagnostic): số khung đã đi đường tắt chỉ-blank trong
+    `_advance` (không lớp nào đạt `min_prob` nên không sinh tiền tố mới). Không ảnh hưởng tới
+    điểm số hay kết quả giải mã, chỉ để quan sát đường tắt có phát huy tác dụng hay không.
+    """
+
     def __init__(self, profile: Profile, lm: CharNGramLM | None = None, params: BeamParams | None = None) -> None:
         self.profile = profile
         self.lm = lm
@@ -129,6 +136,7 @@ class BeamState:
         self.lexicon = set(profile.lexicon_bonus)
         self.ctx_len = max(0, lm.order - 1) if lm is not None else 0
         self.t = 0
+        self.n_shortcut = 0
         self._lm_cache: dict[tuple[tuple[int, ...], tuple[int, ...]], dict[int, float]] = {}
         root = _Prefix()
         root.p_b = 0.0
@@ -170,7 +178,7 @@ class BeamState:
             ext.lm_logp += lm_scores[lm_id]
             ext.lm_ctx = (pre.lm_ctx + (lm_id,))[-self.ctx_len:] if self.ctx_len else ()
         if tok == SPACE:
-            if pre.tokens and pre.tokens[-1] != SPACE:      # kết thúc một từ
+            if pre.word:                                    # kết thúc một từ (rỗng: prosign/# vừa qua)
                 ext.n_words += 1
                 if self.lm is not None:                     # thuần âm thanh: không thưởng từ/lexicon
                     ext.bonus += p.beta
@@ -187,9 +195,10 @@ class BeamState:
         lp_blank = float(lp[p.blank_id])
         k = min(p.topk_per_frame + 1, len(lp))
         cand = np.argpartition(-lp, k - 1)[:k]
-        thresh = math.log(p.min_prob)
+        thresh = math.log(p.min_prob) if p.min_prob > 0.0 else NEG_INF   # 0.0: tắt đường tắt (test)
         classes = [int(c) for c in cand if int(c) != p.blank_id and lp[c] >= thresh]
         if not classes:                                     # đường tắt chỉ-blank
+            self.n_shortcut += 1
             for pre in self.beams.values():
                 pre.p_b = _lse(pre.p_b, pre.p_nb) + lp_blank
                 pre.p_nb = NEG_INF
