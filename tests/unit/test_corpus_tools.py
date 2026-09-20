@@ -145,3 +145,33 @@ def test_get_retry_recovers_from_incomplete_read(monkeypatch):
     with pytest.raises(http.client.IncompleteRead):
         fetch_corpus._get_retry("http://x", attempts=2)
     assert fetch_corpus.GUTENBERG_TXT.format(id=5) == "https://www.gutenberg.org/ebooks/5.txt.utf-8"
+
+
+def test_tatoeba_rus_lines_picks_russian_column_and_dedupes():
+    from tools.fetch_corpus import tatoeba_rus_lines
+
+    tsv = ("eng\trus\tHello\tПривет\n" "rus\teng\tМир\tWorld\n" "eng\trus\tHi\tПривет\n"
+           "bad line\n" "deu\trus\tHallo\t \n")
+    assert tatoeba_rus_lines(tsv) == ["Привет", "Мир"]
+
+
+def test_fetch_tatoeba_rus_writes_file_and_source(tmp_path, monkeypatch):
+    from tools import fetch_corpus
+
+    def fake_get(url, timeout=60.0):
+        if url.endswith("/tree/main/dev"):
+            return json.dumps([{"type": "file", "path": "dev/tatoeba-dev.eng-rus.tsv"},
+                               {"type": "file", "path": "dev/tatoeba-dev.eng-deu.tsv"}]).encode()
+        if url.endswith("/tree/main/test"):
+            return json.dumps([{"type": "file", "path": "test/tatoeba-test.deu-rus.tsv"}]).encode()
+        if url.endswith("eng-rus.tsv"):
+            return "eng\trus\tHello\tПривет\n".encode("utf-8")
+        if url.endswith("deu-rus.tsv"):
+            raise OSError("offline")
+        raise AssertionError(url)
+
+    monkeypatch.setattr(fetch_corpus, "_get", fake_get)
+    sources = []
+    n = fetch_corpus.fetch_tatoeba_rus(tmp_path, sources)
+    assert n == 1 and (tmp_path / "tatoeba_rus.txt").read_text(encoding="utf-8") == "Привет\n"
+    assert sources[0]["license"].startswith("CC BY 2.0") and "1 file" in sources[0]["name"]

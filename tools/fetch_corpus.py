@@ -30,6 +30,7 @@ GUTENBERG_TXT = "https://www.gutenberg.org/ebooks/{id}.txt.utf-8"  # URL chuẩn
 HF_PARQUET_API = "https://huggingface.co/api/datasets/{repo}/parquet/{config}/{split}"
 HF_TREE_API = "https://huggingface.co/api/datasets/{repo}/tree/main"
 HF_RESOLVE = "https://huggingface.co/datasets/{repo}/resolve/main/{path}"
+TATOEBA_REPO = "Helsinki-NLP/tatoeba_mt"  # Tatoeba Challenge, CC BY 2.0 FR
 _ID_RE = re.compile(r'href="/ebooks/(\d+)"')
 _START_RE = re.compile(r"\*\*\* ?START OF[^\n]*\*\*\*")
 _END_RE = re.compile(r"\*\*\* ?END OF[^\n]*\*\*\*")
@@ -134,6 +135,43 @@ def write_ham_lines(profile_id: str, n: int, out: Path, seed: int = 0) -> int:
     return _write_lines(out, lines)
 
 
+def tatoeba_rus_lines(tsv_text: str) -> list[str]:
+    """Cột tiếng Nga từ TSV Tatoeba Challenge (src_lang, tgt_lang, src, tgt); bỏ trùng, giữ thứ tự."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for line in tsv_text.splitlines():
+        parts = line.split("	")
+        if len(parts) < 4:
+            continue
+        for lang, text in ((parts[0], parts[2]), (parts[1], parts[3])):
+            if lang.startswith("rus") and text.strip() and text not in seen:
+                seen.add(text)
+                out.append(text.strip())
+    return out
+
+
+def fetch_tatoeba_rus(dest: Path, sources: list, max_files: int | None = None) -> int:
+    """Câu tiếng Nga từ mọi cặp X-rus trong dev/ và test/ của Tatoeba Challenge (CC BY 2.0 FR)."""
+    lines: list[str] = []
+    n_files = 0
+    for folder in ("dev", "test"):
+        tree = json.loads(_get(HF_TREE_API.format(repo=TATOEBA_REPO) + "/" + folder))
+        paths = sorted(t["path"] for t in tree if t.get("type") == "file"
+                       and t["path"].endswith(".tsv") and "-rus" in t["path"].rsplit("/", 1)[-1])
+        for path in paths[:max_files] if max_files else paths:
+            try:
+                lines += tatoeba_rus_lines(_get_retry(HF_RESOLVE.format(repo=TATOEBA_REPO, path=path)).decode("utf-8", errors="replace"))
+                n_files += 1
+            except _NET_ERRORS as e:
+                print(f"bỏ qua {path}: {e}")
+    uniq = list(dict.fromkeys(lines))
+    n = _write_lines(dest / "tatoeba_rus.txt", uniq)
+    sources.append({"name": f"Tatoeba Challenge (Helsinki-NLP/tatoeba_mt), câu tiếng Nga từ {n_files} file X-rus dev/test",
+                    "url": "https://huggingface.co/datasets/Helsinki-NLP/tatoeba_mt", "license": "CC BY 2.0 FR (tatoeba.org)",
+                    "lines": n})
+    return n
+
+
 def _write_lines(path: Path, lines: list[str]) -> int:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -164,6 +202,10 @@ def fetch_lang(lang: str, out_dir: Path, limit_books: int, sleep_s: float, ham_l
         elif lang == "ru":
             ids = gutenberg_ids_from_html(_get(GUTENBERG_RU).decode("utf-8", errors="replace"))[:limit_books]
             fetch_gutenberg(ids, dest, sleep_s, sources)
+            try:
+                fetch_tatoeba_rus(dest, sources)
+            except _NET_ERRORS as e:
+                print(f"bỏ qua Tatoeba: {e}")
         elif lang == "kk":
             try:
                 lines = []
