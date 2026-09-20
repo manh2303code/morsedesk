@@ -7,6 +7,7 @@ Chỉ chạy trên máy dev có mạng; không dùng trong runtime.
 from __future__ import annotations
 
 import argparse
+import bz2
 import http.client
 import io
 import json
@@ -30,7 +31,7 @@ GUTENBERG_TXT = "https://www.gutenberg.org/ebooks/{id}.txt.utf-8"  # URL chuẩn
 HF_PARQUET_API = "https://huggingface.co/api/datasets/{repo}/parquet/{config}/{split}"
 HF_TREE_API = "https://huggingface.co/api/datasets/{repo}/tree/main"
 HF_RESOLVE = "https://huggingface.co/datasets/{repo}/resolve/main/{path}"
-TATOEBA_REPO = "Helsinki-NLP/tatoeba_mt"  # Tatoeba Challenge, CC BY 2.0 FR
+TATOEBA_RUS_URL = "https://downloads.tatoeba.org/exports/per_language/rus/rus_sentences.tsv.bz2"  # CC BY 2.0 FR
 _ID_RE = re.compile(r'href="/ebooks/(\d+)"')
 _START_RE = re.compile(r"\*\*\* ?START OF[^\n]*\*\*\*")
 _END_RE = re.compile(r"\*\*\* ?END OF[^\n]*\*\*\*")
@@ -135,40 +136,30 @@ def write_ham_lines(profile_id: str, n: int, out: Path, seed: int = 0) -> int:
     return _write_lines(out, lines)
 
 
-def tatoeba_rus_lines(tsv_text: str) -> list[str]:
-    """Cột tiếng Nga từ TSV Tatoeba Challenge (src_lang, tgt_lang, src, tgt); bỏ trùng, giữ thứ tự."""
+def tatoeba_rus_lines(tsv_text: str, max_lines: int | None = None) -> list[str]:
+    """Câu tiếng Nga từ export Tatoeba (id, lang, text); bỏ trùng, giữ thứ tự, tối đa max_lines."""
     out: list[str] = []
     seen: set[str] = set()
     for line in tsv_text.splitlines():
         parts = line.split("	")
-        if len(parts) < 4:
+        if len(parts) < 3 or parts[1] != "rus":
             continue
-        for lang, text in ((parts[0], parts[2]), (parts[1], parts[3])):
-            if lang.startswith("rus") and text.strip() and text not in seen:
-                seen.add(text)
-                out.append(text.strip())
+        text = parts[2].strip()
+        if text and text not in seen:
+            seen.add(text)
+            out.append(text)
+            if max_lines and len(out) >= max_lines:
+                break
     return out
 
 
-def fetch_tatoeba_rus(dest: Path, sources: list, max_files: int | None = None) -> int:
-    """Câu tiếng Nga từ mọi cặp X-rus trong dev/ và test/ của Tatoeba Challenge (CC BY 2.0 FR)."""
-    lines: list[str] = []
-    n_files = 0
-    for folder in ("dev", "test"):
-        tree = json.loads(_get(HF_TREE_API.format(repo=TATOEBA_REPO) + "/" + folder))
-        paths = sorted(t["path"] for t in tree if t.get("type") == "file"
-                       and t["path"].endswith(".tsv") and "-rus" in t["path"].rsplit("/", 1)[-1])
-        for path in paths[:max_files] if max_files else paths:
-            try:
-                lines += tatoeba_rus_lines(_get_retry(HF_RESOLVE.format(repo=TATOEBA_REPO, path=path)).decode("utf-8", errors="replace"))
-                n_files += 1
-            except _NET_ERRORS as e:
-                print(f"bỏ qua {path}: {e}")
-    uniq = list(dict.fromkeys(lines))
-    n = _write_lines(dest / "tatoeba_rus.txt", uniq)
-    sources.append({"name": f"Tatoeba Challenge (Helsinki-NLP/tatoeba_mt), câu tiếng Nga từ {n_files} file X-rus dev/test",
-                    "url": "https://huggingface.co/datasets/Helsinki-NLP/tatoeba_mt", "license": "CC BY 2.0 FR (tatoeba.org)",
-                    "lines": n})
+def fetch_tatoeba_rus(dest: Path, sources: list, max_lines: int = 300_000) -> int:
+    """Câu tiếng Nga từ export chính thức của Tatoeba (CC BY 2.0 FR), giải nén bz2 trong bộ nhớ."""
+    raw = bz2.decompress(_get_retry(TATOEBA_RUS_URL, timeout=600.0)).decode("utf-8", errors="replace")
+    lines = tatoeba_rus_lines(raw, max_lines)
+    n = _write_lines(dest / "tatoeba_rus.txt", lines)
+    sources.append({"name": "Tatoeba, câu tiếng Nga (export per_language/rus)", "url": TATOEBA_RUS_URL,
+                    "license": "CC BY 2.0 FR (tatoeba.org)", "lines": n})
     return n
 
 
