@@ -26,7 +26,7 @@ UA = {"User-Agent": "morsedesk-corpus-fetch/0.1 (+offline morse decoder research
 LANG_PROFILE = {"en": "en", "ru": "ru", "kk": "kk-cyrl-ru"}
 GUTENBERG_TOP = "https://www.gutenberg.org/browse/scores/top"
 GUTENBERG_RU = "https://www.gutenberg.org/browse/languages/ru"
-GUTENBERG_TXT = "https://www.gutenberg.org/cache/epub/{id}/pg{id}.txt"
+GUTENBERG_TXT = "https://www.gutenberg.org/ebooks/{id}.txt.utf-8"  # URL chuẩn, chuyển hướng tới file có thật
 HF_PARQUET_API = "https://huggingface.co/api/datasets/{repo}/parquet/{config}/{split}"
 HF_TREE_API = "https://huggingface.co/api/datasets/{repo}/tree/main"
 HF_RESOLVE = "https://huggingface.co/datasets/{repo}/resolve/main/{path}"
@@ -39,6 +39,22 @@ def _get(url: str, timeout: float = 60.0) -> bytes:
     req = urllib.request.Request(url, headers=UA)
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
+
+
+_TRANSIENT = (http.client.IncompleteRead, TimeoutError, ConnectionError)
+
+
+def _get_retry(url: str, timeout: float = 60.0, attempts: int = 3, pause_s: float = 2.0) -> bytes:
+    """Tải lại khi kết nối bị ngắt giữa chừng (IncompleteRead, timeout); lỗi HTTP 404 không thử lại."""
+    for k in range(attempts):
+        try:
+            return _get(url, timeout)
+        except _TRANSIENT as e:
+            if k == attempts - 1:
+                raise
+            print(f"thử lại ({k + 1}/{attempts - 1}) {url}: {e}")
+            time.sleep(pause_s)
+    raise RuntimeError("không tới được")  # pragma: no cover
 
 
 def gutenberg_ids_from_html(html: str) -> list[int]:
@@ -82,7 +98,7 @@ def fetch_gutenberg(ids: list[int], out_dir: Path, sleep_s: float, sources: list
             n += 1
             continue
         try:
-            text = _get(GUTENBERG_TXT.format(id=i)).decode("utf-8", errors="replace")
+            text = _get_retry(GUTENBERG_TXT.format(id=i)).decode("utf-8", errors="replace")
         except _NET_ERRORS as e:  # nguồn lẻ lỗi không chặn cả lô
             print(f"bỏ qua Gutenberg {i}: {e}")
             continue

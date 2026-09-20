@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from morsedesk.lm.alphabet import LMAlphabet
 from morsedesk.lm.profile import load_profile
 from tools import fetch_corpus
@@ -121,3 +123,25 @@ def test_net_errors_cover_incomplete_read():
     from tools.fetch_corpus import _NET_ERRORS
     assert issubclass(http.client.IncompleteRead, _NET_ERRORS)
     assert issubclass(TimeoutError, _NET_ERRORS)
+
+
+def test_get_retry_recovers_from_incomplete_read(monkeypatch):
+    import http.client
+
+    from tools import fetch_corpus
+
+    calls = {"n": 0}
+
+    def flaky(url, timeout=60.0):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise http.client.IncompleteRead(b"x", 10)
+        return b"ok"
+
+    monkeypatch.setattr(fetch_corpus, "_get", flaky)
+    monkeypatch.setattr(fetch_corpus.time, "sleep", lambda s: None)
+    assert fetch_corpus._get_retry("http://x", attempts=3) == b"ok" and calls["n"] == 3
+    calls["n"] = 0
+    with pytest.raises(http.client.IncompleteRead):
+        fetch_corpus._get_retry("http://x", attempts=2)
+    assert fetch_corpus.GUTENBERG_TXT.format(id=5) == "https://www.gutenberg.org/ebooks/5.txt.utf-8"
