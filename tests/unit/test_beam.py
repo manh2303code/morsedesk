@@ -66,11 +66,19 @@ def test_lm_resolves_ambiguous_frame():
     row[VOCAB.id("-.--")] = np.log(0.55)                          # Y hơi cao hơn
     row[VOCAB.id("-.-")] = np.log(0.43)                           # K
     lat[t] = row
-    # lexicon_bonus=0.0 để cô lập tín hiệu thuần âm thanh: "K" nằm trong lexicon_bonus
-    # của EN còn "Y" thì không, nên với tham số mặc định phần thưởng từ vựng sẽ luôn
-    # thắng chênh lệch âm thanh (0,25 nats) và che khuất phép thử.
-    assert beam_search(lat, EN, None, BeamParams(lexicon_bonus=0.0))[0].text == "DE Y"  # thuần âm thanh chọn Y
+    assert beam_search(lat, EN, None)[0].text == "DE Y"           # thuần âm thanh chọn Y
     assert beam_search(lat, EN, lm)[0].text == "DE K"             # LM kéo về K
+
+
+def test_no_lm_has_no_bonus():
+    lat = lattice_from_tokens(text_to_tokens("CQ DE", EN))
+    h = beam_search(lat, EN, None)[0]
+    assert h.lm_logp == 0.0
+    assert h.n_words == 2
+    assert math.isclose(h.score, h.acoustic_logp)
+    boosted = beam_search(lat, EN, None, BeamParams(beta=5.0, lexicon_bonus=5.0))[0]
+    assert boosted.text == h.text
+    assert math.isclose(boosted.score, h.score)
 
 
 def test_kazakh_one_to_many_branching():

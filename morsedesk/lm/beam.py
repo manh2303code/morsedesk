@@ -3,6 +3,10 @@
 Tiền tố = (chuỗi token đã phát, chuỗi chữ đã chọn). Mỗi khung chỉ xét blank cộng tối đa
 `topk_per_frame` lớp có xác suất >= `min_prob`. Khung không có lớp nào đạt ngưỡng đi đường tắt
 chỉ-blank (không sinh tiền tố mới), nhờ đó chi phí tỉ lệ với số token chứ không phải số khung.
+
+Khi `lm=None`, tìm kiếm thuần âm thanh: không cộng điểm LM, không phạt `unk_logp`, không cộng
+`beta` (thưởng theo từ) hay `lexicon_bonus` (thưởng từ trong lexicon) — chỉ điểm âm học quyết
+định thứ hạng. `n_words` vẫn được đếm bình thường trong mọi trường hợp.
 """
 
 from __future__ import annotations
@@ -168,9 +172,10 @@ class BeamState:
         if tok == SPACE:
             if pre.tokens and pre.tokens[-1] != SPACE:      # kết thúc một từ
                 ext.n_words += 1
-                ext.bonus += p.beta
-                if pre.word in self.lexicon:
-                    ext.bonus += p.lexicon_bonus
+                if self.lm is not None:                     # thuần âm thanh: không thưởng từ/lexicon
+                    ext.bonus += p.beta
+                    if pre.word in self.lexicon:
+                        ext.bonus += p.lexicon_bonus
             ext.word = ""
         else:
             ext.word = pre.word + display
@@ -238,7 +243,8 @@ class BeamState:
                 lm_logp += float(self.lm.score(pre.lm_ctx, self.alphabet.eos_id))
             if pre.word:                                    # từ cuối chưa đóng bằng khoảng trắng
                 n_words += 1
-                bonus += p.beta + (p.lexicon_bonus if pre.word in self.lexicon else 0.0)
+                if self.lm is not None:                     # thuần âm thanh: không thưởng từ/lexicon
+                    bonus += p.beta + (p.lexicon_bonus if pre.word in self.lexicon else 0.0)
             out.append(Hypothesis(pre.tokens, pre.letters, pre.frames, pre.probs, acoustic, lm_logp,
                                   acoustic + p.alpha * lm_logp + bonus, n_words))
         out.sort(key=lambda h: h.score, reverse=True)
