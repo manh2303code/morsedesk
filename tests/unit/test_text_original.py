@@ -18,6 +18,14 @@ def test_keep_supported_keeps_kazakh_letters_and_prosigns():
     assert keep_supported("", P["en"]) == ""
 
 
+def test_keep_supported_rewrites_prosigns_colliding_with_letters():
+    """<AR> <BT> <KN> <AS> dùng chung mẫu với + = ( &: bộ giải mã luôn trả chữ nên ghi thành chữ."""
+    assert keep_supported("73 <AR> K", P["en"]) == "73 + K"
+    assert keep_supported("<BT> <KN> <AS>", P["en"]) == "= ( &"
+    assert keep_supported("<SK>", P["en"]) == "<SK>"              # mẫu riêng: giữ tên prosign
+    assert keep_supported("<SOS> <ERR>", P["en"]) == "<SOS> <ERR>"
+
+
 def test_sampler_keeps_original_kazakh_letters():
     ts = TextSampler(P)
     seen = False

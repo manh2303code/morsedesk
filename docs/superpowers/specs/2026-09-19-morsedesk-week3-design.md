@@ -58,7 +58,7 @@ Mỗi profile có bảng chữ LM = tập chữ trong `Profile.map` (kể cả c
 - `Decoder(profile="auto"|id, engine, model_path=None, fallback=True, lm=True, beam=64, lm_dir=None)`. `lm_dir` mặc định `<repo>/models/lm`. `profile="auto"` nạp ba profile và ba LM; thiếu file LM → `FileNotFoundError` nêu đường dẫn. `lm=False` → greedy như hiện nay. Với engine `baseline`, LM chưa áp dụng (giữ nguyên hành vi).
 - `DecodeResult.language` = profile chọn; `language_scores` = điểm từng profile khi `auto`, rỗng khi ép profile; `words[].confidence` như cũ từ `emissions`.
 - CLI `decode`: `--profile` mặc định `auto`; `--no-lm`; `--beam N`. `bench`: `--profile-override auto` để đo nhận diện ngôn ngữ, thêm `language_acc` vào summary và cột `language` từng hàng; `--no-lm`.
-- `Example` và manifest T1 thêm `text_original` (chữ Kazakh gốc trước khi render qua profile). Với profile kk-cyrl-ru, `bench` tính CER trên `text_original` khi có LM, trên `text` khi không có (giữ so sánh công bằng với tuần 1–2).
+- `Example` và manifest T1 thêm `text_original` (chữ gốc trước khi render qua profile: Ә, Ғ, Қ, Ң, Ө, Ұ, Ү, І của Kazakh, cả Ъ của Nga — mọi chữ chia mẫu với chữ khác trong profile). `bench` tính CER trên `text_original` khi engine onnx có LM, trên `text` khi không có (giữ so sánh công bằng với tuần 1–2).
 
 ### 2.6 Pipeline corpus và dựng LM
 

@@ -38,6 +38,10 @@ def test_unigram_and_bigram_ordering(lm):
     assert lm.score((a,), b) > lm.score((a,), c)
     # đơn vị: log tự nhiên, xác suất < 1
     assert lm.score((), a) < 0.0
+    # giá trị chính xác của absolute discounting nội suy (discount 0,75) trên LINES
+    assert math.isclose(math.exp(lm.score((a,), b)), 0.56625, abs_tol=1e-6)
+    # "CC" không phải context đã thấy: lùi về bigram rồi unigram
+    assert math.isclose(math.exp(lm.score((c, c), b)), 0.19375, abs_tol=1e-6)
 
 
 def test_distribution_sums_to_one(lm):

@@ -164,7 +164,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--val-every", type=int, default=500)
     ap.add_argument("--workers", type=int, default=0, help="DataLoader workers (0 an toàn trên Windows)")
     ap.add_argument("--no-mp3", action="store_true")
-    ap.add_argument("--resume", type=Path, default=None)
+    ap.add_argument("--resume", type=Path, default=None,
+                    help="checkpoint để tiếp tục; --lr/--lr-schedule/--warmup/--steps không lưu "
+                         "trong checkpoint nên phải truyền lại đúng như lần chạy trước")
     a = ap.parse_args(argv)
 
     assert a.seed * 1_000_000 + a.steps * a.batch < VAL_SEED_BASE, "seed/steps quá lớn: trùng dải seed validation"

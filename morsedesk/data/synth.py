@@ -27,22 +27,6 @@ AMPLITUDE = 0.8
 MAX_SAMPLE_ROUNDS = 50
 
 
-def split_words(tokens: list[str]) -> list[list[str]]:
-    """Tách danh sách token trên SPACE thành các từ, bỏ qua từ rỗng."""
-    words: list[list[str]] = []
-    current: list[str] = []
-    for tok in tokens:
-        if tok == SPACE:
-            if current:
-                words.append(current)
-            current = []
-        else:
-            current.append(tok)
-    if current:
-        words.append(current)
-    return words
-
-
 def rescale_elements(elements: list[Element], target_seconds: float) -> list[Element]:
     """Co giãn đều mọi phần tử để tổng thời lượng bằng target_seconds (giữ nguyên hình dạng jitter/drift)."""
     total = total_seconds(elements)
@@ -119,8 +103,8 @@ class SynthGenerator:
             if not queue:
                 rounds += 1
                 text = self.text.sample(profile.id, rng)
+                # mọi từ của sample() đều mã hóa được nên không có mục rỗng cần lọc
                 queue = [(text_to_tokens(w, profile), w) for w in text.split()]
-                queue = [(t, w) for t, w in queue if t]
                 continue
             word, word_text = queue.pop(0)
             cand = tokens + ([SPACE] if tokens else []) + word

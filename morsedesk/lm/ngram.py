@@ -56,6 +56,16 @@ class NGramTable:
         hit = (idx < len(self.hashes)) & (self.hashes[idx_c] == keys) if len(self.hashes) else np.zeros(len(keys), bool)
         return np.where(hit, idx_c, -1)
 
+    @classmethod
+    def from_items(cls, items: list[tuple[int, float, float]]) -> NGramTable:
+        """items: (hash, log-prob, backoff) chưa sắp xếp -> bảng đã sắp theo hash để searchsorted."""
+        rows = sorted(items, key=lambda t: t[0])
+        return cls(
+            np.array([h for h, _, _ in rows], dtype=np.uint64),
+            np.array([lp for _, lp, _ in rows], dtype=np.float32),
+            np.array([bo for _, _, bo in rows], dtype=np.float32),
+        )
+
 
 class CharNGramLM:
     def __init__(self, alphabet: LMAlphabet, order: int, tables: list[NGramTable]) -> None:
@@ -186,7 +196,9 @@ def train_small(lines: list[str], alphabet: LMAlphabet, order: int = 6, discount
         for ng, c in counts[k - 1].items():
             h = ng[:-1]
             lam = discount * ctx_types[h] / ctx_total[h]
-            pk[ng] = max(c - discount, 0.0) / ctx_total[h] + lam * lower.get(ng[1:], 1.0 / v)
+            # hậu tố ng[1:] luôn được đếm ở bậc k-1 (mọi n-gram bậc k đều sinh ra nó trong
+            # _ngram_counts) nên bậc 1 phủ hết ký hiệu và probs[k-2] luôn có khóa này
+            pk[ng] = max(c - discount, 0.0) / ctx_total[h] + lam * lower[ng[1:]]
             bk[h] = lam
         probs.append(pk)
         backoffs.append(bk)
@@ -198,12 +210,7 @@ def train_small(lines: list[str], alphabet: LMAlphabet, order: int = 6, discount
         named = {ng: (math.log(p), math.log(bo_map[ng]) if ng in bo_map else 0.0)
                  for ng, p in probs[k - 1].items()}
         ngrams_named.append(named)
-        items = sorted(((fnv1a64(ng), lp, bo) for ng, (lp, bo) in named.items()), key=lambda t: t[0])
-        tables.append(NGramTable(
-            np.array([h for h, _, _ in items], dtype=np.uint64),
-            np.array([lp for _, lp, _ in items], dtype=np.float32),
-            np.array([bo for _, _, bo in items], dtype=np.float32),
-        ))
+        tables.append(NGramTable.from_items([(fnv1a64(ng), lp, bo) for ng, (lp, bo) in named.items()]))
     lm = CharNGramLM(alphabet, order, tables)
     lm._ngrams = ngrams_named  # tên n-gram, chỉ để save_arpa
     return lm
@@ -252,20 +259,12 @@ def load_arpa(path: Path, alphabet: LMAlphabet) -> CharNGramLM:
             parts = line.split("\t")
             lp = float(parts[0]) * LN10
             toks = parts[1].split(" ")
-            ids = [alphabet.index.get(SPACE_TOKEN if t == SPACE_TOKEN else t, None) for t in toks]
-            ids = [alphabet.space_id if t == SPACE_TOKEN else i for t, i in zip(toks, ids, strict=True)]
+            ids = [alphabet.space_id if t == SPACE_TOKEN else alphabet.index.get(t) for t in toks]
             if any(i is None for i in ids):
                 continue  # ký hiệu ngoài bảng chữ (ví dụ <unk> của lmplz): bỏ
             bo = float(parts[2]) * LN10 if len(parts) > 2 else 0.0
             per_order[section].append((fnv1a64(ids), lp, bo))
-    tables = []
-    for k in range(1, order + 1):
-        items = sorted(per_order.get(k, []), key=lambda t: t[0])
-        tables.append(NGramTable(
-            np.array([h for h, _, _ in items], dtype=np.uint64),
-            np.array([lp for _, lp, _ in items], dtype=np.float32),
-            np.array([bo for _, _, bo in items], dtype=np.float32),
-        ))
+    tables = [NGramTable.from_items(per_order.get(k, [])) for k in range(1, order + 1)]
     return CharNGramLM(alphabet, order, tables)
 
 

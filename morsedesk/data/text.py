@@ -62,7 +62,12 @@ def random_callsign(rng: np.random.Generator) -> str:
 
 
 def keep_supported(raw: str, profile: Profile) -> str:
-    """Chuẩn hóa rồi bỏ ký tự không mã hóa được; giữ chữ gốc (Ә, Ғ...) và prosign của profile."""
+    """Chuẩn hóa rồi bỏ ký tự không mã hóa được; giữ chữ gốc (Ә, Ғ...) và prosign của profile.
+
+    Prosign có mẫu trùng với một chữ trong bảng (<AR> = `.-.-.` = `+`) được viết thành chữ đó:
+    bộ giải mã luôn trả về chữ nên giữ tên prosign sẽ tạo lỗi không thể tránh khi đo CER.
+    Prosign có mẫu riêng (<SK>, <SOS>, <ERR>) giữ nguyên tên.
+    """
     norm = normalize(raw, profile)
     out: list[str] = []
     i = 0
@@ -71,8 +76,9 @@ def keep_supported(raw: str, profile: Profile) -> str:
         if ch == "<":
             m = _PROSIGN_RE.match(norm, i)
             if m:                                   # prosign lạ (<XYZ>) bị bỏ trọn, không rò chữ
-                if m.group(0) in profile.prosign_to_pattern:
-                    out.append(m.group(0))
+                pattern = profile.prosign_to_pattern.get(m.group(0))
+                if pattern is not None:
+                    out.append(profile.render([pattern]) if pattern in profile.map else m.group(0))
                 i = m.end()
                 continue
         if ch == " " or ch in profile.letter_to_pattern:

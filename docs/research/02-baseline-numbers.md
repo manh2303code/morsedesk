@@ -72,8 +72,8 @@ Ngày đo: 2026-09-20. T1 v2 = 500 clip vùng gate sinh lại cùng seed, 100 ô
 LM: n-gram ký tự bậc 6 dựng bằng KenLM `lmplz --prune 0 0 1 1 1 1` trong WSL, nhị phân numpy (`tools/arpa_to_bin.py`): en.bin 19,3 MB (perplexity holdout 3,82), ru.bin 13,6 MB (3,62), kk.bin 10,1 MB (3,04). Nguồn: `models/lm/LICENSES.md`.
 Tham chiếu CER: en/ru theo `text`; kk theo `text` khi không LM và theo `text_original` (chữ Kazakh gốc, khắt khe hơn) khi có LM. 13/166 clip kk và một số clip khác ở 0 dB không dò được tone và tính 100% ở mọi cấu hình.
 
-| Cấu hình | CER gate | en | ru | kk | language_acc | s/clip |
-|---|---|---|---|---|---|---|
+| Cấu hình | CER gate | en / ru / kk | language_acc | s/clip |
+|---|---|---|---|---|
 | greedy, không LM | 29.41% | 29.90% / 30.08% / 28.26% | – | 0.07 |
 | beam 64 + LM (alpha 0,2, beta 1,0), ép profile | 28.74% | 27.02% / 29.03% / 30.17% | – | 0.35 |
 | beam 64 + LM, profile auto | 44.38% | 33.36% / 46.89% / 52.95% | 56.6% | – |

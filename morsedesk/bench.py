@@ -17,7 +17,8 @@ def load_rows(manifest: Path) -> list[dict]:
 
 
 def reference_text(row: dict, engine: str, lm: bool) -> str:
-    """Chuỗi tham chiếu: chữ gốc (Kazakh) khi engine onnx có LM, còn lại chữ đã render qua profile."""
+    """Chuỗi tham chiếu: `text_original` (chữ gốc trước khi render qua profile — Ә, Ғ, Қ... của
+    Kazakh, Ъ của Nga) khi engine onnx có LM, còn lại `text` đã render qua profile."""
     if engine == "onnx" and lm and row.get("text_original"):
         return row["text_original"]
     return row["text"]
