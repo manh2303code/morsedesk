@@ -14,7 +14,7 @@ Tốc độ tham chiếu: v1 (clip, workers 0, Windows) ≈ 0,95 s/bước ở b
 | E0 = v1b | v1 + 16.000 bước resume | 96 | clip | 14000 | ~6,3 | 30.56% | 31.47% | 36.10% (alpha 0,6 cũ) | 33.50% / 32.46% / 28.42% |
 | E1 | đặc trưng theo cửa sổ | 96 | window | 8000 | 2,39 | 31.15% | 38.37% | – | 37.78% / 40.34% / 36.98% |
 | E2 | E1 + hidden 128 | 128 | window | 6500 | 2,74 | 27.64% | 29.14% | 28.40% | 29.49% / 29.86% / 28.08% |
-| E3 | E2 + cosine, warmup 500, 30.000 bước | 128 | window | 30000 | | | | | |
+| E3 | E2 + cosine, warmup 500, 30.000 bước | 128 | window | 21500 | 9,40 | 22.29% | 26.45% | 25.27% | 27.89% / 27.49% / 23.97% |
 | E4 | E3 + MP3 (ffmpeg) | 128 | window | 30000 | | | | | |
 | E5 | E4 trong WSL, `--workers 8` (đo tốc độ) | 128 | window | 1000 | | | – | – | – |
 
@@ -99,6 +99,36 @@ Theo kênh: clean=23.20%, mp3=16.74%, qrm=18.71%, qrn=22.14%, qsb=66.29%. Theo k
 Nhận xét: hidden 128 sửa điểm yếu tốc độ thấp của E1 (12 WPM 29,7% so 49,2%) và cho kết quả T1 tốt nhất tới nay (29,41% so v1b 31,47% với 3× số bước ít hơn). MP3 thật (16,7%) không khó hơn clean; QSB vẫn 66%. Beam+LM với alpha 0,2/beta 1,0 (mặc định mới) cho 28.74% (alpha 0,6 cũ: 34,89%); chi tiết ở mục LM trong 02-baseline-numbers.md. Quyết định: E3 giữ window + hidden 128 (khởi động 14:35, seed 13, cosine + warmup 500, 30.000 bước).
 
 ### E3
+
+Lệnh: `-m tools.train --name E3 --steps 30000 --batch 16 --lr 1e-3 --seed 13 --val-clips 200 --val-every 500 --hidden 128 --feature-mode window --lr-schedule cosine --warmup 500 --no-mp3`; 2026-09-20 14:35 → 2026-09-21 00:00, ~1,1–1,5 s/bước (CPU chia sẻ với bench/test/review), 9,40 h. TER val: 500–1000: 100%, 1500: 99,3%, 2000: 74,8%, 2500: 42,5%, 3000: 34,9%, 5000: 30,8%, 9500: 25,2%, 14000: 24,7%, 17000: 24,5%, 20000: 23,5%, 21500: 22,29% (best), 25000: 23,8%, 30000: ~23,2%. Warmup làm khởi đầu chậm hơn E2 (74,8% @2000 so 47,8%) nhưng vượt từ bước ~9000; cosine không cho cải thiện thêm sau bước 21500 (dao động 22,3–23,8%).
+
+Greedy trên T1 v2 (eval_run): gate CER 26.45%, 0.08 s/clip.
+
+```
+CER % theo SNR (hàng) x WPM (cột)
+SNR\WPM    12.0    18.0    25.0    35.0
+    0.0   41.56   43.01   40.34   38.34
+    3.0   30.90   30.78   25.76   22.77
+    6.0   27.87   26.05   23.06   19.95
+   10.0   28.52   22.35   22.12   21.62
+   20.0   18.39   13.07   21.51   11.10
+```
+
+Theo kênh: clean=17.87%, mp3=15.22%, qrm=18.41%, qrn=18.43%, qsb=62.34%. Theo kiểu gõ: bug=28.11%, drift=24.37%, farnsworth=29.40%, jitter=26.70%, machine=23.69%. Theo WPM: 12.0=29.45%, 18.0=27.05%, 25.0=26.56%, 35.0=22.76%. Theo SNR: 0.0=40.81%, 3.0=27.55%, 6.0=24.23%, 10.0=23.65%, 20.0=16.02%.
+
+Beam + LM (alpha 0,2, beta 1,0): gate CER 25.27% (en 23.67%, ru 26.45%, kk theo text_original 25.69%); theo kênh: clean=17.42%, mp3=14.90%, qrm=16.40%, qrn=17.07%, qsb=60.55%.
+
+```
+CER % theo SNR (hàng) x WPM (cột)
+SNR\WPM    12.0    18.0    25.0    35.0
+    0.0   42.44   39.67   39.20   36.56
+    3.0   29.38   32.43   23.95   21.77
+    6.0   27.97   23.37   21.31   18.21
+   10.0   31.37   16.89   19.52   19.14
+   20.0   19.62   15.76   16.88    9.88
+```
+
+Nhận xét: E3 là run tốt nhất (greedy 26,45% so E2 29,14%, LM 25,27% so 28,40%); cải thiện đều ở mọi kênh trừ QSB (62% → vẫn 60%), tức QSB giờ chiếm phần lớn khoảng cách tới gate: bỏ QSB thì CER các kênh khác ~15–18%. Ô tốt nhất 20 dB / 35 WPM còn 9,9%, nên ngay điều kiện dễ cũng chưa tới 2%: model còn thiếu năng lực (deletion/gộp từ) chứ không chỉ nhiễu. Bước tiếp theo trong tuần 3 theo spec: E4 (MP3) — nhưng MP3 thật đã dễ hơn clean trên T1, nên E4 khó cải thiện CER; giá trị của E4 là độ bền với MP3 khi train.
 
 ### E4
 
