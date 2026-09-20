@@ -104,8 +104,12 @@ def cmd_bench(a: argparse.Namespace) -> int:
     from morsedesk.bench import run
 
     model = a.model if a.engine == "onnx" else None
-    _, ok = run(a.manifest, a.engine, model, a.out_dir, a.limit, a.gate, a.max_cer,
-                profile_override=a.profile_override, lm=not a.no_lm, beam=a.beam, lm_dir=a.lm_dir)
+    try:
+        _, ok = run(a.manifest, a.engine, model, a.out_dir, a.limit, a.gate, a.max_cer,
+                    profile_override=a.profile_override, lm=not a.no_lm, beam=a.beam, lm_dir=a.lm_dir)
+    except (NotImplementedError, UnsupportedAudio, FileNotFoundError, ValueError) as e:
+        print(f"lỗi: {e}", file=sys.stderr)
+        return 2
     return 0 if ok else 1
 
 

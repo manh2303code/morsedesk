@@ -9,19 +9,20 @@ from pathlib import Path
 import numpy as np
 
 from morsedesk.audio.io import load_audio, resample
-from morsedesk.constants import FRAME_RATE, SAMPLE_RATE
+from morsedesk.constants import FRAME_RATE, HOP, SAMPLE_RATE
 from morsedesk.dsp.baseline import BaselineDecoder, Symbol
-from morsedesk.dsp.frontend import compute_features, mix_envelope
-from morsedesk.dsp.tone import estimate_tone
+from morsedesk.dsp.frontend import Window, compute_features, compute_features_windowed, mix_envelope
+from morsedesk.dsp.tone import ToneEstimate, estimate_tone
 from morsedesk.encode.synth import add_noise, elements_to_audio, tone_power
 from morsedesk.encode.text import text_to_tokens
 from morsedesk.encode.timing import TimingParams, tokens_to_elements
 from morsedesk.lm.beam import BeamParams, Hypothesis, beam_search
-from morsedesk.lm.langid import detect
+from morsedesk.lm.langid import LangIdResult, detect, detect_tokens
 from morsedesk.lm.ngram import CharNGramLM
 from morsedesk.lm.profile import Profile, list_profiles, load_profile
 from morsedesk.lm.store import LMStore
 from morsedesk.model.ctc import greedy_decode_with_frames
+from morsedesk.model.protocol import AcousticModel
 from morsedesk.model.vocab import SPACE, VOCAB
 
 LOW_CONFIDENCE = 0.6
@@ -98,27 +99,42 @@ class Encoder:
 
 
 def symbols_to_words(
-    symbols: list[Symbol], profile: Profile, frame_rate: int, confidence: float
+    symbols: list[Symbol], profile: Profile, frame_rate: int, confidence: float,
+    letters: list[str] | None = None,
 ) -> list[Word]:
+    """`letters`: chữ beam/LM đã chọn cho từng symbol (cùng độ dài); None -> chữ đầu của profile."""
     words: list[Word] = []
     cur: list[str] = []
     start = end = 0
 
     def flush() -> None:
         if cur:
-            words.append(Word(profile.render(cur), start / frame_rate, end / frame_rate, confidence))
+            words.append(Word("".join(cur), start / frame_rate, end / frame_rate, confidence))
             cur.clear()
 
-    for s in symbols:
+    for i, s in enumerate(symbols):
         if s.token == SPACE:
             flush()
             continue
         if not cur:
             start = s.start_frame
         end = s.end_frame
-        cur.append(s.token)
+        cur.append(letters[i] if letters is not None else profile.render([s.token]))
     flush()
     return words
+
+
+def beam_letters(tokens: list[str], profile_id: str, res: LangIdResult) -> list[str] | None:
+    """Chữ beam đã chọn cho từng token của `res`; None nếu chuỗi token các đoạn không khớp `tokens`."""
+    seq: list[str] = []
+    letters: list[str] = []
+    for seg in res.segments:
+        hyp = seg.best.get(profile_id)
+        if hyp is None:
+            return None
+        seq += list(hyp.tokens)
+        letters += list(hyp.letters)
+    return letters if seq == tokens else None
 
 
 def pattern_units(token: str) -> float:
@@ -186,7 +202,7 @@ class Decoder:
     def __init__(
         self, profile: str | Profile = "en", engine: str = "baseline", model_path: Path | None = None,
         fallback: bool = True, lm: bool = True, beam: int = 64, lm_dir: Path | None = None,
-        acoustic_model=None,
+        acoustic_model: AcousticModel | None = None,
     ) -> None:
         self.auto = isinstance(profile, str) and profile == "auto"
         self.profile: Profile | None = None if self.auto else _resolve_profile(profile)
@@ -195,7 +211,8 @@ class Decoder:
         self.lm_enabled = bool(lm)
         self.beam_params = BeamParams(beam=int(beam))
         self._baseline = BaselineDecoder()
-        self._model = acoustic_model
+        self._model: AcousticModel | None = acoustic_model
+        self.model_path: Path | None = None     # chỉ đặt khi tự nạp model ONNX từ đĩa
         if engine == "onnx":
             if self._model is None:
                 from morsedesk.model.onnx_runner import OnnxAcousticModel
@@ -216,58 +233,78 @@ class Decoder:
             for pid in self.candidates:
                 self._lms[pid] = self._store.get(pid)   # thiếu file -> FileNotFoundError nêu đường dẫn
 
+    @staticmethod
+    def lm_available(lm_dir: Path | None = None) -> bool:
+        """Có đủ file LM cho mọi profile chưa (GUI/CLI hỏi trước khi bật auto hoặc engine onnx)."""
+        store = LMStore(lm_dir)
+        return all(store.available(pid) for pid in list_profiles())
+
     def _empty(self, warnings: list[str]) -> DecodeResult:
         lang = self.profile.id if self.profile is not None else ""
         return DecodeResult("", [], None, None, None, lang, {}, warnings, self.engine)
 
+    def _windowed(self) -> bool:
+        return self.engine == "onnx" and getattr(self._model, "feature_mode", "clip") == "window"
+
     def decode_array(self, x: np.ndarray, sample_rate: int = SAMPLE_RATE) -> DecodeResult:
+        """Ước lượng tone toàn clip chỉ là gợi ý ở chế độ 'window': clip dài chủ yếu là nhiễu vẫn
+        giải mã được nếu có cửa sổ 4 s nào dò ra tone (spec §3.1)."""
         if sample_rate != SAMPLE_RATE:
             x = resample(np.asarray(x, dtype=np.float32), sample_rate, SAMPLE_RATE)
         est = estimate_tone(x)
-        if not est.has_signal or est.f0_hz is None:
+        tone_hz = est.f0_hz if est.has_signal else None
+        windows: list[Window] | None = None
+        if self._windowed():
+            windows = compute_features_windowed(x, tone_hz)
+            if tone_hz is None:                     # toàn clip không dò ra tone -> cửa sổ có tín hiệu đầu tiên
+                signal = next((w for w in windows if w.has_signal), None)
+                tone_hz = signal.f0_hz if signal is not None else None
+        if tone_hz is None:
             return self._empty(["không có tín hiệu Morse trong đoạn âm thanh"])
-        warnings: list[str] = []
-        if est.second_peak_hz is not None:
-            warnings.append(
-                f"phát hiện tone thứ hai tại {est.second_peak_hz:.0f} Hz, đang bám {est.f0_hz:.0f} Hz"
-            )
+        warnings = self._tone_warnings(est)
+        snr_db = est.snr_db if est.has_signal else None
         if self.engine == "baseline":
-            return self._decode_baseline(x, est, warnings)
-        return self._decode_onnx(x, est, warnings)
+            return self._decode_baseline(x, tone_hz, snr_db, warnings)
+        # chế độ 'clip' gọi đúng hai đối số: test thay `_log_probs` bằng hàm hai tham số
+        logp, n_in = self._log_probs(x, tone_hz) if windows is None else self._log_probs(x, tone_hz, windows)
+        return self._decode_onnx(x, logp, n_in, tone_hz, snr_db, warnings)
+
+    @staticmethod
+    def _tone_warnings(est: ToneEstimate) -> list[str]:
+        if not est.has_signal or est.second_peak_hz is None:
+            return []
+        return [f"phát hiện tone thứ hai tại {est.second_peak_hz:.0f} Hz, đang bám {est.f0_hz:.0f} Hz"]
 
     def _baseline_tokens(self, x: np.ndarray, f0_hz: float):
         return self._baseline.decode_envelope(mix_envelope(x, f0_hz))
 
-    def _pick_profile_for_tokens(self, tokens: list[str]) -> tuple[Profile, dict[str, float]]:
-        """Chế độ auto với engine baseline: chấm văn bản render qua từng profile bằng LM."""
-        if not self.auto:
-            return self.profile, {}
-        if not tokens:
-            return self._profiles[self.candidates[0]], {}
-        scores = {}
-        for pid in self.candidates:
-            text = self._profiles[pid].render(tokens)
-            scores[pid] = self._lms[pid].sentence_logprob(text) / (len(text) + 1)
-        best = max(scores, key=scores.get)
-        return self._profiles[best], scores
-
-    def _decode_baseline(self, x, est, warnings: list[str]) -> DecodeResult:
-        res = self._baseline_tokens(x, est.f0_hz)
-        profile, scores = self._pick_profile_for_tokens(res.tokens)
+    def _decode_baseline(self, x, tone_hz: float, snr_db: float | None,
+                         warnings: list[str]) -> DecodeResult:
+        res = self._baseline_tokens(x, tone_hz)
+        profile, scores, letters = self.profile, {}, None
+        if self.auto:                               # cùng thuật toán langid với engine onnx (spec §2.4)
+            det = detect_tokens(res.tokens, self._profiles, self._lms, self.beam_params)
+            profile, scores = self._profiles[det.profile_id], det.scores
+            letters = beam_letters(res.tokens, det.profile_id, det)
         confidence = float(np.exp(-res.cost)) if np.isfinite(res.cost) else 0.0
         if confidence < LOW_CONFIDENCE:
             warnings.append("độ tin cậy thấp")
-        words = symbols_to_words(res.symbols, profile, FRAME_RATE, confidence)
+        words = symbols_to_words(res.symbols, profile, FRAME_RATE, confidence, letters)
         # auto mà không giải mã được token nào (scores rỗng) -> language rỗng, vẫn dùng profile đầu để hiển thị
         lang = profile.id if (not self.auto or scores) else ""
-        return DecodeResult(" ".join(w.text for w in words), words, res.wpm, est.f0_hz, est.snr_db,
+        return DecodeResult(" ".join(w.text for w in words), words, res.wpm, tone_hz, snr_db,
                             lang, scores, warnings, "baseline")
 
-    def _log_probs(self, x: np.ndarray, f0_hz: float) -> tuple[np.ndarray, int]:
-        from morsedesk.model.chunker import run_chunked, run_chunked_audio
+    def _log_probs(self, x: np.ndarray, f0_hz: float,
+                   windows: list[Window] | None = None) -> tuple[np.ndarray, int]:
+        """Nơi duy nhất biến âm thanh thành log-prob. `windows`: đặc trưng cửa sổ đã tính sẵn."""
+        from morsedesk.model.chunker import run_chunked, run_chunked_audio, run_chunked_windows
 
         if getattr(self._model, "feature_mode", "clip") == "window":
-            return run_chunked_audio(self._model, x, f0_hint=f0_hz)
+            if windows is None:
+                return run_chunked_audio(self._model, x, f0_hint=f0_hz)
+            n_frames = len(x) // HOP
+            return run_chunked_windows(self._model, windows, n_frames), n_frames
         feats = compute_features(x, f0_hz)
         return run_chunked(self._model, feats), len(feats)
 
@@ -288,8 +325,8 @@ class Decoder:
             emissions += [(tok, (seg.start + f) * stride, p) for tok, f, p in hyp.emissions]
         return words, _strip_spaces(emissions), self._profiles[res.profile_id], res.scores
 
-    def _decode_onnx(self, x, est, warnings: list[str]) -> DecodeResult:
-        logp, n_in = self._log_probs(x, est.f0_hz)
+    def _decode_onnx(self, x, logp: np.ndarray, n_in: int, tone_hz: float, snr_db: float | None,
+                     warnings: list[str]) -> DecodeResult:
         stride = int(self._model.time_stride)
         if self.lm_enabled:
             words, emissions, profile, scores = self._beam_words(logp, stride, n_in)
@@ -303,13 +340,13 @@ class Decoder:
         if confidence < FALLBACK_CONFIDENCE:
             warnings.append("độ tin cậy thấp, kèm kết quả bộ giải mã DSP")
             if self.fallback:
-                fallback_text = profile.render(self._baseline_tokens(x, est.f0_hz).tokens)
+                fallback_text = profile.render(self._baseline_tokens(x, tone_hz).tokens)
         elif confidence < LOW_CONFIDENCE:
             warnings.append("độ tin cậy thấp")
         # auto mà detect() không ra điểm cho profile nào (scores rỗng) -> language rỗng
         lang = profile.id if (not self.auto or scores) else ""
         return DecodeResult(" ".join(w.text for w in words), words,
-                            estimate_wpm_from_emissions(emissions, FRAME_RATE), est.f0_hz, est.snr_db,
+                            estimate_wpm_from_emissions(emissions, FRAME_RATE), tone_hz, snr_db,
                             lang, scores, warnings, "onnx", fallback_text)
 
     def decode_file(self, path: str | Path) -> DecodeResult:

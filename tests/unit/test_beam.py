@@ -155,6 +155,38 @@ def test_blank_shortcut_fires_on_confident_lattice():
     assert BeamState(EN, None).step(lat90).n_shortcut == 0
 
 
+def _row(peaks: dict[int, float]) -> np.ndarray:
+    rest = (1.0 - sum(peaks.values())) / (len(VOCAB) - len(peaks))
+    r = np.full(len(VOCAB), rest)
+    for c, p in peaks.items():
+        r[c] = p
+    return np.log(r).astype(np.float32)
+
+
+def test_merged_prefix_keeps_frames_of_heavier_path():
+    """Tiền tố "E" tới từ hai đường trong cùng khung 2: đứng yên (phát ở khung 0, 0,50) và
+    mở rộng từ tiền tố rỗng (phát ở khung 2, 0,94). Đường nặng hơn quyết định khung/xác suất."""
+    e = VOCAB.id(".")
+    lat = np.stack([
+        _row({e: 0.50, VOCAB.blank_id: 0.49}),
+        _row({VOCAB.blank_id: 0.99}),
+        _row({e: 0.94, VOCAB.blank_id: 0.05}),
+        _row({VOCAB.blank_id: 0.99}),
+    ])
+    h = beam_search(lat, EN, None)[0]
+    assert h.text == "E" and h.frames == (2,) and math.isclose(h.probs[0], 0.94, abs_tol=1e-3)
+    flipped = np.stack([lat[2], lat[1], lat[0], lat[3]])       # đỉnh mạnh ở khung 0
+    h2 = beam_search(flipped, EN, None)[0]
+    assert h2.text == "E" and h2.frames == (0,) and math.isclose(h2.probs[0], 0.94, abs_tol=1e-3)
+
+
+def test_step_rejects_wrong_class_count():
+    with pytest.raises(ValueError, match="65"):
+        beam_search(np.zeros((4, 5), np.float32), EN, None)
+    with pytest.raises(ValueError, match="65"):
+        beam_search(np.zeros(len(VOCAB), np.float32), EN, None)
+
+
 def test_prosign_does_not_close_word():
     tokens = ["--...", "...--", SPACE, "...-.-", SPACE]                  # 73 <SK>
     lm = tiny_lm(EN, ["73 DE K"])

@@ -59,9 +59,42 @@ def split_segments(log_probs: np.ndarray, silence_frames: int = SILENCE_FRAMES,
     return segments
 
 
+def lattice_from_tokens(tokens: list[str], gap: int = 2, peak: float = 0.99,
+                        lead: int = 1) -> np.ndarray:
+    """Lưới CTC nhọn từ chuỗi token: `lead` khung blank, rồi mỗi token một khung đỉnh + `gap` khung blank.
+
+    Dùng để đưa kết quả của bộ giải mã DSP (chỉ có token, không có lưới) qua đúng một đường
+    nhận diện ngôn ngữ với engine onnx.
+    """
+    n_classes = len(VOCAB)
+    rest = np.log((1.0 - peak) / (n_classes - 1))
+
+    def one_hot(c: int) -> np.ndarray:
+        r = np.full(n_classes, rest, dtype=np.float32)
+        r[c] = np.log(peak)
+        return r
+
+    rows = [one_hot(VOCAB.blank_id)] * lead
+    for tok in tokens:
+        rows.append(one_hot(VOCAB.id(tok)))
+        rows += [one_hot(VOCAB.blank_id)] * gap
+    return np.stack(rows) if rows else np.zeros((0, n_classes), dtype=np.float32)
+
+
+def detect_tokens(tokens: list[str], profiles: dict[str, Profile], lms: dict[str, CharNGramLM],
+                  params: BeamParams | None = None) -> LangIdResult:
+    """Nhận diện ngôn ngữ từ chuỗi token (engine baseline): dựng lưới nhọn rồi gọi `detect`."""
+    if not tokens:
+        return LangIdResult(next(iter(profiles)), {}, [])
+    return detect(lattice_from_tokens(tokens), profiles, lms, params)
+
+
 def detect(log_probs: np.ndarray, profiles: dict[str, Profile], lms: dict[str, CharNGramLM],
            params: BeamParams | None = None, min_margin: float = MIN_MARGIN,
            silence_frames: int = SILENCE_FRAMES, max_frames: int = MAX_FRAMES) -> LangIdResult:
+    missing = [pid for pid in profiles if pid not in lms]
+    if missing:
+        raise KeyError(f"thiếu mô hình ngôn ngữ cho profile: {', '.join(missing)}")
     params = params or BeamParams()
     segments: list[Segment] = []
     prev: str | None = None

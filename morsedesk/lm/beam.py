@@ -207,11 +207,16 @@ class BeamState:
         classes = classes[: p.topk_per_frame]
         nxt: dict[tuple[tuple[str, ...], tuple[str, ...]], _Prefix] = {}
         for key, pre in self.beams.items():
+            carried = _lse(pre.p_b, pre.p_nb) + lp_blank
             same = nxt.get(key)
             if same is None:
                 same = pre.clone_reset()
                 nxt[key] = same
-            same.p_b = _lse(same.p_b, _lse(pre.p_b, pre.p_nb) + lp_blank)
+            elif carried > _lse(same.p_b, same.p_nb):
+                # tiền tố này đã được một tiền tố ngắn hơn mở rộng tới trong cùng khung:
+                # giữ khung/xác suất của đóng góp nặng hơn (xem chú thích ở nhánh mở rộng)
+                same.frames, same.probs = pre.frames, pre.probs
+            same.p_b = _lse(same.p_b, carried)
             last = pre.tokens[-1] if pre.tokens else None
             lm_scores = self._lm_scores(pre, classes)
             for c in classes:
@@ -230,12 +235,22 @@ class BeamState:
                     if ext is None:
                         ext = self._extend(pre, tok, display, lm_id, lm_scores, self.t, math.exp(lp_c))
                         nxt[new_key] = ext
+                    elif p_new > _lse(ext.p_b, ext.p_nb):
+                        # Cùng một tiền tố đến từ hai đường trong một khung: bản sao "đứng yên"
+                        # của chính tiền tố đó và bản mở rộng từ tiền tố ngắn hơn. Giữ khung/xác
+                        # suất của đóng góp nặng hơn phần đã gộp, thay vì của đường tạo ra trước.
+                        # (lm_logp, bonus, n_words chỉ phụ thuộc chuỗi chữ nên hai đường giống nhau)
+                        ext.frames = pre.frames + (self.t,)
+                        ext.probs = pre.probs + (math.exp(lp_c),)
                     ext.p_nb = _lse(ext.p_nb, p_new)
         ranked = sorted(nxt.values(), key=lambda h: h.total(p.alpha), reverse=True)[: p.beam]
         self.beams = {(h.tokens, h.letters): h for h in ranked}
 
     def step(self, log_probs: np.ndarray) -> BeamState:
-        for row in np.asarray(log_probs, dtype=np.float32):
+        lp = np.asarray(log_probs, dtype=np.float32)
+        if lp.ndim != 2 or lp.shape[1] != len(VOCAB):
+            raise ValueError(f"log_probs phải có dạng [T, {len(VOCAB)}], nhận {lp.shape}")
+        for row in lp:
             self._advance(row)
             self.t += 1
         return self

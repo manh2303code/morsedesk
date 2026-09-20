@@ -8,8 +8,8 @@ from morsedesk.constants import SAMPLE_RATE
 from morsedesk.encode.synth import add_noise, elements_to_audio, tone_power
 from morsedesk.encode.text import text_to_tokens
 from morsedesk.encode.timing import TimingParams, tokens_to_elements
+from morsedesk.lm.langid import lattice_from_tokens as _lattice_from_tokens
 from morsedesk.lm.profile import load_profile
-from morsedesk.model.vocab import VOCAB
 
 
 def make_morse(
@@ -34,19 +34,7 @@ def make_morse(
     return audio, tokens
 
 
-def lattice_from_tokens(tokens: list[str], gap: int = 6, peak: float = 0.9, n_classes: int = len(VOCAB),
+def lattice_from_tokens(tokens: list[str], gap: int = 6, peak: float = 0.9,
                         lead: int = 3) -> np.ndarray:
-    """Lưới CTC nhọn: `lead` khung blank, rồi mỗi token một khung đỉnh + `gap` khung blank."""
-    rest = np.log((1.0 - peak) / (n_classes - 1))
-    rows = []
-
-    def one_hot(c: int) -> np.ndarray:
-        r = np.full(n_classes, rest, dtype=np.float32)
-        r[c] = np.log(peak)
-        return r
-
-    rows += [one_hot(VOCAB.blank_id)] * lead
-    for tok in tokens:
-        rows.append(one_hot(VOCAB.id(tok)))
-        rows += [one_hot(VOCAB.blank_id)] * gap
-    return np.stack(rows)
+    """Tái xuất `morsedesk.lm.langid.lattice_from_tokens` với mặc định rộng rãi hơn của test."""
+    return _lattice_from_tokens(tokens, gap=gap, peak=peak, lead=lead)

@@ -6,7 +6,7 @@ from __future__ import annotations
 import numpy as np
 
 from morsedesk.constants import HOP
-from morsedesk.dsp.frontend import compute_features_windowed
+from morsedesk.dsp.frontend import Window, compute_features_windowed
 from morsedesk.dsp.windowing import (  # noqa: F401  (re-export cho import cũ)
     LIVE_STEP_FRAMES,
     LIVE_WINDOW_FRAMES,
@@ -14,6 +14,7 @@ from morsedesk.dsp.windowing import (  # noqa: F401  (re-export cho import cũ)
     WINDOW_FRAMES,
     frame_windows,
 )
+from morsedesk.model.protocol import AcousticModel
 
 
 def _merge_pieces(pieces: list[tuple[int, int, np.ndarray]], n_frames: int, stride: int,
@@ -39,17 +40,23 @@ def _merge_pieces(pieces: list[tuple[int, int, np.ndarray]], n_frames: int, stri
     return out
 
 
-def run_chunked(model, feats: np.ndarray, window: int = WINDOW_FRAMES, step: int = STEP_FRAMES) -> np.ndarray:
-    """Đặc trưng đã tính cho cả clip (chế độ 'clip'). model: time_stride, output_length, __call__, meta['vocab']."""
+def run_chunked(model: AcousticModel, feats: np.ndarray, window: int = WINDOW_FRAMES,
+                step: int = STEP_FRAMES) -> np.ndarray:
+    """Đặc trưng đã tính cho cả clip (chế độ 'clip')."""
     n = feats.shape[0]
     pieces = [(s, e, model(feats[s:e])) for s, e in frame_windows(n, window, step)]
     return _merge_pieces(pieces, n, int(model.time_stride), len(model.meta["vocab"]))
 
 
-def run_chunked_audio(model, x: np.ndarray, f0_hint: float | None = None, window: int = WINDOW_FRAMES,
-                      step: int = STEP_FRAMES) -> tuple[np.ndarray, int]:
+def run_chunked_windows(model: AcousticModel, windows: list[Window], n_frames: int) -> np.ndarray:
+    """Chế độ 'window' với đặc trưng đã tính sẵn (tránh tính lại khi bên gọi đã có cửa sổ)."""
+    pieces = [(w.start_frame, w.end_frame, model(w.feats)) for w in windows]
+    return _merge_pieces(pieces, n_frames, int(model.time_stride), len(model.meta["vocab"]))
+
+
+def run_chunked_audio(model: AcousticModel, x: np.ndarray, f0_hint: float | None = None,
+                      window: int = WINDOW_FRAMES, step: int = STEP_FRAMES) -> tuple[np.ndarray, int]:
     """Chế độ 'window': đặc trưng và tone tính riêng từng cửa sổ. Trả (log-prob gộp, số khung đầu vào)."""
     n_frames = len(x) // HOP
-    pieces = [(w.start_frame, w.end_frame, model(w.feats))
-              for w in compute_features_windowed(x, f0_hint, window_frames=window, step_frames=step)]
-    return _merge_pieces(pieces, n_frames, int(model.time_stride), len(model.meta["vocab"])), n_frames
+    windows = compute_features_windowed(x, f0_hint, window_frames=window, step_frames=step)
+    return run_chunked_windows(model, windows, n_frames), n_frames

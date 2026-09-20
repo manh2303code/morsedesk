@@ -14,6 +14,7 @@ from morsedesk.dsp.frontend import (
     compute_features_windowed,
     stitch_windows,
 )
+from morsedesk.dsp.tone import estimate_tone
 from morsedesk.dsp.windowing import STEP_FRAMES, WINDOW_FRAMES, frame_windows
 from morsedesk.model import chunker
 from morsedesk.model.chunker import run_chunked, run_chunked_audio
@@ -149,16 +150,37 @@ def test_export_writes_feature_mode_and_runner_reads_it(tmp_models):
 
 def test_decoder_picks_path_by_feature_mode(tmp_models, monkeypatch):
     calls = []
-    orig = chunker.run_chunked_audio
+    orig = chunker.run_chunked_windows
 
     def spy(*a, **k):
-        calls.append("audio")
+        calls.append("windows")
         return orig(*a, **k)
 
-    monkeypatch.setattr(chunker, "run_chunked_audio", spy)
+    monkeypatch.setattr(chunker, "run_chunked_windows", spy)
     x = Encoder("en").to_audio("CQ CQ DE R1ABC", wpm=20)
     r = Decoder("en", engine="onnx", model_path=tmp_models["window"], lm=False).decode_array(x)
-    assert calls == ["audio"] and r.engine == "onnx"
+    assert calls == ["windows"] and r.engine == "onnx"
     calls.clear()
     Decoder("en", engine="onnx", model_path=tmp_models["clip"], lm=False).decode_array(x)
     assert calls == []
+
+
+def test_window_mode_decodes_when_global_tone_estimate_fails(tmp_models):
+    """Clip ~21 s gần như toàn nhiễu: cổng tone toàn clip đóng nhưng cửa sổ 4 s vẫn dò ra tone.
+
+    "CQ DE K" ở 25 WPM dài 2,9 s (dài hơn 1,5 s để bản tin nằm gọn trong một cửa sổ);
+    18 s nhiễu ở đầu là mức vừa đủ để `estimate_tone` toàn clip trả has_signal=False.
+    """
+    morse, _ = make_morse("CQ DE K", wpm=25, tone_hz=700.0, pad_s=0.0)
+    rng = np.random.default_rng(0)
+    noise = rng.normal(0, 0.01, size=18 * 8000).astype(np.float32)
+    x = np.concatenate([noise, morse, rng.normal(0, 0.01, size=4000).astype(np.float32)])
+    assert not estimate_tone(x).has_signal                    # cổng tone toàn clip đóng
+    assert sum(w.has_signal for w in compute_features_windowed(x)) >= 1
+    r = Decoder("en", engine="onnx", model_path=tmp_models["window"], lm=False).decode_array(x)
+    assert r.tone_hz is not None and abs(r.tone_hz - 700.0) < 20.0
+    assert not any("không có tín hiệu" in w for w in r.warnings)
+    assert r.snr_db is None                                   # không có ước lượng toàn clip để báo SNR
+    clip = Decoder("en", engine="onnx", model_path=tmp_models["clip"], lm=False).decode_array(x)
+    assert clip.text == "" and clip.tone_hz is None           # chế độ 'clip' giữ nguyên hành vi cũ
+    assert any("không có tín hiệu" in w for w in clip.warnings)

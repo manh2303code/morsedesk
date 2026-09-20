@@ -68,6 +68,20 @@ def test_baseline_auto_picks_profile_by_lm(lm_dir):
     assert set(r.language_scores) == set(P) and r.language_scores["ru"] == max(r.language_scores.values())
 
 
+def test_baseline_auto_recovers_kazakh_letters(lm_dir):
+    """Baseline + auto đi qua detect_tokens: beam chọn được Ә nên kk không còn đổ về ru."""
+    x = Encoder("kk-cyrl-ru").to_audio("СӘЛЕМ ӘЛЕМ", wpm=20)
+    r = Decoder("auto", engine="baseline", lm_dir=lm_dir).decode_array(x)
+    assert r.language == "kk-cyrl-ru" and r.text == "СӘЛЕМ ӘЛЕМ"
+    assert r.language_scores["kk-cyrl-ru"] == max(r.language_scores.values())
+    assert [w.text for w in r.words] == ["СӘЛЕМ", "ӘЛЕМ"]
+
+
+def test_lm_available(lm_dir, tmp_path):
+    assert Decoder.lm_available(lm_dir) is True
+    assert Decoder.lm_available(tmp_path / "trống") is False
+
+
 def test_onnx_beam_lm_recovers_kazakh_letters(monkeypatch, lm_dir):
     patch_lattice(monkeypatch, "СӘЛЕМ ӘЛЕМ", "kk-cyrl-ru")
     x = Encoder("kk-cyrl-ru").to_audio("СӘЛЕМ ӘЛЕМ", wpm=20)
@@ -139,6 +153,22 @@ def test_bench_language_acc_and_reference_text(tmp_path, lm_dir):
     summary, ok = bench.run(manifest, "baseline", None, tmp_path / "r", None, False, 0.02,
                             profile_override="auto", lm_dir=lm_dir)
     assert summary["language_acc"] == 1.0 and summary["profile_override"] == "auto" and ok
+
+
+def test_bench_cli_reports_argument_error(tmp_path, capsys):
+    """'auto' + --no-lm -> ValueError trong Decoder: cmd_bench in 'lỗi: ...' và trả 2, không traceback."""
+    wav = tmp_path / "0.wav"
+    save_audio(wav, Encoder("en").to_audio("CQ DE K", wpm=20), 8000)
+    manifest = tmp_path / "m.jsonl"
+    write_jsonl([{"path": str(wav), "text": "CQ DE K", "profile": "en", "snr": 20.0, "wpm": 20.0,
+                  "keying": "machine", "channel": "clean", "channel_actual": "clean", "seed": 0}],
+                manifest)
+    assert main(["bench", "--manifest", str(manifest), "--out-dir", str(tmp_path / "r"),
+                 "--profile-override", "auto", "--no-lm"]) == 2
+    assert "lỗi" in capsys.readouterr().err
+    assert main(["bench", "--manifest", str(manifest), "--out-dir", str(tmp_path / "r"),
+                 "--profile-override", "auto", "--lm-dir", str(tmp_path / "trống")]) == 2
+    assert "en.bin" in capsys.readouterr().err
 
 
 def test_auto_reports_empty_language_when_nothing_decoded(monkeypatch, lm_dir):

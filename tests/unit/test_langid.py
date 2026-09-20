@@ -1,9 +1,11 @@
 import numpy as np
+import pytest
 
 from morsedesk.encode.text import text_to_tokens
 from morsedesk.lm.alphabet import LMAlphabet
 from morsedesk.lm.beam import BeamParams
-from morsedesk.lm.langid import MIN_MARGIN, LangIdResult, detect, split_segments
+from morsedesk.lm.langid import MIN_MARGIN, LangIdResult, detect, detect_tokens, split_segments
+from morsedesk.lm.langid import lattice_from_tokens as peaked_lattice
 from morsedesk.lm.ngram import train_small
 from morsedesk.lm.profile import load_profile
 from morsedesk.model.vocab import VOCAB
@@ -65,6 +67,33 @@ def test_margin_keeps_previous_profile():
     r = detect(full, PROFILES, LMS, BeamParams(beam=8), min_margin=10.0)
     assert [s.profile_id for s in r.segments] == ["ru", "ru"]
     assert MIN_MARGIN == 0.15
+
+
+def test_detect_tokens_matches_detect_on_the_same_lattice():
+    for text, pid in (("CQ CQ DE K", "en"), ("ПРИВЕТ МИР", "ru"), ("СӘЛЕМ ӘЛЕМ", "kk-cyrl-ru")):
+        tokens = text_to_tokens(text, PROFILES[pid])
+        r = detect_tokens(tokens, PROFILES, LMS, BeamParams(beam=8))
+        assert r.profile_id == pid, (text, r.scores)
+        assert r.segments[0].best[pid].text == text          # beam chọn đúng chữ gốc (Ә, ...)
+        direct = detect(peaked_lattice(tokens), PROFILES, LMS, BeamParams(beam=8))
+        assert r.scores == direct.scores
+    empty = detect_tokens([], PROFILES, LMS)
+    assert empty.profile_id == "en" and empty.scores == {} and empty.segments == []
+
+
+def test_lattice_from_tokens_shape_and_peaks():
+    tokens = text_to_tokens("CQ", PROFILES["en"])
+    lat = peaked_lattice(tokens)                             # gap 2, lead 1, peak 0,99
+    assert lat.shape == (1 + 3 * len(tokens), len(VOCAB))
+    expected = ["<blank>"] + [t for tok in tokens for t in (tok, "<blank>", "<blank>")]
+    assert [VOCAB.token(int(i)) for i in lat.argmax(1)] == expected
+    assert np.isclose(np.exp(lat[1].max()), 0.99)
+    assert peaked_lattice([], lead=0).shape == (0, len(VOCAB))
+
+
+def test_detect_names_profile_without_lm():
+    with pytest.raises(KeyError, match="kk-cyrl-ru"):
+        detect(lat("CQ", "en"), PROFILES, {pid: LMS[pid] for pid in ("en", "ru")})
 
 
 def test_detect_all_blank_returns_first_profile_without_scores():
