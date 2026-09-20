@@ -165,7 +165,7 @@ def test_fetch_tatoeba_rus_writes_file_and_source(tmp_path, monkeypatch):
         if url.endswith("/tree/main/test"):
             return json.dumps([{"type": "file", "path": "test/tatoeba-test.deu-rus.tsv"}]).encode()
         if url.endswith("eng-rus.tsv"):
-            return "eng\trus\tHello\tПривет\n".encode("utf-8")
+            return "eng\trus\tHello\tПривет\n".encode()
         if url.endswith("deu-rus.tsv"):
             raise OSError("offline")
         raise AssertionError(url)
