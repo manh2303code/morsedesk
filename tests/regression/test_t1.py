@@ -91,8 +91,12 @@ def test_t1_lm_not_worse_than_greedy_and_language_acc():
     model = Path("models/acoustic.onnx")
     greedy = bench.evaluate(rows, engine="onnx", model_path=model, lm=False)
     with_lm = bench.evaluate(rows, engine="onnx", model_path=model, lm=True)
+    from morsedesk.metrics import cer as _cer
+
     for pid in ("en", "ru", "kk-cyrl-ru"):
-        g = bench.aggregate(greedy, "profile")[pid]["cer"]
+        # cùng tham chiếu với LM: kk chấm greedy theo text_original (greedy không thể sinh Ә/Ғ/...)
+        g_rows = [r for r in greedy if r.get("profile") == pid]
+        g = sum(_cer(r.get("text_original") or r["text"], r["hyp"]) for r in g_rows) / len(g_rows)
         w = bench.aggregate(with_lm, "profile")[pid]["cer"]
         assert w <= g + 1e-9, (
             f"{pid}: LM {w:.4f} > greedy {g:.4f}"
