@@ -139,3 +139,26 @@ def test_bench_language_acc_and_reference_text(tmp_path, lm_dir):
     summary, ok = bench.run(manifest, "baseline", None, tmp_path / "r", None, False, 0.02,
                             profile_override="auto", lm_dir=lm_dir)
     assert summary["language_acc"] == 1.0 and summary["profile_override"] == "auto" and ok
+
+
+def test_auto_reports_empty_language_when_nothing_decoded(monkeypatch, lm_dir):
+    """Lưới toàn blank -> không segment nào có profile_id -> language rỗng, language_scores rỗng."""
+    lat = lattice_from_tokens([], gap=0, lead=60)
+    monkeypatch.setattr(Decoder, "_log_probs", lambda self, x, f0: (lat, 2 * 60))
+    x = Encoder("en").to_audio("E", wpm=20)
+    dec = Decoder("auto", engine="onnx", acoustic_model=FakeAcousticModel(), lm_dir=lm_dir, beam=4)
+    r = dec.decode_array(x)
+    assert r.text == "" and r.language == "" and r.language_scores == {}
+
+
+def test_language_correct_none_without_profile(tmp_path, lm_dir):
+    """Hàng manifest thiếu khóa 'profile' -> không rõ nhãn đúng -> language_correct None, không phải False."""
+    wav = tmp_path / "0.wav"
+    save_audio(wav, Encoder("en").to_audio("CQ DE K", wpm=20), 8000)
+    rows = [{"path": str(wav), "text": "CQ DE K", "snr": 20.0, "wpm": 20.0,
+             "keying": "machine", "channel": "clean", "channel_actual": "clean", "seed": 0}]
+    manifest = tmp_path / "m.jsonl"
+    write_jsonl(rows, manifest)
+    res = bench.evaluate(bench.load_rows(manifest), engine="baseline", profile_override="auto", lm_dir=lm_dir)
+    assert res[0]["language_correct"] is None
+    assert bench.language_accuracy(res) is None

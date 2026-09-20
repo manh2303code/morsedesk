@@ -258,8 +258,10 @@ class Decoder:
         if confidence < LOW_CONFIDENCE:
             warnings.append("độ tin cậy thấp")
         words = symbols_to_words(res.symbols, profile, FRAME_RATE, confidence)
+        # auto mà không giải mã được token nào (scores rỗng) -> language rỗng, vẫn dùng profile đầu để hiển thị
+        lang = profile.id if (not self.auto or scores) else ""
         return DecodeResult(" ".join(w.text for w in words), words, res.wpm, est.f0_hz, est.snr_db,
-                            profile.id, scores, warnings, "baseline")
+                            lang, scores, warnings, "baseline")
 
     def _log_probs(self, x: np.ndarray, f0_hz: float) -> tuple[np.ndarray, int]:
         from morsedesk.model.chunker import run_chunked, run_chunked_audio
@@ -304,9 +306,11 @@ class Decoder:
                 fallback_text = profile.render(self._baseline_tokens(x, est.f0_hz).tokens)
         elif confidence < LOW_CONFIDENCE:
             warnings.append("độ tin cậy thấp")
+        # auto mà detect() không ra điểm cho profile nào (scores rỗng) -> language rỗng
+        lang = profile.id if (not self.auto or scores) else ""
         return DecodeResult(" ".join(w.text for w in words), words,
                             estimate_wpm_from_emissions(emissions, FRAME_RATE), est.f0_hz, est.snr_db,
-                            profile.id, scores, warnings, "onnx", fallback_text)
+                            lang, scores, warnings, "onnx", fallback_text)
 
     def decode_file(self, path: str | Path) -> DecodeResult:
         x, sr = load_audio(path)

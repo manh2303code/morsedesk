@@ -33,6 +33,7 @@ def evaluate(rows: list[dict], engine: str = "baseline", model_path: Path | None
         if pid not in decoders:
             decoders[pid] = Decoder(pid, engine=engine, model_path=model_path, lm=lm, beam=beam, lm_dir=lm_dir)
         ref = reference_text(row, engine, lm)
+        truth = row.get("profile")
         t0 = time.time()
         out = dict(row)
         out["ref"] = ref
@@ -49,7 +50,9 @@ def evaluate(rows: list[dict], engine: str = "baseline", model_path: Path | None
         out.update({
             "hyp": r.text, "cer": cer(ref, r.text), "wer": wer(ref, r.text), "wpm_est": r.wpm,
             "seconds": time.time() - t0, "warnings": r.warnings, "language": r.language,
-            "language_correct": (r.language == row.get("profile")) if profile_override == "auto" else None,
+            # thiếu khóa "profile" (không rõ nhãn đúng) -> None, không phải False
+            "language_correct": (r.language == truth) if (profile_override == "auto" and truth is not None)
+            else None,
             "error": None,
         })
         results.append(out)

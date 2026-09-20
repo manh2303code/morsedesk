@@ -69,7 +69,10 @@ def test_t1_gate_onnx():
     manifest = Path("testdata/generated/t1/manifest.jsonl")
     if not manifest.exists():
         pytest.skip("chạy: uv run python tools/make_t1.py")
-    results = bench.evaluate(bench.load_rows(manifest), engine="onnx", model_path=Path("models/acoustic.onnx"))
+    # gate greedy (lm=False); gate LM ở test_t1_lm_not_worse_than_greedy_and_language_acc
+    results = bench.evaluate(
+        bench.load_rows(manifest), engine="onnx", model_path=Path("models/acoustic.onnx"), lm=False
+    )
     ok, mean_cer, n = bench.gate(results)
     assert ok, f"CER vùng gate = {mean_cer:.4f} trên {n} clip, ngưỡng 0.02"
 
@@ -91,7 +94,10 @@ def test_t1_lm_not_worse_than_greedy_and_language_acc():
     for pid in ("en", "ru", "kk-cyrl-ru"):
         g = bench.aggregate(greedy, "profile")[pid]["cer"]
         w = bench.aggregate(with_lm, "profile")[pid]["cer"]
-        assert w <= g + 1e-9, f"{pid}: LM {w:.4f} > greedy {g:.4f}"
+        assert w <= g + 1e-9, (
+            f"{pid}: LM {w:.4f} > greedy {g:.4f}"
+            " (kk-cyrl-ru: LM được chấm theo text_original, tham chiếu khắt khe hơn)"
+        )
     auto = bench.evaluate(rows, engine="onnx", model_path=model, profile_override="auto")
     acc = bench.language_accuracy(auto)
     assert acc is not None and acc >= 0.95, f"language_acc = {acc:.3f}"
