@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from morsedesk.encode.text import text_to_tokens
+from morsedesk.encode.text import _PROSIGN_RE, normalize, text_to_tokens
 from morsedesk.lm.profile import Profile
 
 BUILTIN_WORDS: dict[str, list[str]] = {
@@ -59,6 +59,26 @@ def random_callsign(rng: np.random.Generator) -> str:
     digit = str(rng.integers(0, 10))
     suffix = "".join(chr(65 + rng.integers(26)) for _ in range(int(rng.integers(2, 4))))
     return pre + digit + suffix
+
+
+def keep_supported(raw: str, profile: Profile) -> str:
+    """Chuẩn hóa rồi bỏ ký tự không mã hóa được; giữ chữ gốc (Ә, Ғ...) và prosign của profile."""
+    norm = normalize(raw, profile)
+    out: list[str] = []
+    i = 0
+    while i < len(norm):
+        ch = norm[i]
+        if ch == "<":
+            m = _PROSIGN_RE.match(norm, i)
+            if m:                                   # prosign lạ (<XYZ>) bị bỏ trọn, không rò chữ
+                if m.group(0) in profile.prosign_to_pattern:
+                    out.append(m.group(0))
+                i = m.end()
+                continue
+        if ch == " " or ch in profile.letter_to_pattern:
+            out.append(ch)
+        i += 1
+    return " ".join("".join(out).split())
 
 
 class TextSampler:
@@ -117,5 +137,5 @@ class TextSampler:
             raw = self._ham(profile, rng)
         else:
             raw = self._words(profile_id, profile, rng, n)
-        cleaned = profile.render(text_to_tokens(raw, profile, strict=False)).strip()
+        cleaned = keep_supported(raw, profile)
         return cleaned or BUILTIN_WORDS[profile_id][0]

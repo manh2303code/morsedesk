@@ -63,6 +63,7 @@ class Example:
     channel: ChannelParams
     f0_hz: float
     sample_rate: int
+    text_original: str = ""
 
     @property
     def seconds(self) -> float:
@@ -97,7 +98,7 @@ class SynthGenerator:
         return total_seconds(tokens_to_elements(tokens, keyer.timing()))
 
     def _sample_tokens(self, profile: Profile, keyer: KeyerParams, rng: np.random.Generator,
-                       target_s: float) -> list[str]:
+                       target_s: float) -> tuple[list[str], str]:
         """Ghép từng từ cho tới khi đạt target_s, không bao giờ vượt max_seconds.
 
         Chỉ thêm từ nào còn vừa trần; dừng khi đã đạt target_s, hoặc khi không còn từ vừa
@@ -107,41 +108,47 @@ class SynthGenerator:
         min_seconds được đảm bảo chỉ khi cửa sổ (max_seconds - min_seconds) đủ rộng so với
         độ dài từ ở tốc độ cho trước (true cho mặc định 4–12 s: 0 vi phạm trên 27.000 mẫu);
         do fill không backtrack, cửa sổ hẹp (ví dụ 4–6 s ở 5 WPM) có thể dừng dưới sàn
-        sau từ đầu tiên không may mắn.
+        sau từ đầu tiên không may mắn. Trả (tokens, text_original) với text_original là các
+        từ gốc đã ghép.
         """
         tokens: list[str] = []
-        queue: list[list[str]] = []
+        words_text: list[str] = []
+        queue: list[tuple[list[str], str]] = []
         rounds = 0
         while rounds < MAX_SAMPLE_ROUNDS:
             if not queue:
                 rounds += 1
-                queue = split_words(text_to_tokens(self.text.sample(profile.id, rng), profile))
+                text = self.text.sample(profile.id, rng)
+                queue = [(text_to_tokens(w, profile), w) for w in text.split()]
+                queue = [(t, w) for t, w in queue if t]
                 continue
-            word = queue.pop(0)
+            word, word_text = queue.pop(0)
             cand = tokens + ([SPACE] if tokens else []) + word
             d = self.tokens_duration(cand, keyer)
             if d <= self.cfg.max_seconds:
                 tokens = cand
+                words_text.append(word_text)
                 if d >= target_s:
                     break
             elif self.tokens_duration(tokens, keyer) >= self.cfg.min_seconds:
                 break
         if not tokens:
             # Chỉ khi không có từ nào vừa trần: lấy từ ngắn nhất từ từ điển.
-            tokens = self._shortest_builtin_word(profile, keyer)
-        return tokens
+            tokens, word_text = self._shortest_builtin_word(profile, keyer)
+            words_text = [word_text]
+        return tokens, " ".join(words_text)
 
-    def _shortest_builtin_word(self, profile: Profile, keyer: KeyerParams) -> list[str]:
+    def _shortest_builtin_word(self, profile: Profile, keyer: KeyerParams) -> tuple[list[str], str]:
         """Từ ngắn nhất (theo thời lượng) trong BUILTIN_WORDS của profile, dùng khi không tìm
         được từ nào vừa trần trong _sample_tokens."""
-        words = [text_to_tokens(w, profile) for w in BUILTIN_WORDS[profile.id]]
-        return min(words, key=lambda w: self.tokens_duration(w, keyer))
+        words = [(text_to_tokens(w, profile), w) for w in BUILTIN_WORDS[profile.id]]
+        return min(words, key=lambda tw: self.tokens_duration(tw[0], keyer))
 
     def _random_morse(self, n: int, f0: float, rng: np.random.Generator) -> np.ndarray:
         """Tín hiệu Morse ngẫu nhiên tiếng Anh dùng làm QRM."""
         en = self.profiles["en"]
         keyer = machine(float(rng.uniform(15.0, 35.0)))
-        tokens = self._sample_tokens(en, keyer, rng, n / SAMPLE_RATE)
+        tokens, _ = self._sample_tokens(en, keyer, rng, n / SAMPLE_RATE)
         audio = elements_to_audio(tokens_to_elements(tokens, keyer.timing()), f0, SAMPLE_RATE, AMPLITUDE)
         reps = int(np.ceil(n / max(1, len(audio))))
         return np.tile(audio, reps)[:n]
@@ -162,7 +169,7 @@ class SynthGenerator:
             channel = replace(channel, mp3_kbps=None)
 
         target = float(rng.uniform(self.cfg.min_seconds, self.cfg.max_seconds))
-        tokens = self._sample_tokens(profile, keyer, rng, target)
+        tokens, text_original = self._sample_tokens(profile, keyer, rng, target)
         nominal = tokens_to_elements(tokens, keyer.timing())
         elements = rescale_elements(apply_keyer(nominal, keyer, rng), total_seconds(nominal))
         n_sig = elements_to_segments(elements, SAMPLE_RATE)[-1][2]
@@ -185,4 +192,5 @@ class SynthGenerator:
             channel=channel,
             f0_hz=channel.tone_hz,
             sample_rate=SAMPLE_RATE,
+            text_original=text_original,
         )

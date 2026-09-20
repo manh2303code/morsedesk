@@ -170,7 +170,8 @@ def test_sample_tokens_bounds_with_default_window():
         for pid in ("en", "ru", "kk-cyrl-ru"):
             for wpm in (5.0, 12.0, 30.0, 60.0):
                 keyer = machine(wpm)
-                toks = gen._sample_tokens(gen.profiles[pid], keyer, rng, target_s=8.0)
+                toks, original = gen._sample_tokens(gen.profiles[pid], keyer, rng, target_s=8.0)
+                assert text_to_tokens(original, gen.profiles[pid]) == toks
                 d = gen.tokens_duration(toks, keyer)
                 assert 4.0 - 1e-9 <= d <= 12.0 + 1e-9, (seed, pid, wpm, d)
                 assert toks[0] != SPACE and toks[-1] != SPACE
@@ -182,7 +183,7 @@ def test_sample_tokens_tight_window_never_exceeds_max():
     for seed in range(20):
         rng = np.random.default_rng(seed)
         for pid in ("en", "ru", "kk-cyrl-ru"):
-            toks = gen._sample_tokens(gen.profiles[pid], machine(5.0), rng, target_s=5.0)
+            toks, original = gen._sample_tokens(gen.profiles[pid], machine(5.0), rng, target_s=5.0)
             assert gen.tokens_duration(toks, machine(5.0)) <= 6.0 + 1e-9, (seed, pid)
 
 

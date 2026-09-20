@@ -32,6 +32,7 @@ def test_generate_small_matrix_and_bench(tmp_path, monkeypatch):
     rows = make_t1.generate_matrix(tmp_path, full=False, clips=1)
     assert len(rows) == 2 * 2 * 2
     assert all(Path(r["path"]).exists() for r in rows)
+    assert all("text_original" in r and r["text_original"] for r in rows)
     manifest = tmp_path / "manifest.jsonl"
     assert manifest.exists()
 
