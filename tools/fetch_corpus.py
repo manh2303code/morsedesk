@@ -83,7 +83,7 @@ def fetch_gutenberg(ids: list[int], out_dir: Path, sleep_s: float, sources: list
             continue
         try:
             text = _get(GUTENBERG_TXT.format(id=i)).decode("utf-8", errors="replace")
-        except (OSError, urllib.error.URLError, ValueError, KeyError) as e:  # nguồn lẻ lỗi không chặn cả lô
+        except _NET_ERRORS as e:  # nguồn lẻ lỗi không chặn cả lô
             print(f"bỏ qua Gutenberg {i}: {e}")
             continue
         body = strip_gutenberg(text)
