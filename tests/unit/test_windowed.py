@@ -157,8 +157,8 @@ def test_decoder_picks_path_by_feature_mode(tmp_models, monkeypatch):
 
     monkeypatch.setattr(chunker, "run_chunked_audio", spy)
     x = Encoder("en").to_audio("CQ CQ DE R1ABC", wpm=20)
-    r = Decoder("en", engine="onnx", model_path=tmp_models["window"]).decode_array(x)
+    r = Decoder("en", engine="onnx", model_path=tmp_models["window"], lm=False).decode_array(x)
     assert calls == ["audio"] and r.engine == "onnx"
     calls.clear()
-    Decoder("en", engine="onnx", model_path=tmp_models["clip"]).decode_array(x)
+    Decoder("en", engine="onnx", model_path=tmp_models["clip"], lm=False).decode_array(x)
     assert calls == []

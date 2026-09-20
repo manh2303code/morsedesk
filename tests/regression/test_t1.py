@@ -74,6 +74,29 @@ def test_t1_gate_onnx():
     assert ok, f"CER vùng gate = {mean_cer:.4f} trên {n} clip, ngưỡng 0.02"
 
 
+LM_FILES = [Path("models/lm") / f for f in ("en.bin", "ru.bin", "kk.bin")]
+
+
+@pytest.mark.gate
+@pytest.mark.skipif(not Path("models/acoustic.onnx").exists() or not all(p.exists() for p in LM_FILES),
+                    reason="cần models/acoustic.onnx và models/lm/{en,ru,kk}.bin")
+def test_t1_lm_not_worse_than_greedy_and_language_acc():
+    manifest = Path("testdata/generated/t1/manifest.jsonl")
+    if not manifest.exists():
+        pytest.skip("chạy: uv run python tools/make_t1.py")
+    rows = bench.load_rows(manifest)
+    model = Path("models/acoustic.onnx")
+    greedy = bench.evaluate(rows, engine="onnx", model_path=model, lm=False)
+    with_lm = bench.evaluate(rows, engine="onnx", model_path=model, lm=True)
+    for pid in ("en", "ru", "kk-cyrl-ru"):
+        g = bench.aggregate(greedy, "profile")[pid]["cer"]
+        w = bench.aggregate(with_lm, "profile")[pid]["cer"]
+        assert w <= g + 1e-9, f"{pid}: LM {w:.4f} > greedy {g:.4f}"
+    auto = bench.evaluate(rows, engine="onnx", model_path=model, profile_override="auto")
+    acc = bench.language_accuracy(auto)
+    assert acc is not None and acc >= 0.95, f"language_acc = {acc:.3f}"
+
+
 def test_evaluate_isolates_decode_errors(tmp_path):
     from tools.make_t2_manifest import write_jsonl
 

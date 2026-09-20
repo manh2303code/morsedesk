@@ -60,7 +60,7 @@ def test_emissions_to_words():
 
 def test_onnx_engine_runs_with_untrained_model(tmp_model):
     x = Encoder("en").to_audio("CQ CQ DE R1ABC", wpm=20)
-    r = Decoder("en", engine="onnx", model_path=tmp_model).decode_array(x)
+    r = Decoder("en", engine="onnx", model_path=tmp_model, lm=False).decode_array(x)
     assert r.engine == "onnx"
     assert isinstance(r.text, str)
     assert abs(r.tone_hz - 700) < 10
@@ -83,7 +83,12 @@ def test_cli_missing_model_exit_2(tmp_path, capsys):
 
 
 @pytest.mark.gate
-@pytest.mark.skipif(not Path("models/acoustic.onnx").exists(), reason="chưa có model đã huấn luyện")
+@pytest.mark.skipif(
+    not Path("models/acoustic.onnx").exists()
+    or not Path("models/lm/en.bin").exists()
+    or not Path("models/lm/ru.bin").exists(),
+    reason="chưa có model đã huấn luyện hoặc thiếu models/lm/{en,ru}.bin",
+)
 def test_trained_model_roundtrip():
     text = "CQ CQ DE R1ABC R1ABC K"
     x = Encoder("en").to_audio(text, wpm=20, snr_db=10.0, seed=1)
@@ -97,6 +102,6 @@ def test_trained_model_roundtrip():
 
 def test_no_fallback_disables_baseline_text(tmp_model):
     x = Encoder("en").to_audio("CQ CQ DE R1ABC", wpm=20)
-    r = Decoder("en", engine="onnx", model_path=tmp_model, fallback=False).decode_array(x)
+    r = Decoder("en", engine="onnx", model_path=tmp_model, fallback=False, lm=False).decode_array(x)
     assert r.fallback_text is None
 

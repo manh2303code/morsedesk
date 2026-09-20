@@ -33,11 +33,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     dec = sub.add_parser("decode", help="file âm thanh -> văn bản")
     dec.add_argument("file", type=Path)
-    dec.add_argument("--profile", default="en", choices=list_profiles() + ["auto"])
+    dec.add_argument("--profile", default="auto", choices=list_profiles() + ["auto"])
     dec.add_argument("--engine", default="baseline", choices=["baseline", "onnx"])
     dec.add_argument("--model", type=Path, default=None, help="mặc định: models/acoustic.onnx trong repo")
     dec.add_argument("--no-fallback", action="store_true",
                      help="tắt fallback DSP khi độ tin cậy engine onnx thấp (spec §8)")
+    dec.add_argument("--no-lm", action="store_true", help="giải mã greedy, không dùng mô hình ngôn ngữ")
+    dec.add_argument("--beam", type=int, default=64, help="độ rộng beam khi có LM")
+    dec.add_argument("--lm-dir", type=Path, default=None, help="mặc định: models/lm trong repo")
     dec.add_argument("--json", action="store_true")
 
     sub.add_parser("devices", help="liệt kê thiết bị âm thanh")
@@ -50,6 +53,11 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--limit", type=int, default=None)
     b.add_argument("--gate", action="store_true", help="kiểm tra vùng SNR>=0, 10-35 WPM")
     b.add_argument("--max-cer", type=float, default=0.02)
+    b.add_argument("--profile-override", default=None, choices=list_profiles() + ["auto"],
+                   help="ép profile cho mọi hàng; 'auto' để đo nhận diện ngôn ngữ")
+    b.add_argument("--no-lm", action="store_true")
+    b.add_argument("--beam", type=int, default=64)
+    b.add_argument("--lm-dir", type=Path, default=None)
     return p
 
 
@@ -71,7 +79,7 @@ def cmd_encode(a: argparse.Namespace) -> int:
 def cmd_decode(a: argparse.Namespace) -> int:
     try:
         dec = Decoder(a.profile, engine=a.engine, model_path=a.model if a.engine == "onnx" else None,
-                      fallback=not a.no_fallback)
+                      fallback=not a.no_fallback, lm=not a.no_lm, beam=a.beam, lm_dir=a.lm_dir)
         r = dec.decode_file(a.file)
     except (NotImplementedError, UnsupportedAudio, FileNotFoundError, ValueError) as e:
         print(f"lỗi: {e}", file=sys.stderr)
@@ -96,7 +104,8 @@ def cmd_bench(a: argparse.Namespace) -> int:
     from morsedesk.bench import run
 
     model = a.model if a.engine == "onnx" else None
-    _, ok = run(a.manifest, a.engine, model, a.out_dir, a.limit, a.gate, a.max_cer)
+    _, ok = run(a.manifest, a.engine, model, a.out_dir, a.limit, a.gate, a.max_cer,
+                profile_override=a.profile_override, lm=not a.no_lm, beam=a.beam, lm_dir=a.lm_dir)
     return 0 if ok else 1
 
 
