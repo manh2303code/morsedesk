@@ -7,6 +7,7 @@ Chỉ chạy trên máy dev có mạng; không dùng trong runtime.
 from __future__ import annotations
 
 import argparse
+import http.client
 import io
 import json
 import re
@@ -123,7 +124,7 @@ def _write_lines(path: Path, lines: list[str]) -> int:
     return len(lines)
 
 
-_NET_ERRORS = (OSError, urllib.error.URLError, ValueError, KeyError)
+_NET_ERRORS = (OSError, urllib.error.URLError, http.client.HTTPException, ValueError, KeyError)  # IncompleteRead là HTTPException
 
 
 def fetch_lang(lang: str, out_dir: Path, limit_books: int, sleep_s: float, ham_lines: int = 20000) -> None:

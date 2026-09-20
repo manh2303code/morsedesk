@@ -113,3 +113,11 @@ def test_fetch_gutenberg_skip_existing_keeps_source_entry(tmp_path, monkeypatch)
     assert len(sources) == 1
     assert sources[0]["lines"] == 2
     assert "Public domain" in sources[0]["license"]
+
+
+def test_net_errors_cover_incomplete_read():
+    import http.client
+
+    from tools.fetch_corpus import _NET_ERRORS
+    assert issubclass(http.client.IncompleteRead, _NET_ERRORS)
+    assert issubclass(TimeoutError, _NET_ERRORS)
