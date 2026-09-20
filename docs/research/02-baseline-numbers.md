@@ -70,12 +70,12 @@ Nhận xét: sau 8000 bước model đã vượt xa baseline (33.6% so với 296
 
 Ngày đo: 2026-09-20. T1 v2 = 500 clip vùng gate sinh lại cùng seed, 100 ô MP3 thật (ffmpeg 9.0.1), cột `text_original`.
 LM: n-gram ký tự bậc 6 dựng bằng KenLM `lmplz --prune 0 0 1 1 1 1` trong WSL, nhị phân numpy (`tools/arpa_to_bin.py`): en.bin 19,3 MB (perplexity holdout 3,82), ru.bin 13,6 MB (3,62), kk.bin 10,1 MB (3,04). Nguồn: `models/lm/LICENSES.md`.
-Tham chiếu CER: en/ru theo `text`; kk theo `text` khi không LM và theo `text_original` (chữ Kazakh gốc, khắt khe hơn) khi có LM. 13/166 clip kk và một số clip khác ở 0 dB không dò được tone và tính 100% ở mọi cấu hình.
+Tham chiếu CER: en/ru theo `text`; kk theo `text` khi không LM và theo `text_original` (chữ Kazakh gốc, khắt khe hơn) khi có LM. Sau commit 9744b07 (cổng tone theo cửa sổ) các clip 0 dB không dò được tone toàn cục vẫn được giải mã nếu một cửa sổ 4 s có tone; số trong bảng đo sau commit đó (greedy trước đó 29,41%, LM 28,74%).
 
 | Cấu hình | CER gate | en / ru / kk | language_acc | s/clip |
 |---|---|---|---|---|
-| greedy, không LM | 29.41% | 29.90% / 30.08% / 28.26% | – | 0.07 |
-| beam 64 + LM (alpha 0,2, beta 1,0), ép profile | 28.74% | 27.02% / 29.03% / 30.17% | – | 0.35 |
+| greedy, không LM | 29.14% | 29.90% / 30.08% / 28.26% | – | 0.07 |
+| beam 64 + LM (alpha 0,2, beta 1,0), ép profile | 28.40% | 27.02% / 29.03% / 30.17% | – | 0.35 |
 | beam 64 + LM, profile auto | 44.38% | 33.36% / 46.89% / 52.95% | 56.6% | – |
 
 Tinh chỉnh alpha/beta trên toàn T1 v2 với E2 (CER en / ru / kk-orig): greedy 29,90 / 30,08 / 31,34; alpha 0,6 beta 0,5 (spec) 31,73 / 35,54 / 30,64; alpha 0,3 27,95 / 30,90 / 26,22; alpha 0,2 27,66 / 29,60 / 25,09; alpha 0,15 27,75 / 29,23 / 24,60; **alpha 0,2 beta 1,0: 27,02 / 29,14 / 24,23** (kk-orig ở đây loại 13 clip không tone). Với v1b (model yếu hơn) mọi alpha ≥ 0,3 đều làm xấu ru. Mặc định `BeamParams` đổi thành alpha 0,2, beta 1,0 (lệch spec 0,6/0,5, commit 50dc2c9); beam không LM bằng greedy (26,08% so 26,25% trên 40 clip).

@@ -13,7 +13,7 @@ Tốc độ tham chiếu: v1 (clip, workers 0, Windows) ≈ 0,95 s/bước ở b
 | v1 | tuần 2, 8.000 bước | 96 | clip | 7500 | 2,1 | 38.00% | 33.52% | – | 35.15% / 34.18% / 31.20% |
 | E0 = v1b | v1 + 16.000 bước resume | 96 | clip | 14000 | ~6,3 | 30.56% | 31.47% | 36.10% (alpha 0,6 cũ) | 33.50% / 32.46% / 28.42% |
 | E1 | đặc trưng theo cửa sổ | 96 | window | 8000 | 2,39 | 31.15% | 38.37% | – | 37.78% / 40.34% / 36.98% |
-| E2 | E1 + hidden 128 | 128 | window | 6500 | 2,74 | 27.64% | 29.41% | 28.74% | 29.90% / 30.08% / 28.26% |
+| E2 | E1 + hidden 128 | 128 | window | 6500 | 2,74 | 27.64% | 29.14% | 28.40% | 29.49% / 29.86% / 28.08% |
 | E3 | E2 + cosine, warmup 500, 30.000 bước | 128 | window | 30000 | | | | | |
 | E4 | E3 + MP3 (ffmpeg) | 128 | window | 30000 | | | | | |
 | E5 | E4 trong WSL, `--workers 8` (đo tốc độ) | 128 | window | 1000 | | | – | – | – |
@@ -82,7 +82,7 @@ Nhận xét: E1 tốt hơn v1 rõ trên validation (31,15% so 38,00% cùng 8.000
 
 Lệnh: `-m tools.train --name E2 --steps 8000 --batch 16 --lr 1e-3 --seed 12 --val-clips 200 --val-every 500 --hidden 128 --feature-mode window --lr-schedule constant --no-mp3`; 2026-09-20 11:43→14:27, ~1,2 s/bước (CPU chia sẻ với bench/test), 2,74 h; 198k tham số. TER val: 100% tới bước 1000, 47,8% @2000, 34,9% @2500, 28,5% @5000, 27,64% @6500 (best), 27,9% @8000.
 
-Greedy trên T1 v2 (eval_run): gate CER 29.41%, 0.09 s/clip.
+Greedy trên T1 v2 (eval_run, sau cổng tone theo cửa sổ 9744b07; trước đó 29,41%): gate CER 29.14%, 0.09 s/clip.
 
 ```
 CER % theo SNR (hàng) x WPM (cột)
