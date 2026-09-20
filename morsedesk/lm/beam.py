@@ -36,8 +36,8 @@ def _lse(a: float, b: float) -> float:
 @dataclass(frozen=True)
 class BeamParams:
     beam: int = 64
-    alpha: float = 0.6
-    beta: float = 0.5
+    alpha: float = 0.2   # tinh chỉnh trên T1 v2 với E2 (spec gốc 0.6 làm xấu CER mọi profile)
+    beta: float = 1.0    # thưởng mỗi từ; 1.0 tốt hơn 0.5 trên T1 v2
     lexicon_bonus: float = 1.0
     topk_per_frame: int = 8
     unk_logp: float = math.log(1e-4)
