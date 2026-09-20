@@ -11,9 +11,9 @@ Tốc độ tham chiếu: v1 (clip, workers 0, Windows) ≈ 0,95 s/bước ở b
 | Mã | Thay đổi so với mốc | hidden | feature_mode | bước (ckpt best) | giờ máy | TER val | CER T1 greedy | CER T1 beam+LM | en / ru / kk (greedy) |
 |---|---|---|---|---|---|---|---|---|---|
 | v1 | tuần 2, 8.000 bước | 96 | clip | 7500 | 2,1 | 38.00% | 33.52% | – | 35.15% / 34.18% / 31.20% |
-| E0 = v1b | v1 + 16.000 bước resume | 96 | clip | 14000 | ~6,3 | 30.56% | 31.47% | 36.10% | 33.50% / 32.46% / 28.42% |
+| E0 = v1b | v1 + 16.000 bước resume | 96 | clip | 14000 | ~6,3 | 30.56% | 31.47% | 36.10% (alpha 0,6 cũ) | 33.50% / 32.46% / 28.42% |
 | E1 | đặc trưng theo cửa sổ | 96 | window | 8000 | 2,39 | 31.15% | 38.37% | – | 37.78% / 40.34% / 36.98% |
-| E2 | E1 + hidden 128 | 128 | window | 6500 | 2,74 | 27.64% | 29.41% | 34.89% (alpha 0,6) | 29.90% / 30.08% / 28.26% |
+| E2 | E1 + hidden 128 | 128 | window | 6500 | 2,74 | 27.64% | 29.41% | 28.74% | 29.90% / 30.08% / 28.26% |
 | E3 | E2 + cosine, warmup 500, 30.000 bước | 128 | window | 30000 | | | | | |
 | E4 | E3 + MP3 (ffmpeg) | 128 | window | 30000 | | | | | |
 | E5 | E4 trong WSL, `--workers 8` (đo tốc độ) | 128 | window | 1000 | | | – | – | – |
@@ -96,7 +96,7 @@ SNR\WPM    12.0    18.0    25.0    35.0
 
 Theo kênh: clean=23.20%, mp3=16.74%, qrm=18.71%, qrn=22.14%, qsb=66.29%. Theo kiểu gõ: bug=31.11%, drift=27.40%, farnsworth=30.51%, jitter=31.10%, machine=26.96%. Theo WPM: 12.0=29.70%, 18.0=28.69%, 25.0=28.59%, 35.0=30.68%.
 
-Nhận xét: hidden 128 sửa điểm yếu tốc độ thấp của E1 (12 WPM 29,7% so 49,2%) và cho kết quả T1 tốt nhất tới nay (29,41% so v1b 31,47% với 3× số bước ít hơn). MP3 thật (16,7%) không khó hơn clean; QSB vẫn 66%. Beam+LM với alpha 0,6 mặc định vẫn làm xấu (34,89%): xem mục LM trong 02-baseline-numbers.md, alpha đang được tinh chỉnh. Quyết định: E3 giữ window + hidden 128 (khởi động 14:35, seed 13, cosine + warmup 500, 30.000 bước).
+Nhận xét: hidden 128 sửa điểm yếu tốc độ thấp của E1 (12 WPM 29,7% so 49,2%) và cho kết quả T1 tốt nhất tới nay (29,41% so v1b 31,47% với 3× số bước ít hơn). MP3 thật (16,7%) không khó hơn clean; QSB vẫn 66%. Beam+LM với alpha 0,2/beta 1,0 (mặc định mới) cho 28.74% (alpha 0,6 cũ: 34,89%); chi tiết ở mục LM trong 02-baseline-numbers.md. Quyết định: E3 giữ window + hidden 128 (khởi động 14:35, seed 13, cosine + warmup 500, 30.000 bước).
 
 ### E3
 

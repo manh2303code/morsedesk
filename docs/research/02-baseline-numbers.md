@@ -65,3 +65,49 @@ n=500 CER=33.60% WER=75.45% -> gate TRƯỢT (ngưỡng 2%)
 ```
 
 Nhận xét: sau 8000 bước model đã vượt xa baseline (33.6% so với 296%) nhưng còn thiếu huấn luyện (TER validation 100% tới bước 1000, 38% ở bước 7500 và vẫn giảm). QSB là kênh yếu nhất (68%). Bước tiếp: train tiếp v1b (resume, 16000 bước, seed 2), rồi cân nhắc hidden 128, lịch learning rate và tăng tỉ lệ mẫu QSB; mục tiêu gate CER < 2% thuộc vòng lặp tuần 3.
+
+## Tuần 3: LM ký tự và beam search (model E2 = `models/eval_E2.onnx`, T1 v2)
+
+Ngày đo: 2026-09-20. T1 v2 = 500 clip vùng gate sinh lại cùng seed, 100 ô MP3 thật (ffmpeg 9.0.1), cột `text_original`.
+LM: n-gram ký tự bậc 6 dựng bằng KenLM `lmplz --prune 0 0 1 1 1 1` trong WSL, nhị phân numpy (`tools/arpa_to_bin.py`): en.bin 19,3 MB (perplexity holdout 3,82), ru.bin 13,6 MB (3,62), kk.bin 10,1 MB (3,04). Nguồn: `models/lm/LICENSES.md`.
+Tham chiếu CER: en/ru theo `text`; kk theo `text` khi không LM và theo `text_original` (chữ Kazakh gốc, khắt khe hơn) khi có LM. 13/166 clip kk và một số clip khác ở 0 dB không dò được tone và tính 100% ở mọi cấu hình.
+
+| Cấu hình | CER gate | en | ru | kk | language_acc | s/clip |
+|---|---|---|---|---|---|---|
+| greedy, không LM | 29.41% | 29.90% / 30.08% / 28.26% | – | 0.07 |
+| beam 64 + LM (alpha 0,2, beta 1,0), ép profile | 28.74% | 27.02% / 29.03% / 30.17% | – | 0.35 |
+| beam 64 + LM, profile auto | 44.38% | 33.36% / 46.89% / 52.95% | 56.6% | – |
+
+Tinh chỉnh alpha/beta trên toàn T1 v2 với E2 (CER en / ru / kk-orig): greedy 29,90 / 30,08 / 31,34; alpha 0,6 beta 0,5 (spec) 31,73 / 35,54 / 30,64; alpha 0,3 27,95 / 30,90 / 26,22; alpha 0,2 27,66 / 29,60 / 25,09; alpha 0,15 27,75 / 29,23 / 24,60; **alpha 0,2 beta 1,0: 27,02 / 29,14 / 24,23** (kk-orig ở đây loại 13 clip không tone). Với v1b (model yếu hơn) mọi alpha ≥ 0,3 đều làm xấu ru. Mặc định `BeamParams` đổi thành alpha 0,2, beta 1,0 (lệch spec 0,6/0,5, commit 50dc2c9); beam không LM bằng greedy (26,08% so 26,25% trên 40 clip).
+
+Greedy (eval_run):
+
+```
+CER % theo SNR (hàng) x WPM (cột)
+SNR\WPM    12.0    18.0    25.0    35.0
+    0.0   43.61   44.81   44.25   53.69
+    3.0   32.11   32.71   27.55   33.22
+    6.0   23.96   27.32   26.60   20.45
+   10.0   26.77   24.03   22.23   29.66
+   20.0   22.04   14.57   22.33   16.39
+```
+
+Beam + LM (eval_run):
+
+```
+CER % theo SNR (hàng) x WPM (cột)
+SNR\WPM    12.0    18.0    25.0    35.0
+    0.0   45.86   43.06   41.86   50.24
+    3.0   29.63   35.89   27.13   31.54
+    6.0   24.42   26.67   26.83   19.29
+   10.0   24.89   23.78   22.41   27.94
+   20.0   19.66   15.28   22.13   16.25
+```
+
+Auto (bench --profile-override auto): by_channel clean=39.18%, mp3=31.97%, qrm=40.05%, qrn=35.63%, qsb=75.09%; language_acc 56.6%.
+
+Nhận xét:
+- LM giúp cả ba profile khi ép profile: en 29,9 → 27,0; ru 30,1 → 29,0; kk 28,3 (so `text`) → 30,2 (so `text_original`, tức đã khôi phục được phần lớn Ә/Ғ/Қ/Ң/Ө/Ұ/Ү/І: greedy so `text_original` là 31,3). Lỗi còn lại chủ yếu là mất ký tự và gộp từ của model âm thanh (CANGE cho "CAN GET"), LM ký tự không bù được deletion.
+- Beam thuần Python: 0,35 s/clip (6–8 s) kể cả tải ONNX, đạt mục tiêu 2 s/12 s; đường tắt blank kích hoạt 88–96% khung với model thật.
+- Nhận diện ngôn ngữ auto chỉ 56,6%: 30% clip T1 là radiogram ham đã chuyển tự (trung lập ngôn ngữ, đúng 30% ≈ ngẫu nhiên), random group 10%; trên phần "từ" đạt ~64% với v1b. CER auto (44%) cao hơn ép profile vì đoán sai profile làm render sai bảng chữ (kk↔ru). Mục tiêu 95% của spec không đạt được với T1 hiện tại; cần (a) đo language_acc trên tập câu tự nhiên, (b) model âm thanh tốt hơn (E3), (c) LM ru/kk phân biệt hơn (corpus kk còn nghiêng KazNERD).
+- Baseline + auto (CLI mặc định khi chưa có model ONNX) chấm LM trên bản render chữ đầu nên kk thường bị nhận thành ru; hạn chế đã biết, đường onnx+beam là đường chính.
