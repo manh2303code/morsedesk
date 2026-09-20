@@ -16,7 +16,7 @@ Tốc độ tham chiếu: v1 (clip, workers 0, Windows) ≈ 0,95 s/bước ở b
 | E2 | E1 + hidden 128 | 128 | window | 6500 | 2,74 | 27.64% | 29.14% | 28.40% | 29.49% / 29.86% / 28.08% |
 | E3 | E2 + cosine, warmup 500, 30.000 bước | 128 | window | 21500 | 9,40 | 22.29% | 26.45% | 25.27% | 27.89% / 27.49% / 23.97% |
 | E4 | E3 + MP3 (ffmpeg) | 128 | window | 30000 | | | | | |
-| E5 | E4 trong WSL, `--workers 8` (đo tốc độ) | 128 | window | 1000 | | | – | – | – |
+| E5 | E4 trong WSL, `--workers 8` (đo tốc độ) | 128 | window | 1000 | 0,145 | 100% (@1000, chưa hội tụ) | – | – | – |
 
 ## Chi tiết từng thí nghiệm
 
@@ -133,6 +133,10 @@ Nhận xét: E3 là run tốt nhất (greedy 26,45% so E2 29,14%, LM 25,27% so 2
 ### E4
 
 ### E5
+
+Lệnh (WSL Ubuntu 26.04, uv riêng `~/.venv-morsedesk`, khởi động qua `Start-Process wsl.exe -- bash wsl_train_fg.sh` để wsl.exe giữ tiến trình sống; `nohup` trong WSL bị tắt cùng distro): `-m tools.train --name E5 --steps 1000 --batch 16 --lr 1e-3 --seed 15 --val-clips 50 --val-every 500 --hidden 128 --feature-mode window --lr-schedule cosine --warmup 100 --workers 8` (MP3 bật, ffmpeg 8.0.1 trong WSL).
+
+Tốc độ: lần 1 với torch 16 thread mặc định: **~44 s/bước** — main process 1578% CPU, 8 worker rảnh; micro-benchmark (batch 16 × 1600 khung, hidden 128) trên WSL2: 16 thread 27,6 s/bước, 8 thread 0,26 s, 4 thread 0,27 s, 2 thread 0,28 s → thrash thread torch/OMP khi dùng đủ 16 hyperthread. Với `OMP_NUM_THREADS=8`: **0,52 s/bước** (1000 bước = 0,145 h) so Windows `--workers 0` 1,1–1,3 s/bước (không MP3) → nhanh ~2,3×; E4 chạy trong WSL. TER 100% ở bước 1000 giống E2/E3 cùng mốc (chỉ đo tốc độ).
 
 ## Kết luận và điều kiện ra
 
