@@ -136,3 +136,13 @@ Kết quả ghi `docs/research/03-model-experiments.md`: bảng cấu hình, bư
 - Runtime LM: numpy tự viết thay pyctcdecode + kenlm (mục 2.6); KenLM chỉ dùng lúc dev.
 - Corpus: bỏ Wikipedia (CC BY-SA) và `multidomain-kazakh-dataset` (license chưa rõ); dùng Gutenberg, KazNERD, KSC2, dataset Apache-2.0.
 - Dò tone theo cửa sổ (mục 2.3 spec) được kéo lên tuần 3 nhờ thiết kế 3.1.
+
+### 6.1 Lệch phát sinh khi thực thi (2026-09-20)
+
+- `BeamParams` mặc định alpha 0,2 / beta 1,0 thay 0,6 / 0,5 (mục 2.3): đo trên T1 v2 với model E2, alpha 0,6 làm CER xấu hơn greedy ở cả ba profile (ru +5,5 điểm), alpha 0,2 + beta 1,0 thắng greedy cả ba (en 29,9→27,0; ru 30,1→29,1; kk theo `text_original` 31,3→24,2 loại clip không tone). Chi tiết: `docs/research/02-baseline-numbers.md`.
+- `lm=None` là beam thuần âm thanh: không cộng beta/lexicon/unk (mục 2.3 chỉ nói "thuần âm thanh"; mã mẫu kế hoạch cộng bonus cả khi không LM và bị sửa).
+- Ghép đặc trưng khi huấn luyện (mục 3.1) dùng cửa sổ có tâm gần nhất thay trung bình vùng chồng, để khớp cách gộp log-prob khi suy luận.
+- Corpus thực tế: en = 40 sách Gutenberg + michaellin (Apache-2.0) + radiogram; ru = 5 sách Gutenberg + Tatoeba 300k câu (CC BY 2.0 FR, export chính thức; bản HF bị gate) + radiogram 5k; kk = KazNERD + radiogram; KSC2 không có transcript tải riêng nên chưa dùng. Tatoeba là nguồn CC BY chưa liệt kê ở mục 2.6.
+- KenLM trong WSL Ubuntu 26.04: `sudo` cần mật khẩu nên chạy `wsl -d Ubuntu-26.04 -u root`; Boost 1.90 không còn thành phần `system` nên vá `CMakeLists.txt` của KenLM.
+- Mục tiêu `language_acc ≥ 95%` (mục 2.7) không đạt trên T1: 56,6% với E2, vì 30% clip T1 là radiogram ham đã chuyển tự (trung lập ngôn ngữ) và 10% nhóm ký tự ngẫu nhiên; cần bộ đo riêng bằng câu tự nhiên. Gate test tương ứng được phép đỏ theo mục 3.3.
+- Kết quả E1 (đặc trưng theo cửa sổ, hidden 96) kém v1 trên T1 dù validation tốt hơn; E2 (thêm hidden 128) mới vượt v1b. Validation ngẫu nhiên không dự báo T1; cần cân nhắc validation dạng T1 ở tuần sau.
