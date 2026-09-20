@@ -87,7 +87,7 @@ def test_fetch_lang_survives_failing_source(tmp_path, monkeypatch):
     def fake_get(url, timeout=60.0):
         if url == fetch_corpus.GUTENBERG_TOP:
             return gutenberg_html.encode("utf-8")
-        if url.startswith("https://www.gutenberg.org/cache/epub/"):
+        if url.startswith("https://www.gutenberg.org/ebooks/") and url.endswith(".txt.utf-8"):
             return book_body.encode("utf-8")
         raise OSError("offline")  # ví dụ HF parquet API
 
