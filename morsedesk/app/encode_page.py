@@ -25,14 +25,17 @@ from morsedesk.api import Encoder
 from morsedesk.app.settings import AppSettings
 from morsedesk.app.widgets.banner import Banner
 from morsedesk.app.widgets.charmap import CharMap
-from morsedesk.app.worker import Player
+from morsedesk.app.worker import MAX_SECONDS, Player
 from morsedesk.audio.io import save_audio
 from morsedesk.constants import SAMPLE_RATE
 from morsedesk.encode.text import normalize
+from morsedesk.encode.timing import TimingParams, tokens_to_elements, total_seconds
 from morsedesk.lm.profile import Profile, load_profile
 
 FORMATS = (("WAV", ".wav"), ("FLAC", ".flac"), ("OGG", ".ogg"))
 PROFILES = ("en", "ru", "kk-cyrl-ru")
+PAD_S = 0.3         # `Encoder.to_audio` đệm im lặng PAD_S giây ở mỗi đầu (mặc định của lõi)
+MAX_MINUTES = int(MAX_SECONDS // 60)    # dùng chung ngưỡng 20 phút với phía giải mã
 
 
 def unsupported_chars(text: str, profile: Profile) -> list[str]:
@@ -56,6 +59,7 @@ class EncodePage(QWidget):
         self.player = player
         self.settings = settings
         self._profiles = {pid: load_profile(pid) for pid in PROFILES}
+        self._limit_banner = False      # banner đang hiện có phải cảnh báo quá thời lượng không
 
         self.text_label = QLabel(self)
         self.text_edit = QPlainTextEdit(self)
@@ -187,10 +191,56 @@ class EncodePage(QWidget):
         else:
             self.warn_label.hide()
         has = bool(morse)
-        self.play_button.setEnabled(has)
-        self.save_button.setEnabled(has)
+        over = has and self._over_limit_seconds() is not None
+        self.play_button.setEnabled(has and not over)
+        self.save_button.setEnabled(has and not over)
+
+    def _over_limit_seconds(self) -> float | None:
+        """Thời lượng ước tính nếu vượt `MAX_SECONDS` (và hiện banner), ngược lại `None`.
+
+        Tham số timing không hợp lệ (vd. Farnsworth > WPM) thì không ước lượng được: coi như
+        không vượt ngưỡng và để lỗi nổi lên khi bấm Nghe thử/Lưu (`_audio_or_error`).
+        """
+        try:
+            seconds = self.estimate_seconds()
+        except ValueError:
+            seconds = 0.0
+        if seconds > MAX_SECONDS:
+            # Chuỗi tr() phải nằm trọn một dòng: tools/build_i18n.py trích bằng regex một dòng.
+            self.banner.show_warning(
+                self.tr("Estimated audio is {minutes} min long; the limit is {limit} min. Shorten the text or raise the speed.").format(minutes=f"{seconds / 60:.1f}", limit=MAX_MINUTES)
+            )
+            self._limit_banner = True
+            return seconds
+        if self._limit_banner:
+            self.banner.clear()
+            self._limit_banner = False
+        return None
 
     # ---- âm thanh ----
+    def timing_params(self) -> TimingParams:
+        """Tham số timing hiện tại; ném `ValueError` nếu tổ hợp không hợp lệ (Farnsworth > WPM)."""
+        return TimingParams(
+            float(self.wpm_spin.value()),
+            float(self.farnsworth_spin.value()) if self.farnsworth_check.isChecked() else None,
+            float(self.weight_spin.value()),
+        )
+
+    def estimate_seconds(self) -> float:
+        """Thời lượng audio ước tính (giây) mà KHÔNG dựng audio.
+
+        Dùng đúng `tokens_to_elements`/`total_seconds` của lõi nên khớp `build_audio()`, cộng
+        `2 * PAD_S` cho phần đệm im lặng hai đầu. Nhờ vậy văn bản 100 000 ký tự được chặn
+        trước khi cấp phát mảng nhiều GB.
+        """
+        text = self.current_text()
+        if not text.strip():
+            return 0.0
+        tokens = self._encoder().to_tokens(text, strict=False)
+        if not tokens:
+            return 0.0
+        return total_seconds(tokens_to_elements(tokens, self.timing_params())) + 2 * PAD_S
+
     def build_audio(self) -> np.ndarray:
         return self._encoder().to_audio(
             self.current_text(),

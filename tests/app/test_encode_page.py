@@ -1,10 +1,11 @@
 from PySide6.QtCore import QSettings
 
 import morsedesk.app.worker as wk
-from morsedesk.app.encode_page import FORMATS, EncodePage, unsupported_chars
+from morsedesk.app.encode_page import FORMATS, MAX_MINUTES, EncodePage, unsupported_chars
 from morsedesk.app.settings import AppSettings
-from morsedesk.app.worker import Player
+from morsedesk.app.worker import MAX_SECONDS, Player
 from morsedesk.audio.io import load_audio
+from morsedesk.constants import SAMPLE_RATE
 from morsedesk.lm.profile import load_profile
 
 
@@ -105,3 +106,35 @@ def test_play_and_stop_use_player(qtbot, tmp_path, monkeypatch):
     page.play_button.click()
     assert page.banner.level == "warning" and "no device" in page.banner.text()
     assert wk.Player is Player
+
+
+def test_estimate_seconds_matches_built_audio(qtbot, tmp_path):
+    """Ước lượng không dựng audio phải khớp `build_audio()` trong sai số 10 %."""
+    page = _page(qtbot, tmp_path)
+    page.wpm_spin.setValue(20)
+    page.text_edit.setPlainText("PARIS")
+    est = page.estimate_seconds()
+    real = len(page.build_audio()) / SAMPLE_RATE
+    assert abs(est - real) <= 0.1 * real
+    assert page.play_button.isEnabled() and page.save_button.isEnabled()
+    assert page.banner.level is None
+    page.text_edit.setPlainText("   ")
+    assert page.estimate_seconds() == 0.0
+
+
+def test_text_over_duration_limit_disables_audio_without_building_it(qtbot, tmp_path, monkeypatch):
+    """Văn bản dài: chặn ở khâu ước lượng, không bao giờ gọi `build_audio()`."""
+    page = _page(qtbot, tmp_path)
+    calls = []
+    monkeypatch.setattr(page, "build_audio", lambda: calls.append(1))
+    page.wpm_spin.setValue(20)
+    page.text_edit.setPlainText("PARIS " * 1000)          # ~ 50 phút ở 20 WPM
+    assert page.estimate_seconds() > MAX_SECONDS
+    assert not page.play_button.isEnabled() and not page.save_button.isEnabled()
+    assert page.banner.level == "warning" and str(MAX_MINUTES) in page.banner.text()
+    page.play_button.click()
+    page.save_button.click()
+    assert calls == []
+    page.text_edit.setPlainText("SOS")                    # về dưới ngưỡng -> bật lại, xóa banner
+    assert page.play_button.isEnabled() and page.save_button.isEnabled()
+    assert page.banner.level is None

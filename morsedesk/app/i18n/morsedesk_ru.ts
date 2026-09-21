@@ -98,97 +98,102 @@
 <context>
     <name>EncodePage</name>
     <message>
-        <location filename="../encode_page.py" line="184" />
+        <location filename="../encode_page.py" line="188" />
         <source>Unsupported characters skipped: {chars}</source>
         <translation>Пропущены неподдерживаемые символы: {chars}</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="222" />
+        <location filename="../encode_page.py" line="211" />
+        <source>Estimated audio is {minutes} min long; the limit is {limit} min. Shorten the text or raise the speed.</source>
+        <translation>Расчётная длительность аудио {minutes} мин, предел {limit} мин. Сократите текст или увеличьте скорость.</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="272" />
         <source>Save audio</source>
         <translation>Сохранить аудио</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="222" />
+        <location filename="../encode_page.py" line="272" />
         <source>Audio ({ext})</source>
         <translation>Аудио ({ext})</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="242" />
+        <location filename="../encode_page.py" line="292" />
         <source>Text to encode</source>
         <translation>Текст для кодирования</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="243" />
+        <location filename="../encode_page.py" line="293" />
         <source>Morse code:</source>
         <translation>Код Морзе:</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="244" />
+        <location filename="../encode_page.py" line="294" />
         <source>Type text to see its Morse code.</source>
         <translation>Введите текст, чтобы увидеть код Морзе.</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="245" />
+        <location filename="../encode_page.py" line="295" />
         <source>English</source>
         <translation>Английский</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="245" />
+        <location filename="../encode_page.py" line="295" />
         <source>Russian</source>
         <translation>Русский</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="245" />
+        <location filename="../encode_page.py" line="295" />
         <source>Kazakh</source>
         <translation>Казахский</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="251" />
+        <location filename="../encode_page.py" line="301" />
         <source>Profile:</source>
         <translation>Профиль:</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="252" />
+        <location filename="../encode_page.py" line="302" />
         <source>Speed (WPM):</source>
         <translation>Скорость (WPM):</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="253" />
+        <location filename="../encode_page.py" line="303" />
         <source>Farnsworth (WPM):</source>
         <translation>Фарнсворт (WPM):</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="254" />
+        <location filename="../encode_page.py" line="304" />
         <source>Weight:</source>
         <translation>Вес:</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="255" />
+        <location filename="../encode_page.py" line="305" />
         <source>Tone (Hz):</source>
         <translation>Тон (Гц):</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="256" />
+        <location filename="../encode_page.py" line="306" />
         <source>Add noise, SNR (dB):</source>
         <translation>Добавить шум, ОСШ (дБ):</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="257" />
+        <location filename="../encode_page.py" line="307" />
         <source>Format:</source>
         <translation>Формат:</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="262" />
+        <location filename="../encode_page.py" line="312" />
         <source>Play</source>
         <translation>Воспроизвести</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="263" />
+        <location filename="../encode_page.py" line="313" />
         <source>Stop</source>
         <translation>Стоп</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="264" />
+        <location filename="../encode_page.py" line="314" />
         <source>Save…</source>
         <translation>Сохранить…</translation>
     </message>

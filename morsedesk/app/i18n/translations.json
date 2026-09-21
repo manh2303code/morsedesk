@@ -49,7 +49,8 @@
     "Audio ({ext})": "Аудио ({ext})",
     "Hz": "Гц",
     "s": "с",
-    "Finishing the current decode; the window will close right after.": "Завершается текущее декодирование; окно закроется сразу после этого."
+    "Finishing the current decode; the window will close right after.": "Завершается текущее декодирование; окно закроется сразу после этого.",
+    "Estimated audio is {minutes} min long; the limit is {limit} min. Shorten the text or raise the speed.": "Расчётная длительность аудио {minutes} мин, предел {limit} мин. Сократите текст или увеличьте скорость."
   },
   "kk": {
     "MorseDesk": "MorseDesk",
@@ -101,6 +102,7 @@
     "Audio ({ext})": "Аудио ({ext})",
     "Hz": "Гц",
     "s": "с",
-    "Finishing the current decode; the window will close right after.": "Ағымдағы декодтау аяқталуда; содан кейін терезе жабылады."
+    "Finishing the current decode; the window will close right after.": "Ағымдағы декодтау аяқталуда; содан кейін терезе жабылады.",
+    "Estimated audio is {minutes} min long; the limit is {limit} min. Shorten the text or raise the speed.": "Аудионың болжамды ұзақтығы {minutes} мин, шегі {limit} мин. Мәтінді қысқартыңыз немесе жылдамдықты арттырыңыз."
   }
 }
