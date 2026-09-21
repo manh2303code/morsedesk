@@ -65,9 +65,10 @@ def test_save_writes_audio_with_expected_duration(qtbot, tmp_path):
     assert sr == 8000
     assert abs(len(x) / sr - (0.6 + 43 * 0.06)) < 0.15    # PARIS = 43 dit (không có khoảng từ cuối) ở 20 WPM + 2×0,3 s đệm
     assert page.banner.level is None
-    page.format_combo.setCurrentIndex(page.format_combo.findData(".flac"))
-    page.save_to(tmp_path / "paris.flac")
-    assert (tmp_path / "paris.flac").exists()
+    for ext in (".flac", ".ogg"):
+        page.format_combo.setCurrentIndex(page.format_combo.findData(ext))
+        page.save_to(tmp_path / f"paris{ext}")
+        assert (tmp_path / f"paris{ext}").exists() and page.banner.level is None
     assert [ext for _, ext in FORMATS] == [".wav", ".flac", ".ogg"]
 
 
