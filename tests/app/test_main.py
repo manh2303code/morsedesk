@@ -40,6 +40,20 @@ def test_create_app_builds_window_with_language(qtbot, tiny_lm_dir, tmp_path, mo
     assert not window.worker.isRunning()
 
 
+def test_about_to_quit_stops_worker(qtbot, tiny_lm_dir, tmp_path, monkeypatch):
+    """Vòng lặp sự kiện kết thúc KHÔNG qua closeEvent (QCoreApplication.exit, đăng xuất phiên)
+    vẫn phải dừng worker; nếu không, QThread bị hủy khi còn chạy -> tiến trình abort 0xC0000409."""
+    settings = AppSettings(settings=QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+    monkeypatch.setattr(app_main, "load_settings", lambda: settings)
+    args = build_parser().parse_args(["--engine", "baseline", "--lm-dir", str(tiny_lm_dir)])
+    app, window = create_app(args)
+    qtbot.addWidget(window)
+    assert window.worker.isRunning()
+    app.aboutToQuit.emit()          # đúng tín hiệu Qt phát khi vòng lặp sự kiện sắp kết thúc
+    assert window.worker.isFinished()
+    window.close()
+
+
 class _PausedWorker(DecoderWorker):
     """`DecoderWorker` thật (hàng đợi, vòng `run`, tín hiệu `busy`/`finished`); chỉ phần giải mã
     được thay bằng một chỗ chờ để test giữ worker ở trạng thái bận đúng lúc gọi `close()`."""

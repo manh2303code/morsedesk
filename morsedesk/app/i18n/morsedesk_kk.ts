@@ -133,117 +133,117 @@
 <context>
     <name>EncodePage</name>
     <message>
-        <location filename="../encode_page.py" line="190" />
+        <location filename="../encode_page.py" line="195" />
         <source>Unsupported characters skipped: {chars}</source>
         <translation>Қолдау көрсетілмейтін таңбалар өткізілді: {chars}</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="213" />
+        <location filename="../encode_page.py" line="218" />
         <source>Estimated audio is {minutes} min long; the limit is {limit} min. Shorten the text or raise the speed.</source>
         <translation>Аудионың болжамды ұзақтығы {minutes} мин, шегі {limit} мин. Мәтінді қысқартыңыз немесе жылдамдықты арттырыңыз.</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="269" />
+        <location filename="../encode_page.py" line="281" />
         <source>Invalid timing settings: the Farnsworth speed must not exceed the speed in WPM.</source>
         <translation>Тайминг параметрлері қате: Фарнсворт жылдамдығы WPM жылдамдығынан аспауы тиіс.</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="272" />
+        <location filename="../encode_page.py" line="284" />
         <source>Could not build the audio.</source>
         <translation>Аудионы құру мүмкін болмады.</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="293" />
+        <location filename="../encode_page.py" line="305" />
         <source>Save audio</source>
         <translation>Аудионы сақтау</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="293" />
+        <location filename="../encode_page.py" line="305" />
         <source>Audio ({ext})</source>
         <translation>Аудио ({ext})</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="319" />
+        <location filename="../encode_page.py" line="331" />
         <source>Cannot write {path}: {detail}</source>
         <translation>{path} жазылмады: {detail}</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="328" />
+        <location filename="../encode_page.py" line="340" />
         <source>Text to encode</source>
         <translation>Кодталатын мәтін</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="329" />
+        <location filename="../encode_page.py" line="341" />
         <source>Morse code:</source>
         <translation>Морзе коды:</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="330" />
+        <location filename="../encode_page.py" line="342" />
         <source>Type text to see its Morse code.</source>
         <translation>Морзе кодын көру үшін мәтін теріңіз.</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="331" />
+        <location filename="../encode_page.py" line="343" />
         <source>English</source>
         <translation>Ағылшын</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="331" />
+        <location filename="../encode_page.py" line="343" />
         <source>Russian</source>
         <translation>Орыс</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="331" />
+        <location filename="../encode_page.py" line="343" />
         <source>Kazakh</source>
         <translation>Қазақ</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="337" />
+        <location filename="../encode_page.py" line="349" />
         <source>Profile:</source>
         <translation>Профиль:</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="338" />
+        <location filename="../encode_page.py" line="350" />
         <source>Speed (WPM):</source>
         <translation>Жылдамдық (WPM):</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="339" />
+        <location filename="../encode_page.py" line="351" />
         <source>Farnsworth (WPM):</source>
         <translation>Фарнсворт (WPM):</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="340" />
+        <location filename="../encode_page.py" line="352" />
         <source>Weight:</source>
         <translation>Салмақ:</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="341" />
+        <location filename="../encode_page.py" line="353" />
         <source>Tone (Hz):</source>
         <translation>Тон (Гц):</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="342" />
+        <location filename="../encode_page.py" line="354" />
         <source>Add noise, SNR (dB):</source>
         <translation>Шу қосу, SNR (дБ):</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="343" />
+        <location filename="../encode_page.py" line="355" />
         <source>Format:</source>
         <translation>Пішім:</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="348" />
+        <location filename="../encode_page.py" line="360" />
         <source>Play</source>
         <translation>Ойнату</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="349" />
+        <location filename="../encode_page.py" line="361" />
         <source>Stop</source>
         <translation>Тоқтату</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="350" />
+        <location filename="../encode_page.py" line="362" />
         <source>Save…</source>
         <translation>Сақтау…</translation>
     </message>

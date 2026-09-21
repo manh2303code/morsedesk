@@ -144,6 +144,11 @@ class EncodePage(QWidget):
         self.profile_combo.currentIndexChanged.connect(self._on_profile)
         self.charmap.char_clicked.connect(self._insert_char)
         self.farnsworth_check.toggled.connect(self.farnsworth_spin.setEnabled)
+        # Ngưỡng 20 phút phụ thuộc cả tham số timing, không chỉ văn bản: nâng WPM theo đúng lời
+        # khuyên trong banner phải bật lại nút ngay, không đợi gõ thêm ký tự.
+        for w in (self.wpm_spin, self.farnsworth_spin, self.weight_spin):
+            w.valueChanged.connect(self.refresh_morse)
+        self.farnsworth_check.toggled.connect(self.refresh_morse)
         self.snr_check.toggled.connect(self.snr_spin.setEnabled)
         self.play_button.clicked.connect(self.play)
         self.stop_button.clicked.connect(self.stop)

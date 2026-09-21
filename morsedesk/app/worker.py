@@ -167,14 +167,14 @@ class DecoderWorker(QThread):
                 self._handle(req)
             except DecodeFailure as e:
                 log.warning("decode failed (%s): %s", e.code, e.detail)
-                self.failed.emit(e.code, e.detail, str(req.path))
+                self.failed.emit(e.code, e.detail, str(Path(req.path)))
             except (FileNotFoundError, ValueError, NotImplementedError) as e:
                 # Cài đặt sai: thiếu file LM/model, engine chưa hỗ trợ, tổ hợp profile/LM không hợp lệ.
                 log.warning("decode config error: %s", e)
-                self.failed.emit("config", str(e), str(req.path))
+                self.failed.emit("config", str(e), str(Path(req.path)))
             except Exception as e:  # không để worker chết vì một file lạ
                 log.exception("decode failed")
-                self.failed.emit("internal", f"{type(e).__name__}: {e}", str(req.path))
+                self.failed.emit("internal", f"{type(e).__name__}: {e}", str(Path(req.path)))
             finally:
                 self.busy.emit(False)
 

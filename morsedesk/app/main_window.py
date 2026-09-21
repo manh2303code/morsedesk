@@ -120,9 +120,9 @@ class MainWindow(QMainWindow):
         giao diện, hiện banner, và nối `worker.finished` vào `close()` đúng một lần. Khi worker
         kết thúc, `close()` chạy lại, `isRunning()` là False và cửa sổ đóng bình thường.
         """
-        if self.worker.isRunning():
+        if self.worker.isRunning() and not self._closing:
             self.worker.stop_async()
-            self.worker.wait(500)
+            self.worker.wait(500)   # chỉ chờ ở lần đóng đầu tiên, khỏi treo thêm mỗi lần bấm X
         if self.worker.isRunning():
             if not self._closing:
                 self._closing = True
@@ -131,6 +131,10 @@ class MainWindow(QMainWindow):
                 self.banner.show_warning(
                     self.tr("Finishing the current decode; the window will close right after.")
                 )
+                if self.worker.isFinished():
+                    # Worker kết thúc ngay giữa kiểm tra và connect: `finished` đã phát xong nên
+                    # không còn ai gọi close() nữa -> đóng luôn thay vì để cửa sổ khóa một nhịp.
+                    return super().closeEvent(event)
             event.ignore()
             return
         super().closeEvent(event)

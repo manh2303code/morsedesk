@@ -130,7 +130,7 @@ Bố cục dọc: (1) hàng điều khiển: nút "Mở file…", nhãn đườn
 
 | Rủi ro | Giảm thiểu |
 |---|---|
-| PySide6 trên Windows dev và pytest-qt offscreen không ổn định | pin `PySide6>=6.6,<7`; test dùng `qtbot.waitSignal` với timeout; nếu offscreen lỗi, đánh dấu `skipif` theo biến môi trường và chạy tay |
+| PySide6 trên Windows dev và pytest-qt offscreen không ổn định | pin `PySide6-Essentials>=6.6,<7` (xem mục 5); test dùng `qtbot.waitSignal` với timeout; nếu offscreen lỗi, đánh dấu `skipif` theo biến môi trường và chạy tay |
 | Spectrogram file 20 phút nặng UI | max-pool xuống ≤ 4000 cột trong worker; ImageItem cập nhật một lần |
 | Bản dịch kk/ru sai ngữ | nhãn nháp; mọi chuỗi tập trung trong `.ts` để sửa không cần đụng mã |
 | `sounddevice` không có thiết bị (CI/offscreen) | Nghe thử bắt `sounddevice.PortAudioError`/`OSError` → banner; test không gọi phát thật |
@@ -155,14 +155,29 @@ Ghi lại sau khi chạy Task 1–7. Mỗi mục là lệch so với mục 2 ở
 - `CharMap` bị **ẩn hoàn toàn** với profile `en` (mục 2.5 chỉ nói nhóm Kazakh ẩn khi không phải `kk`).
 - `path_label` **không** elide đường dẫn dài như mục 2.4; `fallback_text` hiện trong một `QLabel` phẳng có word-wrap, không phải "khối mở rộng được"; trạng thái bận **không** đổi con trỏ chuột thành con trỏ chờ.
 - `MainWindow` có thêm một `Banner` mức cửa sổ (mục 2.2 đã dự tính) dùng cho thông báo lúc hoãn đóng cửa sổ.
-- Extra `gui` khai `PySide6-Essentials>=6.6,<7` thay cho meta `PySide6>=6.6` của mục 2.1 (meta kéo theo `PySide6-Addons` với QtCharts/QtDataVisualization/QtGraphs/QtWebEngine — không LGPL, mà dự án đóng nguồn), và `pyqtgraph>=0.13,<0.15` có trần.
+- Extra `gui` khai `PySide6-Essentials>=6.6,<7` thay cho meta `PySide6>=6.6` của mục 2.1 (meta kéo theo `PySide6-Addons`, trong đó QtCharts/QtDataVisualization/QtGraphs chỉ có GPLv3 hoặc thương mại, mà dự án đóng nguồn; QtWebEngine là LGPLv3 nhưng nặng và không dùng tới), và `pyqtgraph>=0.13,<0.15` có trần.
 - Tất cả thông điệp lỗi của `DecoderWorker` đi qua `failed(code, detail, path)` với `code` thuộc `FAILURE_CODES`; `DecodePage` dựng câu bằng `tr()`, `detail` chỉ làm tooltip. Mục 2.3 vẽ `failed(message)`.
 
 **Hành vi phát hiện khi chạy**
 
 - Profile `ru` và `kk-cyrl-ru` không chứa chữ Latin, nên gõ văn bản Latin ở tab Tạo mã rồi đổi sang hai profile này sẽ cảnh báo "ký tự không hỗ trợ" cho từng chữ Latin, không phải chuyển tự. Đây là hệ quả đúng của bảng mã, cần nhớ khi viết test.
-- Đóng cửa sổ trong lúc đang giải mã: `closeEvent` gọi `DecoderWorker.stop_async()` rồi chờ ngắn 500 ms; nếu yêu cầu hiện tại chưa xong thì **hoãn đóng** (`event.ignore()`), khóa `QTabWidget`, hiện banner "đang hoàn tất giải mã" và nối `worker.finished` vào `close()`. Cửa sổ đóng ngay khi worker kết thúc. QThread không bao giờ bị hủy khi đang chạy (trước khi sửa, file dài hơn ~1 phút làm tiến trình chết `0xC0000409`).
+- Đóng cửa sổ trong lúc đang giải mã: `closeEvent` gọi `DecoderWorker.stop_async()` rồi chờ ngắn 500 ms; nếu yêu cầu hiện tại chưa xong thì **hoãn đóng** (`event.ignore()`), khóa `QTabWidget`, hiện banner "đang hoàn tất giải mã" và nối `worker.finished` vào `close()`. Cửa sổ đóng ngay khi worker kết thúc. Vòng lặp sự kiện cũng có thể kết thúc không qua `closeEvent` (`QCoreApplication.exit`, đăng xuất phiên), nên `create_app` nối thêm `app.aboutToQuit` vào `DecoderWorker.stop`. Hai chốt này cùng bảo đảm QThread không bị hủy khi đang chạy; trước khi sửa, file dài hơn ~1 phút làm tiến trình chết `0xC0000409`.
 - Trong lúc giải mã file mới, kết quả cũ vẫn hiển thị dưới tên file mới cho tới khi có kết quả. Các điều khiển bị khóa là: "Mở file…", combo ngôn ngữ bản tin, ô "Dùng mô hình ngôn ngữ", "Giải mã", ba nút "Sao chép"/"Xuất TXT…"/"Xuất JSON…" và cả kéo-thả; StatsBar hiện thanh tiến trình vô định. Chấp nhận ở tuần 4.
+
+- Ngưỡng 20 phút của tab Tạo mã được kiểm ở hai chỗ: trạng thái nút (cập nhật khi đổi văn bản, profile
+  hoặc tham số timing) và `audio_or_error()` ngay trước khi dựng audio. Nút bị vô hiệu chỉ là chỉ dẫn giao
+  diện, không phải bất biến, nên gọi thẳng `play()`/`save_to()` vẫn bị chặn.
+
+**Giới hạn đã biết, chưa sửa ở tuần 4**
+
+- Cảnh báo trong `DecodeResult.warnings` (lõi sinh, tiếng Việt) và thông điệp lỗi của `Player.play`
+  (tiếng Anh) vẫn đổ thẳng vào banner, chưa qua `tr()`. Khác với nhóm lỗi của worker đã có bảng mã.
+- `worker.py` gộp mọi `ValueError` phát sinh khi giải mã vào mã `config`, nên một `ValueError` từ numpy
+  cũng hiện câu về "thiếu file model/LM"; chi tiết thật nằm ở tooltip.
+- `save_audio` chưa ghi được `.aif` và `.oga` dù hai đuôi này nằm trong `SUPPORTED_EXT` (chỉ đọc được).
+  Không với tới từ GUI vì hộp thoại Lưu chỉ có WAV/FLAC/OGG.
+- Thả nhiều file cùng lúc chỉ nhận file đầu tiên.
+- File 19,5 phút mất khoảng 3,7 phút và 2,1 GB, chỉ có thanh tiến trình vô định, chưa có nút Hủy.
 
 **Kiểm chứng Task 7 (2026-09-21, engine ONNX thật + 3 LM thật, offscreen)**
 

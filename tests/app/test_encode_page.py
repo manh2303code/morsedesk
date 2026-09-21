@@ -147,6 +147,21 @@ def test_text_over_duration_limit_disables_audio_without_building_it(qtbot, tmp_
     assert page.banner.level is None
 
 
+def test_duration_limit_follows_timing_controls(qtbot, tmp_path):
+    """Banner khuyên "nâng tốc độ" thì nâng WPM phải bật lại nút ngay, không đợi gõ thêm ký tự."""
+    page = _page(qtbot, tmp_path)
+    page.wpm_spin.setValue(10)
+    page.text_edit.setPlainText("PARIS " * 700)
+    assert page.estimate_seconds() > MAX_SECONDS
+    assert not page.play_button.isEnabled() and page.banner.level == "warning"
+    page.wpm_spin.setValue(60)                      # làm đúng lời khuyên trong banner
+    assert page.estimate_seconds() < MAX_SECONDS
+    assert page.play_button.isEnabled() and page.save_button.isEnabled()
+    assert page.banner.level is None
+    page.wpm_spin.setValue(10)                      # chiều ngược lại cũng phải bắt kịp
+    assert not page.play_button.isEnabled() and page.banner.level == "warning"
+
+
 def test_farnsworth_above_wpm_errors_for_both_play_and_save(qtbot, tmp_path, monkeypatch):
     """Farnsworth > WPM: cả Nghe thử lẫn Lưu phải cho banner đỏ bằng tr(), không im lặng."""
     import sounddevice as sd

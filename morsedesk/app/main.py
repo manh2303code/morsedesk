@@ -74,9 +74,13 @@ def load_settings() -> AppSettings:
 def create_app(args: argparse.Namespace) -> tuple[QApplication, MainWindow]:
     """Dựng QApplication (tái dùng nếu đã có) + MainWindow đã đặt ngôn ngữ giao diện; chưa show()."""
     app = QApplication.instance() or QApplication(sys.argv[:1])
-    settings = load_settings()      # tên tổ chức/ứng dụng đã đặt ở set_app_identity()
+    set_app_identity()              # idempotent: create_app có thể được gọi thẳng (script, test)
+    settings = load_settings()
     worker = DecoderWorker(engine=args.engine, model_path=args.model, lm_dir=args.lm_dir)
     worker.start()
+    # Vòng lặp sự kiện có thể kết thúc KHÔNG qua closeEvent (QCoreApplication.exit, đăng xuất
+    # phiên, tín hiệu hệ thống). Thiếu chốt này, QThread bị hủy khi còn chạy -> abort 0xC0000409.
+    app.aboutToQuit.connect(worker.stop)
     window = MainWindow(worker, Player(), settings, I18N_DIR)
     window.set_language(default_language(args.lang, settings.ui_language, QLocale.system().name()))
     return app, window
