@@ -51,7 +51,15 @@ def load_audio(path: str | Path, target_sr: int = SAMPLE_RATE) -> tuple[np.ndarr
 
 
 def save_audio(path: str | Path, x: np.ndarray, sample_rate: int) -> None:
-    sf.write(str(path), np.clip(x, -1.0, 1.0), sample_rate, subtype="PCM_16")
+    """Ghi audio theo phần mở rộng của `path`, biên độ clip về [-1, 1].
+
+    Chỉ ép `PCM_16` cho container nhận subtype PCM (WAV, AIFF, FLAC). OGG không nhận PCM_16 —
+    libsndfile ném `ValueError: Invalid combination of format, subtype and endian` — nên để
+    `soundfile` tự chọn subtype mặc định (Vorbis).
+    """
+    fmt = Path(path).suffix.lower().lstrip(".").upper()   # tên format của libsndfile: WAV, FLAC, OGG…
+    subtype = "PCM_16" if sf.check_format(fmt, "PCM_16") else None
+    sf.write(str(path), np.clip(x, -1.0, 1.0), sample_rate, subtype=subtype)
 
 
 def audio_info(path: str | Path) -> tuple[int, int, float]:

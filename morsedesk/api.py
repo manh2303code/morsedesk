@@ -202,8 +202,9 @@ class Decoder:
     def __init__(
         self, profile: str | Profile = "en", engine: str = "baseline", model_path: Path | None = None,
         fallback: bool = True, lm: bool = True, beam: int = 64, lm_dir: Path | None = None,
-        acoustic_model: AcousticModel | None = None,
+        acoustic_model: AcousticModel | None = None, lm_store: LMStore | None = None,
     ) -> None:
+        """lm_store: dùng chung LM giữa nhiều Decoder (GUI); khi có thì bỏ qua lm_dir."""
         self.auto = isinstance(profile, str) and profile == "auto"
         self.profile: Profile | None = None if self.auto else _resolve_profile(profile)
         self.engine = engine
@@ -223,7 +224,7 @@ class Decoder:
             raise NotImplementedError(f"engine chưa hỗ trợ: {engine}")
         if self.auto and not self.lm_enabled:
             raise ValueError("profile 'auto' cần mô hình ngôn ngữ; bỏ --no-lm hoặc chọn profile cụ thể")
-        self._store = LMStore(lm_dir)
+        self._store = lm_store if lm_store is not None else LMStore(lm_dir)
         if self.profile is not None:
             self._store.register(self.profile)
         self.candidates: list[str] = list_profiles() if self.auto else [self.profile.id]

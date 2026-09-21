@@ -77,3 +77,16 @@ def test_load_missing_file_raises_file_not_found(tmp_path):
     with pytest.raises(FileNotFoundError):
         load_audio(tmp_path / "missing.wav")
 
+
+
+@pytest.mark.parametrize("ext,subtype", [(".wav", "PCM_16"), (".flac", "PCM_16"), (".ogg", "VORBIS")])
+def test_save_roundtrip_for_every_container(tmp_path, ext, subtype):
+    """OGG từng luôn hỏng vì `save_audio` ép PCM_16 cho mọi container (libsndfile từ chối)."""
+    p = tmp_path / f"o{ext}"
+    x = _sine(8000, 1.5, 700)
+    save_audio(p, x, 8000)
+    sr, ch, dur = audio_info(p)
+    assert (sr, ch) == (8000, 1) and abs(dur - 1.5) < 1e-3
+    assert sf.info(str(p)).subtype == subtype
+    y, sr2 = sf.read(p)
+    assert sr2 == 8000 and len(y) == len(x)
