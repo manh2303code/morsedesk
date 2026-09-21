@@ -28,4 +28,4 @@ Tùy chọn: cài `ffmpeg` (ví dụ `scoop install ffmpeg`) để bộ sinh d�
 - Tab Giải mã: mở hoặc kéo thả file (`.wav .flac .ogg .mp3 .aiff`), chọn ngôn ngữ bản tin (Tự động/Anh/Nga/Kazakh), bật/tắt mô hình ngôn ngữ; từ tô màu theo tin cậy (xanh ≥ 0,8, vàng ≥ 0,5, đỏ dưới), spectrogram 0–2 kHz với vạch tone, xuất TXT/JSON. File dài hơn 20 phút chưa hỗ trợ.
 - Tab Tạo mã: văn bản → chuỗi chấm gạch, bảng ký tự Cyrillic và 9 chữ Kazakh, WPM/Farnsworth/weight/tone/nhiễu, Nghe thử (sounddevice), Lưu WAV/FLAC/OGG.
 - Ngôn ngữ giao diện đổi ngay bằng combo trên thanh công cụ (English, Русский, Қазақша bản nháp); lưu trong QSettings. Sửa bản dịch trong `morsedesk/app/i18n/translations.json` rồi chạy `uv run python tools/build_i18n.py` để sinh lại `.ts/.qm`.
-- Log: `%LOCALAPPDATA%\MorseDesk\logs\morsedesk.log` (Windows) hoặc `~/.local/share/MorseDesk/logs/` (Linux).
+- Log: `%APPDATA%\MorseDesk\MorseDesk\logs\morsedesk.log` (Windows, tức `C:\Users\<user>\AppData\Roaming\MorseDesk\MorseDesk\logs\`) hoặc `~/.local/share/MorseDesk/MorseDesk/logs/` (Linux): `QStandardPaths.AppDataLocation` lồng cả tên tổ chức lẫn tên ứng dụng.

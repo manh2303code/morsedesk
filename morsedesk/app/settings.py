@@ -34,7 +34,13 @@ class AppSettings:
 
     @property
     def last_dir(self) -> str:
-        return str(self._s.value("paths/last_dir", str(Path.home())))
+        """Thư mục gần nhất; giá trị hỏng trong QSettings (`@Invalid()`, rỗng) -> thư mục nhà.
+
+        `QSettings.value` trả `None` cho một mục hỏng, và `str(None)` từng cho ra chuỗi
+        "None" nên hộp thoại Lưu/Xuất gợi ý một thư mục tên "None".
+        """
+        v = self._s.value("paths/last_dir", None)
+        return v if isinstance(v, str) and v else str(Path.home())
 
     @last_dir.setter
     def last_dir(self, path: str) -> None:

@@ -44,3 +44,30 @@ def test_app_settings_roundtrip(tmp_path):
     assert s2.ui_language == "ru" and s2.last_dir == str(tmp_path)
     s2.clear()
     assert AppSettings(settings=QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat)).ui_language is None
+
+
+def test_check_models_rejects_directories_named_like_model_files(tmp_path, tiny_lm_dir):
+    """Thư mục tên `acoustic.onnx`/`en.bin` phải bị coi là thiếu (exists() đúng với thư mục)."""
+    (tmp_path / "acoustic.onnx").mkdir()
+    (tmp_path / "acoustic.json").mkdir()
+    missing = check_models(tmp_path / "acoustic.onnx", tiny_lm_dir, engine="onnx")
+    assert [p.name for p in missing] == ["acoustic.onnx", "acoustic.json"]
+    lm_dir = tmp_path / "lm"
+    lm_dir.mkdir()
+    for name in ("en.bin", "kk.bin", "ru.bin"):
+        (lm_dir / name).mkdir()
+    assert [p.name for p in check_models(None, lm_dir, engine="baseline")] == ["en.bin", "kk.bin", "ru.bin"]
+
+
+def test_last_dir_falls_back_when_setting_is_corrupt(tmp_path):
+    """`paths/last_dir=@Invalid()` từng cho chuỗi "None" làm thư mục gợi ý."""
+    ini = tmp_path / "broken.ini"
+    ini.write_text("[paths]\nlast_dir=@Invalid()\n", encoding="utf-8")
+    s = AppSettings(settings=QSettings(str(ini), QSettings.Format.IniFormat))
+    assert s.last_dir == str(Path.home())
+    s.last_dir = str(tmp_path)
+    assert AppSettings(settings=QSettings(str(ini), QSettings.Format.IniFormat)).last_dir == str(tmp_path)
+    qs = QSettings(str(ini), QSettings.Format.IniFormat)
+    qs.setValue("paths/last_dir", "")
+    qs.sync()
+    assert AppSettings(settings=qs).last_dir == str(Path.home())

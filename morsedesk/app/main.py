@@ -8,7 +8,7 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from PySide6.QtCore import QLocale, QStandardPaths
+from PySide6.QtCore import QCoreApplication, QLocale, QStandardPaths
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from morsedesk.app.main_window import MainWindow
@@ -18,7 +18,20 @@ from morsedesk.app.worker import DecoderWorker, Player
 from morsedesk.textio import force_utf8_streams
 
 I18N_DIR = Path(__file__).resolve().parent / "i18n"
+ORG_NAME = "MorseDesk"
+APP_NAME = "MorseDesk"
 log = logging.getLogger("morsedesk.app")
+
+
+def set_app_identity() -> None:
+    """Đặt tên tổ chức/ứng dụng bằng setter tĩnh (chạy được khi chưa có QApplication).
+
+    Phải gọi TRƯỚC `setup_logging()`: `QStandardPaths.AppDataLocation` chỉ trả về
+    `.../MorseDesk/MorseDesk` khi đã có hai tên này; chưa có thì log rơi thẳng vào gốc
+    `%APPDATA%` (Windows) hoặc `~/.local/share` (Linux).
+    """
+    QCoreApplication.setOrganizationName(ORG_NAME)
+    QCoreApplication.setApplicationName(APP_NAME)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -61,9 +74,7 @@ def load_settings() -> AppSettings:
 def create_app(args: argparse.Namespace) -> tuple[QApplication, MainWindow]:
     """Dựng QApplication (tái dùng nếu đã có) + MainWindow đã đặt ngôn ngữ giao diện; chưa show()."""
     app = QApplication.instance() or QApplication(sys.argv[:1])
-    app.setApplicationName("MorseDesk")
-    app.setOrganizationName("MorseDesk")
-    settings = load_settings()
+    settings = load_settings()      # tên tổ chức/ứng dụng đã đặt ở set_app_identity()
     worker = DecoderWorker(engine=args.engine, model_path=args.model, lm_dir=args.lm_dir)
     worker.start()
     window = MainWindow(worker, Player(), settings, I18N_DIR)
@@ -75,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
     """Điểm vào `morsedesk-gui`: thiếu model/LM -> hộp thoại lỗi + mã 2; đủ -> mở cửa sổ, chạy vòng lặp Qt."""
     force_utf8_streams()
     args = build_parser().parse_args(argv)
+    set_app_identity()
     setup_logging()
     missing = check_models(args.model, args.lm_dir, args.engine)
     if missing:

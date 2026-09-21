@@ -12,15 +12,17 @@ from morsedesk.lm.store import default_lm_dir, lm_file_for
 def check_models(model_path: Path | None, lm_dir: Path | None, engine: str = "onnx") -> list[Path]:
     """Danh sách file thiếu: ONNX + metadata (nếu engine onnx) rồi các .bin LM theo thứ tự profile."""
     missing: list[Path] = []
+    # is_file() chứ không phải exists(): một thư mục tên `acoustic.onnx` từng lọt qua kiểm
+    # tra, cửa sổ mở ra rồi mới chết ở lần giải mã đầu.
     if engine == "onnx":
         onnx = Path(model_path) if model_path else DEFAULT_MODEL_PATH
         for p in (onnx, onnx.with_suffix(".json")):
-            if not p.exists():
+            if not p.is_file():
                 missing.append(p)
     lm_root = Path(lm_dir) if lm_dir else default_lm_dir()
     for pid in list_profiles():
         p = lm_file_for(load_profile(pid), lm_root)
-        if not p.exists():
+        if not p.is_file():
             missing.append(p)
     return missing
 

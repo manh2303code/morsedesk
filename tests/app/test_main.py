@@ -1,6 +1,6 @@
 import threading
 
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QCoreApplication, QSettings, QStandardPaths
 
 import morsedesk.app.main as app_main
 from morsedesk.app.main import I18N_DIR, build_parser, create_app, main
@@ -91,3 +91,24 @@ def test_close_with_idle_worker_closes_immediately(qtbot, tiny_lm_dir, tmp_path)
     window.close()
     assert not window.isVisible() and window.banner.level is None
     qtbot.waitUntil(lambda: worker.isFinished(), timeout=5000)
+
+
+def test_logging_is_set_up_after_the_app_identity(tmp_path, monkeypatch):
+    """setup_logging() phải chạy SAU set_app_identity(), nếu không log rơi ra gốc %APPDATA%."""
+    seen = []
+    monkeypatch.setattr(
+        app_main,
+        "setup_logging",
+        lambda: seen.append(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)),
+    )
+    monkeypatch.setattr(app_main, "show_missing_dialog", lambda msg: None)
+    QCoreApplication.setOrganizationName("ZZTestOrg")       # xóa dấu vết của test khác
+    QCoreApplication.setApplicationName("ZZTestApp")
+    try:
+        before = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
+        rc = main(["--model", str(tmp_path / "none.onnx"), "--lm-dir", str(tmp_path)])
+    finally:
+        app_main.set_app_identity()
+    assert rc == 2 and len(seen) == 1
+    assert not before.endswith("MorseDesk/MorseDesk")
+    assert seen[0].endswith("MorseDesk/MorseDesk"), seen[0]
