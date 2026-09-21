@@ -159,6 +159,8 @@ PySide6, một `QMainWindow` với `QStackedWidget` ba trang.
 - Font: đóng gói DejaVu Sans và Noto Sans, đặt làm font ứng dụng để chắc chắn hiện Ә Ғ Қ Ң Ө Ұ Ү Һ І.
 - Bản dịch Kazakh do người bản ngữ soát trước khi phát hành; đến khi đó gắn nhãn "bản nháp" trong Cài đặt.
 
+**Ghi chú tuần 4 (2026-09-21):** GUI nằm trong gói `morsedesk/app/` (không phải `app/` ở gốc) để wheel/PyInstaller đóng gói; hai tab Giải mã | Tạo mã bằng `QTabWidget` (tab Cài đặt thêm ở tuần 5, hiện chỉ có combo ngôn ngữ giao diện trên thanh công cụ); spectrogram tĩnh của file (waterfall live để tuần 5); nghe thử dùng `sounddevice.play` không chặn qua lớp `Player` thay `EncoderWorker(QThread)`; thiếu model/LM → hộp thoại rồi thoát mã 2 (đúng §7). Chi tiết và danh sách lệch: `docs/superpowers/specs/2026-09-21-morsedesk-week4-gui-design.md` mục 5.
+
 ## 5. Dữ liệu và huấn luyện
 
 ### 5.1 Bộ sinh tổng hợp (`tools/gen_synth.py`)

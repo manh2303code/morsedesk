@@ -135,3 +135,27 @@ Bố cục dọc: (1) hàng điều khiển: nút "Mở file…", nhãn đườn
 | Bản dịch kk/ru sai ngữ | nhãn nháp; mọi chuỗi tập trung trong `.ts` để sửa không cần đụng mã |
 | `sounddevice` không có thiết bị (CI/offscreen) | Nghe thử bắt `sounddevice.PortAudioError`/`OSError` → banner; test không gọi phát thật |
 | Đổi profile tạo lại Decoder chậm | ONNX session dùng chung qua `acoustic_model`; LM cache trong `LMStore` |
+
+## 5. Lệch khi thực thi
+
+Ghi lại sau khi chạy Task 1–7. Mỗi mục là lệch so với mục 2 ở trên, không phải lỗi còn mở.
+
+**Kiến trúc**
+
+- Nghe thử dùng lớp `Player` bọc `sounddevice.play` (không chặn) thay cho `EncoderWorker(QThread)` như mục 2.5: tạo audio cho một bản tin mất dưới 100 ms nên không cần thread riêng. `Player` nằm cùng `worker.py` với `DecoderWorker` và `Spectrogram`.
+- Lõi nhận thêm tham số tương thích ngược `Decoder(lm_store=...)` (mục 2.3 chỉ nói "LMStore dùng chung"): GUI tạo một `LMStore` rồi truyền cho mọi `Decoder`, nên ba profile chia sẻ cùng LM đã nạp.
+- Không cài `sys.excepthook` hiện banner đỏ "Lỗi nội bộ" như mục 2.7. `main()` đặt excepthook ghi log rồi gọi hook mặc định; lỗi trong worker vẫn tới banner qua tín hiệu `failed`. Banner cho lỗi bất đồng bộ để tuần 5, khi có chế độ live sinh ra nhiều nguồn lỗi hơn.
+- `DecodePage` được gia cố ngoài mục 2.4 sau review: `on_result` bỏ qua kết quả không khớp file đang mở, và `on_busy` khóa cả kéo-thả. Không có việc này thì thả file B trong lúc giải mã file A sẽ vẽ kết quả A dưới tên B (và xuất ra file sai nội dung).
+- Tên định dạng lưu ("WAV", "FLAC", "OGG") không qua `self.tr()`: là tên định dạng file, giữ nguyên ở cả ba ngôn ngữ.
+
+**Hành vi phát hiện khi chạy**
+
+- Profile `ru` và `kk-cyrl-ru` không chứa chữ Latin, nên gõ văn bản Latin ở tab Tạo mã rồi đổi sang hai profile này sẽ cảnh báo "ký tự không hỗ trợ" cho từng chữ Latin, không phải chuyển tự. Đây là hệ quả đúng của bảng mã, cần nhớ khi viết test.
+- Đóng cửa sổ trong lúc đang giải mã sẽ chờ yêu cầu hiện tại chạy xong (`DecoderWorker.stop()` chờ tối đa 10 giây) trước khi thoát. Với file ngắn là tức thì; file dài vẫn có độ trễ.
+- Trong lúc giải mã file mới, kết quả cũ vẫn hiển thị dưới tên file mới cho tới khi có kết quả; các điều khiển bị khóa và StatsBar hiện tiến trình. Chấp nhận ở tuần 4.
+
+**Kiểm chứng Task 7 (2026-09-21, engine ONNX thật + 3 LM thật, offscreen)**
+
+29/29 mục kiểm đạt, gồm: mở file T1 và giải mã 0,55 giây lần đầu (đã gồm nạp ONNX + LM) và 0,41 giây các lần sau; StatsBar đủ WPM/tone/SNR; spectrogram có vạch tone; đổi profile Kazakh cho ra Cyrillic; profile Tự động trả đủ điểm ba ngôn ngữ và tooltip; kéo thả file `.wav` chạy, kéo thả `README.md` bị từ chối ở `dragEnterEvent` và cho banner đỏ khi ép nạp; xuất TXT/JSON đúng; đổi giao diện en → ru → kk → en đổi nhãn ngay và lưu vào `QSettings`; tab Tạo mã gõ "СӘЛЕМ" bằng bảng ký tự, lưu WAV rồi giải mã lại đúng "СӘЛЕМ"; đóng cửa sổ dừng worker dưới 2 giây.
+
+Hai điều chưa kiểm được bằng cách này: chữ hiển thị (Qt headless không có font nên mọi ký tự vẽ thành ô vuông — càng cho thấy phải đóng gói DejaVu/Noto như §4 spec gốc yêu cầu, việc của tuần 6) và âm thanh phát ra loa thật.
