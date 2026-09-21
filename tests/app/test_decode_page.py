@@ -18,6 +18,12 @@ def _page(qtbot, tiny_lm_dir, tmp_path):
     return worker, page
 
 
+
+def _wait_idle(qtbot, page):
+    """busy(False) là tín hiệu xếp hàng đến SAU result_ready/failed; chờ nút Decode bật lại
+    trước khi kiểm trạng thái điều khiển hoặc bấm nút, tránh race trong test."""
+    qtbot.waitUntil(lambda: page.decode_button.isEnabled(), timeout=5000)
+
 def test_load_file_decodes_and_fills_widgets(qtbot, tiny_lm_dir, tmp_path, wav_cq):
     worker, page = _page(qtbot, tiny_lm_dir, tmp_path)
     try:
@@ -26,6 +32,7 @@ def test_load_file_decodes_and_fills_widgets(qtbot, tiny_lm_dir, tmp_path, wav_c
         with qtbot.waitSignal(worker.result_ready, timeout=60000):
             page.load_file(wav_cq)
         qtbot.waitUntil(lambda: page.result is not None, timeout=5000)
+        _wait_idle(qtbot, page)
         assert page.result.text == "CQ DE K"
         assert [lb.text() for lb in page.word_view.labels()] == ["CQ", "DE", "K"]
         assert "WPM" in page.stats.text() and page.stats.language_label("en") in page.stats.text()
@@ -49,13 +56,16 @@ def test_changing_profile_or_lm_requests_again(qtbot, tiny_lm_dir, tmp_path, wav
         with qtbot.waitSignal(worker.result_ready, timeout=60000):
             page.load_file(wav_ru)
         qtbot.waitUntil(lambda: page.result is not None and page.result.language == "ru", timeout=5000)
+        _wait_idle(qtbot, page)
         with qtbot.waitSignal(worker.result_ready, timeout=60000):
             page.profile_combo.setCurrentIndex(PROFILE_CHOICES.index("en"))
         qtbot.waitUntil(lambda: page.result is not None and page.result.language == "en", timeout=5000)
+        _wait_idle(qtbot, page)
         assert page.current_request().profile_id == "en"
         with qtbot.waitSignal(worker.result_ready, timeout=60000):
             page.lm_check.setChecked(False)
         assert page.current_request().use_lm is False
+        _wait_idle(qtbot, page)
         with qtbot.waitSignal(worker.result_ready, timeout=60000):
             page.decode_button.click()
     finally:
@@ -70,6 +80,7 @@ def test_failed_shows_error_banner_and_keeps_page_usable(qtbot, tiny_lm_dir, tmp
         with qtbot.waitSignal(worker.failed, timeout=30000):
             page.load_file(bad)
         qtbot.waitUntil(lambda: page.banner.level == "error", timeout=5000)
+        _wait_idle(qtbot, page)
         assert "bad.wav" in page.banner.text() and page.decode_button.isEnabled()
         assert page.word_view.labels() == []
     finally:
@@ -119,6 +130,7 @@ def test_stale_result_for_replaced_file_is_ignored(qtbot, tiny_lm_dir, tmp_path,
         with qtbot.waitSignal(worker.result_ready, timeout=60000):
             page.load_file(wav_cq)
         qtbot.waitUntil(lambda: page.result is not None, timeout=5000)
+        _wait_idle(qtbot, page)
         words_before = [lb.text() for lb in page.word_view.labels()]
         stats_before = page.stats.text()
 
