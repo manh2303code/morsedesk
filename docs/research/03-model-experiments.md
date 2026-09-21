@@ -15,7 +15,7 @@ Tốc độ tham chiếu: v1 (clip, workers 0, Windows) ≈ 0,95 s/bước ở b
 | E1 | đặc trưng theo cửa sổ | 96 | window | 8000 | 2,39 | 31.15% | 38.37% | – | 37.78% / 40.34% / 36.98% |
 | E2 | E1 + hidden 128 | 128 | window | 6500 | 2,74 | 27.64% | 29.14% | 28.40% | 29.49% / 29.86% / 28.08% |
 | E3 | E2 + cosine, warmup 500, 30.000 bước | 128 | window | 21500 | 9,40 | 22.29% | 26.45% | 25.27% | 27.89% / 27.49% / 23.97% |
-| E4 | E3 + MP3 (ffmpeg) | 128 | window | 30000 | | | | | |
+| E4 | E3 + MP3 (ffmpeg), chạy trong WSL 8 worker | 128 | window | 21000 | 4,38 | 23.15% | 28.53% | 27.68% | 29.57% / 29.78% / 26.23% |
 | E5 | E4 trong WSL, `--workers 8` (đo tốc độ) | 128 | window | 1000 | 0,145 | 100% (@1000, chưa hội tụ) | – | – | – |
 
 ## Chi tiết từng thí nghiệm
@@ -132,6 +132,24 @@ Nhận xét: E3 là run tốt nhất (greedy 26,45% so E2 29,14%, LM 25,27% so 2
 
 ### E4
 
+Lệnh (WSL, `OMP_NUM_THREADS=8`, `--workers 8`, ffmpeg 8.0.1): `-m tools.train --name E4 --steps 30000 --batch 16 --lr 1e-3 --seed 14 --val-clips 200 --val-every 500 --hidden 128 --feature-mode window --lr-schedule cosine --warmup 500 --workers 8` (MP3 bật); 2026-09-21 02:48 → 07:11, 0,52 s/bước, 4,38 h (so E3 9,40 h trên Windows). TER val: 37,2% @3000, 29,2% @5000, 26,7% @10000, 24,3% @15000, 23,8% @20000, 23,15% @21000 (best), 23,6% @27500.
+
+Greedy trên T1 v2 (eval_run): gate CER 28.53%. Theo kênh: clean=20.70%, mp3=18.86%, qrm=19.42%, qrn=21.17%, qsb=62.51%. Theo WPM: 12.0=29.99%, 18.0=29.76%, 25.0=28.20%, 35.0=26.18%. Theo SNR: 0.0=42.91%, 3.0=31.58%, 6.0=24.07%, 10.0=25.29%, 20.0=18.81%.
+
+```
+CER % theo SNR (hàng) x WPM (cột)
+SNR\WPM    12.0    18.0    25.0    35.0
+    0.0   45.27   47.16   40.98   38.22
+    3.0   36.36   31.85   31.52   26.59
+    6.0   24.61   27.57   24.62   19.47
+   10.0   23.46   25.69   24.45   27.58
+   20.0   20.24   16.55   19.43   19.03
+```
+
+Beam + LM: gate CER 27.68% (en 26.37%, ru 28.70%, kk theo text_original 27.96%).
+
+Nhận xét: E4 kém E3 khoảng 2 điểm ở cả validation và T1 (greedy 28,5% so 26,5%; LM 27,7% so 25,3%). Tăng cường MP3 khi huấn luyện không giúp T1 vì ô MP3 thật (64 kbps) vốn dễ hơn clean với model này (18,9% so 20,7%), trong khi seed khác (14 so 13) và dữ liệu MP3 chiếm chỗ dữ liệu sạch. Không tách được ảnh hưởng seed vì mỗi cấu hình chỉ chạy một lần. Kết luận: giữ E3.
+
 ### E5
 
 Lệnh (WSL Ubuntu 26.04, uv riêng `~/.venv-morsedesk`, khởi động qua `Start-Process wsl.exe -- bash wsl_train_fg.sh` để wsl.exe giữ tiến trình sống; `nohup` trong WSL bị tắt cùng distro): `-m tools.train --name E5 --steps 1000 --batch 16 --lr 1e-3 --seed 15 --val-clips 50 --val-every 500 --hidden 128 --feature-mode window --lr-schedule cosine --warmup 100 --workers 8` (MP3 bật, ffmpeg 8.0.1 trong WSL).
@@ -140,4 +158,28 @@ Tốc độ: lần 1 với torch 16 thread mặc định: **~44 s/bước** — 
 
 ## Kết luận và điều kiện ra
 
-<điền ở Task 5: run tốt nhất, có đạt gate CER < 2% không, khoảng cách theo ô nếu chưa đạt, nguyên nhân nghi ngờ, bước tiếp>
+Run được chọn: **E3** (`runs/E3/best.pt`, bước 21500, hidden 128, đặc trưng theo cửa sổ, cosine + warmup 500, không MP3) — xuất thành `models/acoustic.onnx` v0.2.0 (metadata `models/acoustic.json` đã commit). Lý do: CER T1 v2 thấp nhất ở cả greedy (26.45%) và beam+LM (25.27%); E4 (thêm MP3) kém ~2 điểm; E2 kém ~3 điểm.
+
+Gate CER < 2% (SNR ≥ 0 dB, 10–35 WPM): **KHÔNG ĐẠT**. Tiến bộ trong tuần: ONNX v1 33,6% (T1 v1) → v1b 31,5% → E3 26,5% greedy / 25,3% beam+LM (T1 v2). Khoảng cách còn lại theo ô (beam+LM, E3):
+
+```
+CER % theo SNR (hàng) x WPM (cột)
+SNR\WPM    12.0    18.0    25.0    35.0
+    0.0   42.44   39.67   39.20   36.56
+    3.0   29.38   32.43   23.95   21.77
+    6.0   27.97   23.37   21.31   18.21
+   10.0   31.37   16.89   19.52   19.14
+   20.0   19.62   15.76   16.88    9.88
+```
+
+Theo kênh (beam+LM): clean=17.42%, mp3=14.90%, qrm=16.40%, qrn=17.07%, qsb=60.55%. Theo kiểu gõ: bug=26.38%, drift=23.13%, farnsworth=28.36%, jitter=25.73%, machine=22.74%.
+
+Nguyên nhân nghi ngờ, theo thứ tự ảnh hưởng:
+1. **QSB** (fading 20 dB, chu kỳ 4 s): 60–62% ở mọi run, gần như không đổi từ v1; chiếm ~1/5 clip nhưng ~1/2 tổng lỗi. Chuẩn hóa theo cửa sổ 4 s không đủ vì chu kỳ fade bằng độ dài cửa sổ; cần AGC nhanh hơn (tau 0,3–0,5 s) hoặc chuẩn hóa theo từng phần tử, hoặc tăng cường QSB mạnh hơn khi train (hiện depth/period được lấy ngẫu nhiên nhẹ hơn ô T1).
+2. **SNR 0 dB**: 40–45% ở mọi tốc độ; validation ngẫu nhiên ít mẫu 0 dB nên model không được tối ưu cho ô này. Cần validation dạng T1 (ô cố định) thay validation ngẫu nhiên — đã thấy validation không dự báo T1 ở E1.
+3. **Năng lực model**: ngay ô dễ nhất (20 dB, 35 WPM, clean) còn ~10%; lỗi phổ biến là mất ký tự và gộp từ (`CANGE` cho `CAN GET`), LM ký tự không bù được. Cần model lớn hơn hoặc dài hơn (E3 hội tụ ~22% TER và không giảm thêm sau bước 21500) và/hoặc dữ liệu khó hơn.
+4. Tốc độ thấp (12 WPM) kém hơn 35 WPM ở mọi run (~30% so ~21%): cửa sổ 4 s chứa ít ký tự, ít ngữ cảnh cho BiGRU.
+
+Bước tiếp (tuần 4+, không làm trong tuần này): validation dạng T1; tăng cường QSB/0 dB có trọng số; AGC tau ngắn hơn hoặc chuẩn hóa hai tầng; thử hidden 192 hoặc thêm một lớp Conv; chạy trong WSL (0,52 s/bước) để mỗi thí nghiệm 30k bước còn ~4,5 h; đánh giá language_acc trên tập câu tự nhiên thay T1.
+
+Kết quả `uv run pytest -m gate` với E3: xem `docs/research/02-baseline-numbers.md` mục "Model tuần 3".

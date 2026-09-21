@@ -111,3 +111,47 @@ Nhận xét:
 - Beam thuần Python: 0,35 s/clip (6–8 s) kể cả tải ONNX, đạt mục tiêu 2 s/12 s; đường tắt blank kích hoạt 88–96% khung với model thật.
 - Nhận diện ngôn ngữ auto chỉ 56,6%: 30% clip T1 là radiogram ham đã chuyển tự (trung lập ngôn ngữ, đúng 30% ≈ ngẫu nhiên), random group 10%; trên phần "từ" đạt ~64% với v1b. CER auto (44%) cao hơn ép profile vì đoán sai profile làm render sai bảng chữ (kk↔ru). Mục tiêu 95% của spec không đạt được với T1 hiện tại; cần (a) đo language_acc trên tập câu tự nhiên, (b) model âm thanh tốt hơn (E3), (c) LM ru/kk phân biệt hơn (corpus kk còn nghiêng KazNERD).
 - Baseline + auto (CLI mặc định khi chưa có model ONNX) chấm LM trên bản render chữ đầu nên kk thường bị nhận thành ru; hạn chế đã biết, đường onnx+beam là đường chính.
+
+## Model tuần 3: `models/acoustic.onnx` v0.2.0 = E3 (T1 v2)
+
+Ngày đo: 2026-09-21. Mọi số trên T1 v2 (500 clip, MP3 thật, `text_original`), beam+LM với alpha 0,2 / beta 1,0 và LM en/ru/kk dựng ngày 2026-09-20; kk chấm theo `text_original` khi có LM.
+
+| Run | hidden | feature_mode | bước (best) | TER val | CER T1 greedy | CER T1 beam+LM |
+|---|---|---|---|---|---|---|
+| v1 | 96 | clip | 7500 | 38.00% | 33.52% | – |
+| v1b | 96 | clip | 14000 | 30.56% | 31.47% | 36.10% |
+| E1 | 96 | window | 8000 | 31.15% | 38.37% | – |
+| E2 | 128 | window | 6500 | 27.64% | 29.14% | 28.40% |
+| E3 | 128 | window | 21500 | 22.29% | 26.45% | 25.27% |
+| E4 | 128 | window | 21000 | 23.15% | 28.53% | 27.68% |
+
+So với ONNX v1 tuần 2 (33,6% trên T1 v1): E3 giảm còn 26.45% greedy / 25.27% beam+LM. Gate 2% KHÔNG ĐẠT; phân tích khoảng cách và nguyên nhân ở `03-model-experiments.md` mục "Kết luận và điều kiện ra".
+
+Greedy (E3):
+
+```
+CER % theo SNR (hàng) x WPM (cột)
+SNR\WPM    12.0    18.0    25.0    35.0
+    0.0   41.56   43.01   40.34   38.34
+    3.0   30.90   30.78   25.76   22.77
+    6.0   27.87   26.05   23.06   19.95
+   10.0   28.52   22.35   22.12   21.62
+   20.0   18.39   13.07   21.51   11.10
+```
+
+Beam + LM (E3):
+
+```
+CER % theo SNR (hàng) x WPM (cột)
+SNR\WPM    12.0    18.0    25.0    35.0
+    0.0   42.44   39.67   39.20   36.56
+    3.0   29.38   32.43   23.95   21.77
+    6.0   27.97   23.37   21.31   18.21
+   10.0   31.37   16.89   19.52   19.14
+   20.0   19.62   15.76   16.88    9.88
+```
+
+Theo kênh (greedy → LM): clean=17.87%→17.42%, mp3=15.22%→14.90%, qrm=18.41%→16.40%, qrn=18.43%→17.07%, qsb=62.34%→60.55%. Theo profile (greedy en/ru/kk-text → LM en/ru/kk-orig): 27.89%/27.49%/23.97% → 23.67%/26.45%/25.69%.
+
+`uv run pytest -m gate` với model này: <điền sau khi chạy>
+

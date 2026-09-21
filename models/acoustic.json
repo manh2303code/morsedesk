@@ -1,5 +1,5 @@
 {
-  "version": "0.2.0-e2",
+  "version": "0.2.0",
   "sample_rate": 8000,
   "hop": 40,
   "frame_rate": 200,
@@ -78,8 +78,8 @@
   "output_name": "log_probs",
   "time_stride": 2,
   "opset": 17,
-  "train_step": 6500,
-  "val_ter": 0.2764058315977388,
+  "train_step": 21500,
+  "val_ter": 0.2228503421600714,
   "config": {
     "feat_dim": 11,
     "n_classes": 65,
