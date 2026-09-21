@@ -34,7 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     dec = sub.add_parser("decode", help="file âm thanh -> văn bản")
     dec.add_argument("file", type=Path)
     dec.add_argument("--profile", default="auto", choices=list_profiles() + ["auto"])
-    dec.add_argument("--engine", default="baseline", choices=["baseline", "onnx"])
+    dec.add_argument("--engine", default="baseline", choices=["baseline", "onnx", "deepcw"])
     dec.add_argument("--model", type=Path, default=None, help="mặc định: models/acoustic.onnx trong repo")
     dec.add_argument("--no-fallback", action="store_true",
                      help="tắt fallback DSP khi độ tin cậy engine onnx thấp (spec §8)")
@@ -47,7 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     b = sub.add_parser("bench", help="đo CER/WER trên manifest JSONL")
     b.add_argument("--manifest", type=Path, required=True)
-    b.add_argument("--engine", default="baseline", choices=["baseline", "onnx"])
+    b.add_argument("--engine", default="baseline", choices=["baseline", "onnx", "deepcw"])
     b.add_argument("--model", type=Path, default=None, help="mặc định: models/acoustic.onnx trong repo")
     b.add_argument("--out-dir", type=Path, default=Path("bench_results"))
     b.add_argument("--limit", type=int, default=None)
@@ -78,7 +78,8 @@ def cmd_encode(a: argparse.Namespace) -> int:
 
 def cmd_decode(a: argparse.Namespace) -> int:
     try:
-        dec = Decoder(a.profile, engine=a.engine, model_path=a.model if a.engine == "onnx" else None,
+        dec = Decoder(a.profile, engine=a.engine,
+                      model_path=a.model if a.engine in ("onnx", "deepcw") else None,
                       fallback=not a.no_fallback, lm=not a.no_lm, beam=a.beam, lm_dir=a.lm_dir)
         r = dec.decode_file(a.file)
     except (NotImplementedError, UnsupportedAudio, FileNotFoundError, ValueError) as e:
@@ -103,7 +104,7 @@ def cmd_devices(a: argparse.Namespace) -> int:
 def cmd_bench(a: argparse.Namespace) -> int:
     from morsedesk.bench import run
 
-    model = a.model if a.engine == "onnx" else None
+    model = a.model if a.engine in ("onnx", "deepcw") else None
     try:
         _, ok = run(a.manifest, a.engine, model, a.out_dir, a.limit, a.gate, a.max_cer,
                     profile_override=a.profile_override, lm=not a.no_lm, beam=a.beam, lm_dir=a.lm_dir)

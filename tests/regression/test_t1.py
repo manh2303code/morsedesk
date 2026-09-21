@@ -127,3 +127,28 @@ def test_evaluate_isolates_decode_errors(tmp_path):
 def test_aggregate_sorts_numeric_keys():
     rows = [{"snr": s, "cer": 0.1, "wer": 0.2} for s in (10.0, 3.0, 0.0, 20.0)]
     assert list(bench.aggregate(rows, "snr").keys()) == ["0.0", "3.0", "10.0", "20.0"]
+
+
+@pytest.mark.gate
+@pytest.mark.skipif(not Path("models/deepcw/model.onnx").exists(),
+                    reason="chưa có models/deepcw/model.onnx (tools/fetch_deepcw.py)")
+def test_deepcw_engine_on_t1_en_subset():
+    """Engine deepcw phải đạt lại mốc đo qua `Decoder` thật: CER <= 29 % trên 167 clip profile
+    en của T1 v2 (lm=False; giá trị đo được 27,23 %).
+
+    Số 22,86 % ở docs/research/04-pretrained-baselines.md đo bằng tools/bench_pretrained.py,
+    gọi thẳng `emissions_to_text()` trên log-prob của DeepCW, KHÔNG qua `decode_array()` của
+    `Decoder`. Đi qua `Decoder` thật (như CLI/GUI dùng), 15/167 clip của tập này (SNR 0-3 dB,
+    phần lớn kênh qsb) bị `estimate_tone()` coi là không có tín hiệu nên trả "" trước khi
+    `DeepCwModel` kịp chạy (CER 1.0 mỗi clip) — đây không phải lỗi khi lắp engine: đo lại đúng
+    167 clip này bằng `emissions_to_text()` thô (bỏ qua `estimate_tone()`) ra 22,80 %, khớp mốc
+    gốc; còn bước `_group_words` gộp từ không tốn thêm CER nào so với `emissions_to_text()` thô
+    (đã đo tách riêng). Chi tiết: .superpowers/sdd/qa-task-2-report.md.
+    """
+    manifest = Path("testdata/generated/t1/manifest.jsonl")
+    if not manifest.exists():
+        pytest.skip("chạy: uv run python tools/make_t1.py")
+    rows = [r for r in bench.load_rows(manifest) if r.get("profile") == "en"]
+    results = bench.evaluate(rows, engine="deepcw", lm=False)
+    mean = sum(r["cer"] for r in results) / len(results)
+    assert mean <= 0.29, f"CER deepcw trên {len(results)} clip en = {mean:.4f}, mốc đo được 0.2723"

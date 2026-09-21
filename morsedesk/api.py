@@ -23,11 +23,14 @@ from morsedesk.lm.profile import Profile, list_profiles, load_profile
 from morsedesk.lm.store import LMStore
 from morsedesk.model.ctc import greedy_decode_with_frames
 from morsedesk.model.protocol import AcousticModel
-from morsedesk.model.vocab import SPACE, VOCAB
+from morsedesk.model.vocab import SPACE, UNK, VOCAB
 
 LOW_CONFIDENCE = 0.6
 FALLBACK_CONFIDENCE = 0.5
 DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[1] / "models" / "acoustic.onnx"
+DEEPCW_PROFILE = "en"
+# Beam ký tự + LM `en` trên hậu nghiệm DeepCW. Task 3 đo trước/sau và chốt giá trị này.
+DEEPCW_LM = True
 
 
 @dataclass
@@ -142,7 +145,7 @@ def pattern_units(token: str) -> float:
     return sum(1.0 if c == "." else 3.0 for c in token) + (len(token) - 1)
 
 
-def estimate_wpm_from_emissions(emissions: list[tuple[str, int, float]], frame_rate: int) -> float | None:
+def estimate_wpm_from_emissions(emissions: list[tuple[str, int, float]], frame_rate: float) -> float | None:
     """emissions: (token, khung đầu vào lúc phát ra, xác suất). Chia số khung cho tổng dit lý thuyết."""
     items = [(t, f) for t, f, _ in emissions]
     if len([t for t, _ in items if t != SPACE]) < 2:
@@ -220,6 +223,19 @@ class Decoder:
 
                 self.model_path = Path(model_path) if model_path else DEFAULT_MODEL_PATH
                 self._model = OnnxAcousticModel(self.model_path)
+        elif engine == "deepcw":
+            # Kiểm profile TRƯỚC khi nạp model: người dùng chọn sai profile phải thấy lỗi ngay,
+            # không phải chờ tải 15 MB rồi mới báo.
+            if self.auto or self.profile is None or self.profile.id != DEEPCW_PROFILE:
+                raise ValueError(
+                    "engine 'deepcw' chỉ hỗ trợ profile 'en' (bảng chữ DeepCW chỉ có A–Z, 0–9, "
+                    "',' '.' '/' '?' và dấu cách); dùng --profile en, hoặc --engine onnx cho ru/kk"
+                )
+            if self._model is None:
+                from morsedesk.model.deepcw import DEEPCW_MODEL_PATH, DeepCwModel
+
+                self.model_path = Path(model_path) if model_path else DEEPCW_MODEL_PATH
+                self._model = DeepCwModel(self.model_path).load()
         elif engine != "baseline":
             raise NotImplementedError(f"engine chưa hỗ trợ: {engine}")
         if self.auto and not self.lm_enabled:
@@ -230,7 +246,7 @@ class Decoder:
         self.candidates: list[str] = list_profiles() if self.auto else [self.profile.id]
         self._profiles: dict[str, Profile] = {pid: self._store.get_profile(pid) for pid in self.candidates}
         self._lms: dict[str, CharNGramLM] = {}
-        if self.lm_enabled and (self.auto or engine == "onnx"):
+        if self.lm_enabled and (self.auto or engine in ("onnx", "deepcw")):
             for pid in self.candidates:
                 self._lms[pid] = self._store.get(pid)   # thiếu file -> FileNotFoundError nêu đường dẫn
 
@@ -266,6 +282,8 @@ class Decoder:
         snr_db = est.snr_db if est.has_signal else None
         if self.engine == "baseline":
             return self._decode_baseline(x, tone_hz, snr_db, warnings)
+        if self.engine == "deepcw":
+            return self._decode_deepcw(x, tone_hz, snr_db, warnings)
         # chế độ 'clip' gọi đúng hai đối số: test thay `_log_probs` bằng hàm hai tham số
         logp, n_in = self._log_probs(x, tone_hz) if windows is None else self._log_probs(x, tone_hz, windows)
         return self._decode_onnx(x, logp, n_in, tone_hz, snr_db, warnings)
@@ -325,6 +343,35 @@ class Decoder:
             words += hypothesis_to_words(hyp, FRAME_RATE, stride, end_in, offset=seg.start)
             emissions += [(tok, (seg.start + f) * stride, p) for tok, f, p in hyp.emissions]
         return words, _strip_spaces(emissions), self._profiles[res.profile_id], res.scores
+
+    def _deepcw_words(self, x: np.ndarray) -> tuple[list[Word], list[tuple[str, int, float]], float]:
+        """Từ và emissions từ hậu nghiệm DeepCW.
+
+        DeepCW phát ra **chữ Latin**, còn phần còn lại của hệ thống đếm nhịp theo **mẫu chấm
+        gạch**, nên mỗi chữ được đổi ngược về mẫu qua `profile.letter_to_pattern` để dùng lại
+        `_group_words` và `estimate_wpm_from_emissions` y như engine onnx.
+        """
+        out = self._model.decode_greedy(x, SAMPLE_RATE)
+        items = [(SPACE if ch == " " else self.profile.letter_to_pattern.get(ch, UNK), ch, f, p)
+                 for ch, f, p in out.emissions]
+        words = _group_words(items, out.frame_rate, out.n_frames)
+        emissions = _strip_spaces([(tok, f, p) for tok, _, f, p in items])
+        return words, emissions, out.frame_rate
+
+    def _decode_deepcw(self, x: np.ndarray, tone_hz: float, snr_db: float | None,
+                       warnings: list[str]) -> DecodeResult:
+        words, emissions, frame_rate = self._deepcw_words(x)
+        confidence = float(np.mean([w.confidence for w in words])) if words else 0.0
+        fallback_text = None
+        if confidence < FALLBACK_CONFIDENCE:
+            warnings.append("độ tin cậy thấp, kèm kết quả bộ giải mã DSP")
+            if self.fallback:
+                fallback_text = self.profile.render(self._baseline_tokens(x, tone_hz).tokens)
+        elif confidence < LOW_CONFIDENCE:
+            warnings.append("độ tin cậy thấp")
+        return DecodeResult(" ".join(w.text for w in words), words,
+                            estimate_wpm_from_emissions(emissions, frame_rate), tone_hz, snr_db,
+                            self.profile.id, {}, warnings, "deepcw", fallback_text)
 
     def _decode_onnx(self, x, logp: np.ndarray, n_in: int, tone_hz: float, snr_db: float | None,
                      warnings: list[str]) -> DecodeResult:
