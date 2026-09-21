@@ -12,7 +12,7 @@ from morsedesk.audio.io import load_audio, resample
 from morsedesk.constants import FRAME_RATE, HOP, SAMPLE_RATE
 from morsedesk.dsp.baseline import BaselineDecoder, Symbol
 from morsedesk.dsp.frontend import Window, compute_features, compute_features_windowed, mix_envelope
-from morsedesk.dsp.tone import ToneEstimate, estimate_tone
+from morsedesk.dsp.tone import ToneEstimate, estimate_tone, fallback_tone_hz
 from morsedesk.encode.synth import add_noise, elements_to_audio, tone_power
 from morsedesk.encode.text import text_to_tokens
 from morsedesk.encode.timing import TimingParams, tokens_to_elements
@@ -279,9 +279,20 @@ class Decoder:
         # Engine `deepcw` nghe cả dải 400-1200 Hz và không dùng ước lượng tone, nên không được
         # chặn nó ở đây: đo được 15/167 clip `en` của T1 (SNR 0-3 dB, phần lớn qsb) bị cổng này
         # trả rỗng dù DeepCW giải mã được, làm CER xấu từ 22,9 % lên 27,2 %.
+        guessed_tone = False
+        if tone_hz is None and self.engine == "onnx":
+            # Model âm thanh được huấn luyện trên đúng loại nhiễu này; bỏ cuộc là chắc chắn sai
+            # (CER 1,0), còn đoán tone theo đỉnh phổ đo được 74,8 % trên đúng nhóm clip đó.
+            # 29/500 clip vùng gate của T1 rơi vào đây, tương đương 1,46 điểm CER.
+            tone_hz = fallback_tone_hz(x)
+            guessed_tone = tone_hz is not None
+            if guessed_tone and windows is not None:
+                windows = compute_features_windowed(x, tone_hz)   # dựng lại đặc trưng theo tone đoán
         if tone_hz is None and self.engine != "deepcw":
             return self._empty(["không có tín hiệu Morse trong đoạn âm thanh"])
         warnings = self._tone_warnings(est)
+        if guessed_tone:
+            warnings.append("không dò được tone rõ, đang đoán theo đỉnh phổ; kết quả có thể sai")
         snr_db = est.snr_db if est.has_signal else None
         if self.engine == "baseline":
             return self._decode_baseline(x, tone_hz, snr_db, warnings)

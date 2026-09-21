@@ -40,6 +40,25 @@ def _noise_bin_power(power: np.ndarray, k: int, band: np.ndarray) -> float:
     return float(np.median(power[idx, :])) + 1e-20
 
 
+def fallback_tone_hz(x: np.ndarray, sample_rate: int = SAMPLE_RATE) -> float | None:
+    """Đỉnh phổ trong dải tone, dùng khi `estimate_tone` không đủ tự tin để báo có tín hiệu.
+
+    `estimate_tone` đòi đỉnh nhô lên `MIN_PEAK_DB` so với nền; ở 0 dB SNR kèm fading QSB thì
+    ngưỡng đó không đạt và cả clip bị trả rỗng (CER 1,0). Đoán theo đỉnh phổ kém chắc chắn hơn
+    nhiều, nhưng đo trên T1 cho 74,8 % thay vì 100 % trên đúng nhóm clip đó, nên vẫn hơn bỏ cuộc.
+    Trả `None` khi clip quá ngắn để dựng phổ.
+    """
+    if len(x) < N_FFT * 2:
+        return None
+    power, freqs = stft_power(x, sample_rate=sample_rate)
+    band = (freqs >= TONE_MIN_HZ) & (freqs <= TONE_MAX_HZ)
+    if not band.any():
+        return None
+    p90 = np.percentile(power, 90, axis=1)
+    idx = np.flatnonzero(band)
+    return float(freqs[idx[int(np.argmax(p90[band]))]])
+
+
 def estimate_tone(x: np.ndarray, sample_rate: int = SAMPLE_RATE) -> ToneEstimate:
     if len(x) < N_FFT * 2:
         return ToneEstimate(None, 0.0, False, None)

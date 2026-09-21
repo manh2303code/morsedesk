@@ -155,3 +155,23 @@ Theo kênh (greedy → LM): clean=17.87%→17.42%, mp3=15.22%→14.90%, qrm=18.4
 
 `uv run pytest -m gate` với model này (2026-09-21, 12 phút): 3 FAIL, đúng như spec §3.3 cho phép khi chưa đạt gate — `test_t1_gate_onnx` (CER greedy 26,45% > 2%); `test_t1_lm_not_worse_than_greedy_and_language_acc` (phần LM ≤ greedy đạt cho cả ba profile, trượt `language_acc` 0,584 < 0,95); `test_trained_model_roundtrip` (en đạt; ru "ПРИВЕТ МЕРН" cho "ПРИВЕТ МИР", CER 0,2 > 0,1).
 
+## Cổng dò tone: 1,46 điểm CER lấy lại được mà không cần huấn luyện (2026-09-22)
+
+`Decoder.decode_array` trả rỗng khi `estimate_tone` không đủ tự tin, áp cho mọi engine. Đo trên
+vùng gate của T1 (500 clip, SNR ≥ 0, 10–35 WPM, engine `onnx` greedy):
+
+| | CER vùng gate | Clip trả rỗng |
+|---|---|---|
+| Trước (bỏ cuộc khi không dò được tone) | 26,45 % | 29 (26 qsb, 2 clean, 1 qrn; 23 ở 0 dB) |
+| Sau (đoán tone theo đỉnh phổ dải 300–1500 Hz) | **24,99 %** | 0 |
+
+Mỗi clip rỗng tính CER 1,0, nên 29 clip đóng góp 5,8 điểm. Khi ép tone đoán, đúng nhóm 29 clip đó
+cho 74,8 % thay vì 100 %, tức lấy lại 1,46 điểm trên toàn vùng gate.
+
+Với engine `deepcw` thì cổng này còn vô lý hơn: model nghe cả dải 400–1200 Hz và không dùng ước
+lượng tone. Bỏ cổng cho riêng nó đưa CER tập `en` của T1 từ 27,23 % xuống **22,80 %** (167 clip).
+
+Đánh đổi: kết quả đoán tone mang cảnh báo "không dò được tone rõ, đang đoán theo đỉnh phổ; kết quả
+có thể sai" và độ tin cậy thấp (tô đỏ trong giao diện). Đây là **lệch spec gốc §7**, chỗ nói không
+dò được tone thì trả rỗng — đổi lại vì bỏ cuộc là chắc chắn sai, còn đoán thì sai ít hơn và người
+dùng vẫn được cảnh báo. Engine `baseline` giữ hành vi cũ: bộ giải mã DSP với tone sai chỉ ra nhiễu.
