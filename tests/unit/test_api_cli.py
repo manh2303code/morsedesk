@@ -48,9 +48,7 @@ def test_noise_only_gives_warning():
     assert any("không có tín hiệu" in w for w in r.warnings)
 
 
-def test_auto_and_unknown_engine_not_yet_supported():
-    with pytest.raises(NotImplementedError):
-        Decoder("auto")
+def test_unknown_engine_not_supported():
     with pytest.raises(NotImplementedError):
         Decoder("en", engine="foo")
 

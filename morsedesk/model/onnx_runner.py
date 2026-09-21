@@ -36,6 +36,8 @@ class OnnxAcousticModel:
         self.input_name = self.meta["input_name"]
         self.output_name = self.meta["output_name"]
         self.time_stride = int(self.meta["time_stride"])
+        self.feature_mode = str(self.meta.get("feature_mode", "clip"))
+        self.hidden = (self.meta.get("config") or {}).get("hidden")
 
     def output_length(self, t: int) -> int:
         return (t - 1) // self.time_stride + 1

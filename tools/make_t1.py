@@ -87,7 +87,8 @@ def generate_matrix(out_dir: Path, full: bool = False, clips: int = 1, seed_base
             if actual == "mp3" and ex.channel.mp3_kbps is None:
                 actual = "clean"
             rows.append({
-                "path": str(path.resolve()), "text": ex.text, "profile": profile,
+                "path": str(path.resolve()), "text": ex.text, "text_original": ex.text_original,
+                "profile": profile,
                 "snr": cell["snr"], "wpm": cell["wpm"], "keying": cell["keying"],
                 "channel": cell["channel"], "channel_actual": actual, "seed": seed,
             })

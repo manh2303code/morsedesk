@@ -8,6 +8,7 @@ from morsedesk.constants import SAMPLE_RATE
 from morsedesk.encode.synth import add_noise, elements_to_audio, tone_power
 from morsedesk.encode.text import text_to_tokens
 from morsedesk.encode.timing import TimingParams, tokens_to_elements
+from morsedesk.lm.langid import lattice_from_tokens as _lattice_from_tokens
 from morsedesk.lm.profile import load_profile
 
 
@@ -31,3 +32,9 @@ def make_morse(
     if snr_db is not None:
         audio = add_noise(audio, snr_db, tone_power(amplitude), rng=np.random.default_rng(seed))
     return audio, tokens
+
+
+def lattice_from_tokens(tokens: list[str], gap: int = 6, peak: float = 0.9,
+                        lead: int = 3) -> np.ndarray:
+    """Tái xuất `morsedesk.lm.langid.lattice_from_tokens` với mặc định rộng rãi hơn của test."""
+    return _lattice_from_tokens(tokens, gap=gap, peak=peak, lead=lead)
