@@ -78,9 +78,27 @@ def test_deepcw_low_confidence_adds_dsp_fallback():
 
 
 def test_deepcw_no_signal_returns_empty():
-    dec = Decoder("en", engine="deepcw", acoustic_model=FakeDeepCw(), lm=False)
+    """Không dò được tone VÀ model cũng không ra chữ nào -> rỗng kèm cảnh báo (spec §7)."""
+    dec = Decoder("en", engine="deepcw", acoustic_model=FakeDeepCw(text=""), lm=False)
     r = dec.decode_array(np.zeros(8000, dtype=np.float32), 8000)
     assert r.text == "" and r.words == [] and r.warnings
+
+
+def test_deepcw_decodes_even_when_tone_estimator_finds_nothing():
+    """Cổng dò tone không được chặn engine deepcw.
+
+    DeepCW nghe cả dải 400-1200 Hz và không dùng ước lượng tone. Đo được 15/167 clip `en` của T1
+    (SNR 0-3 dB, phần lớn qsb) bị cổng này trả rỗng dù model giải mã được, làm CER xấu từ 22,9 %
+    lên 27,2 %. Clip dưới đây là nhiễu trắng: `estimate_tone` không thấy tín hiệu, nhưng model
+    vẫn phải được chạy.
+    """
+    rng = np.random.default_rng(0)
+    noise = rng.normal(0.0, 0.05, 8000).astype(np.float32)
+    dec = Decoder("en", engine="deepcw", acoustic_model=FakeDeepCw(text="CQ"), lm=False)
+    r = dec.decode_array(noise, 8000)
+    assert r.text == "CQ", r.text
+    assert r.tone_hz is None                  # không dò được tone thì báo cáo trung thực là None
+    assert r.fallback_text is None            # bộ giải mã DSP cần tone, không chạy được
 
 
 def test_cli_decode_deepcw_rejects_cyrillic_profile(tmp_path, capsys):

@@ -133,17 +133,14 @@ def test_aggregate_sorts_numeric_keys():
 @pytest.mark.skipif(not Path("models/deepcw/model.onnx").exists(),
                     reason="chưa có models/deepcw/model.onnx (tools/fetch_deepcw.py)")
 def test_deepcw_engine_on_t1_en_subset():
-    """Engine deepcw phải đạt lại mốc đo qua `Decoder` thật: CER <= 29 % trên 167 clip profile
-    en của T1 v2 (lm=False; giá trị đo được 27,23 %).
+    """Engine deepcw phải đạt lại mốc đo qua `Decoder` thật: CER <= 24 % trên 167 clip profile
+    en của T1 v2 (lm=False; giá trị đo được 22,80 %, khớp mốc 22,86 % của
+    docs/research/04-pretrained-baselines.md đo bằng tools/bench_pretrained.py).
 
-    Số 22,86 % ở docs/research/04-pretrained-baselines.md đo bằng tools/bench_pretrained.py,
-    gọi thẳng `emissions_to_text()` trên log-prob của DeepCW, KHÔNG qua `decode_array()` của
-    `Decoder`. Đi qua `Decoder` thật (như CLI/GUI dùng), 15/167 clip của tập này (SNR 0-3 dB,
-    phần lớn kênh qsb) bị `estimate_tone()` coi là không có tín hiệu nên trả "" trước khi
-    `DeepCwModel` kịp chạy (CER 1.0 mỗi clip) — đây không phải lỗi khi lắp engine: đo lại đúng
-    167 clip này bằng `emissions_to_text()` thô (bỏ qua `estimate_tone()`) ra 22,80 %, khớp mốc
-    gốc; còn bước `_group_words` gộp từ không tốn thêm CER nào so với `emissions_to_text()` thô
-    (đã đo tách riêng). Chi tiết: .superpowers/sdd/qa-task-2-report.md.
+    Trước khi sửa, đi qua `Decoder` cho 27,23 % vì cổng `estimate_tone()` trả "" cho 15/167 clip
+    (SNR 0-3 dB, phần lớn kênh qsb) trước khi `DeepCwModel` kịp chạy. DeepCW nghe cả dải
+    400-1200 Hz và không dùng ước lượng tone, nên cổng đó nay không áp cho engine này
+    (`Decoder.decode_array`). Chi tiết: .superpowers/sdd/qa-task-2-report.md.
     """
     manifest = Path("testdata/generated/t1/manifest.jsonl")
     if not manifest.exists():
@@ -151,4 +148,4 @@ def test_deepcw_engine_on_t1_en_subset():
     rows = [r for r in bench.load_rows(manifest) if r.get("profile") == "en"]
     results = bench.evaluate(rows, engine="deepcw", lm=False)
     mean = sum(r["cer"] for r in results) / len(results)
-    assert mean <= 0.29, f"CER deepcw trên {len(results)} clip en = {mean:.4f}, mốc đo được 0.2723"
+    assert mean <= 0.24, f"CER deepcw trên {len(results)} clip en = {mean:.4f}, mốc đo được 0.2280"

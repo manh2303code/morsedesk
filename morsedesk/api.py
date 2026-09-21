@@ -276,7 +276,10 @@ class Decoder:
             if tone_hz is None:                     # toàn clip không dò ra tone -> cửa sổ có tín hiệu đầu tiên
                 signal = next((w for w in windows if w.has_signal), None)
                 tone_hz = signal.f0_hz if signal is not None else None
-        if tone_hz is None:
+        # Engine `deepcw` nghe cả dải 400-1200 Hz và không dùng ước lượng tone, nên không được
+        # chặn nó ở đây: đo được 15/167 clip `en` của T1 (SNR 0-3 dB, phần lớn qsb) bị cổng này
+        # trả rỗng dù DeepCW giải mã được, làm CER xấu từ 22,9 % lên 27,2 %.
+        if tone_hz is None and self.engine != "deepcw":
             return self._empty(["không có tín hiệu Morse trong đoạn âm thanh"])
         warnings = self._tone_warnings(est)
         snr_db = est.snr_db if est.has_signal else None
@@ -358,14 +361,21 @@ class Decoder:
         emissions = _strip_spaces([(tok, f, p) for tok, _, f, p in items])
         return words, emissions, out.frame_rate
 
-    def _decode_deepcw(self, x: np.ndarray, tone_hz: float, snr_db: float | None,
+    def _decode_deepcw(self, x: np.ndarray, tone_hz: float | None, snr_db: float | None,
                        warnings: list[str]) -> DecodeResult:
+        """`tone_hz` có thể là None: DeepCW không cần tone, chỉ fallback DSP và báo cáo mới cần.
+
+        Không dò được tone mà model cũng không ra chữ nào thì mới coi là không có tín hiệu, giữ
+        đúng spec §7 "không bịa chữ".
+        """
         words, emissions, frame_rate = self._deepcw_words(x)
+        if not words and tone_hz is None:
+            return self._empty(["không có tín hiệu Morse trong đoạn âm thanh"])
         confidence = float(np.mean([w.confidence for w in words])) if words else 0.0
         fallback_text = None
         if confidence < FALLBACK_CONFIDENCE:
             warnings.append("độ tin cậy thấp, kèm kết quả bộ giải mã DSP")
-            if self.fallback:
+            if self.fallback and tone_hz is not None:   # bộ giải mã DSP bắt buộc phải có tone
                 fallback_text = self.profile.render(self._baseline_tokens(x, tone_hz).tokens)
         elif confidence < LOW_CONFIDENCE:
             warnings.append("độ tin cậy thấp")
