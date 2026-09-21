@@ -36,16 +36,22 @@ import argparse
 import json
 import math
 import time
-import wave
 from collections import Counter
 from pathlib import Path
 
 import numpy as np
 
 from morsedesk.bench import aggregate, gate, load_rows, pivot_snr_wpm
-from morsedesk.data.text import translit_via_patterns
-from morsedesk.lm.profile import load_profile
 from morsedesk.metrics import cer, wer
+from morsedesk.model.deepcw import (
+    DEEPCW_MODEL_PATH,
+    Remapper,
+    audio_to_spectrogram,
+    emissions_to_text,
+    greedy_ctc_emissions,
+    read_wav_mono,
+    resample_to,
+)
 from morsedesk.textio import force_utf8_streams
 
 # T1 sinh tone theo công thức của tools/make_t1.py: seed = 1000 + index.
@@ -59,26 +65,6 @@ def tone_hz_for_seed(seed: int | None, seed_base: int = T1_SEED_BASE) -> float |
     return 500.0 + ((seed - seed_base) * 97) % 600
 
 
-def read_wav_mono(path: Path) -> tuple[int, np.ndarray]:
-    """Đọc WAV PCM -> (sample_rate, mono float32 trong [-1, 1]). Giống ví dụ của deepcw-engine."""
-    with wave.open(str(path), "rb") as wav:
-        channels = wav.getnchannels()
-        width = wav.getsampwidth()
-        rate = wav.getframerate()
-        raw = wav.readframes(wav.getnframes())
-    if width == 1:
-        audio = (np.frombuffer(raw, dtype=np.uint8).astype(np.float32) - 128.0) / 128.0
-    elif width == 2:
-        audio = np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32768.0
-    elif width == 4:
-        audio = np.frombuffer(raw, dtype="<i4").astype(np.float32) / 2147483648.0
-    else:
-        raise ValueError(f"độ rộng mẫu PCM không hỗ trợ: {width} byte")
-    if channels > 1:
-        audio = audio.reshape(-1, channels).mean(axis=1)
-    return rate, audio.astype(np.float32, copy=False)
-
-
 def resample_linear(audio: np.ndarray, src_rate: int, dst_rate: int) -> np.ndarray:
     """Nội suy tuyến tính — đúng như ví dụ tham chiếu (không chống chồng phổ)."""
     if src_rate == dst_rate or len(audio) == 0:
@@ -89,18 +75,6 @@ def resample_linear(audio: np.ndarray, src_rate: int, dst_rate: int) -> np.ndarr
     right = np.minimum(left + 1, len(audio) - 1)
     frac = (pos - left).astype(np.float32)
     return (audio[left] * (1.0 - frac) + audio[right] * frac).astype(np.float32, copy=False)
-
-
-def resample_poly(audio: np.ndarray, src_rate: int, dst_rate: int) -> np.ndarray:
-    """Resample đa pha có lọc chống chồng phổ (scipy). 8000 -> 3200 là up=2 / down=5."""
-    if src_rate == dst_rate or len(audio) == 0:
-        return audio.astype(np.float32, copy=False)
-    from math import gcd
-
-    from scipy.signal import resample_poly as _poly
-
-    g = gcd(src_rate, dst_rate)
-    return _poly(audio, dst_rate // g, src_rate // g).astype(np.float32, copy=False)
 
 
 def bandpass(audio: np.ndarray, rate: int, center_hz: float, width_hz: float, passes: int = 4) -> np.ndarray:
@@ -121,73 +95,6 @@ def bandpass(audio: np.ndarray, rate: int, center_hz: float, width_hz: float, pa
     for _ in range(passes):
         out = lfilter(b, a, out)
     return out.astype(np.float32, copy=False)
-
-
-def frequency_bin_range(rate: int, fft_length: int, min_hz: float, max_hz: float) -> tuple[int, int]:
-    bin_hz = rate / fft_length
-    return int(math.ceil(min_hz / bin_hz)), int(math.floor(max_hz / bin_hz)) + 1
-
-
-def audio_to_spectrogram(audio: np.ndarray, meta: dict) -> np.ndarray:
-    """Phổ [1, 1, time, freq] float32 cho model. Vector hóa nhưng cùng công thức với ví dụ gốc."""
-    fft_length = int(meta["fft_length"])
-    hop = int(meta["hop_length"])
-    rate = int(meta["sample_rate"])
-    bins = int(meta["spectrogram_frequency_bins"])
-    if len(audio) < fft_length:
-        raise ValueError(f"clip quá ngắn so với fft_length={fft_length}")
-    start_bin, stop_bin = frequency_bin_range(
-        rate, fft_length, float(meta["spectrogram_min_freq_hz"]), float(meta["spectrogram_max_freq_hz"])
-    )
-    if stop_bin - start_bin != bins:
-        raise ValueError(f"metadata cần {bins} bin nhưng dải tính được có {stop_bin - start_bin}")
-    padded = np.pad(audio, (fft_length // 2, fft_length // 2), mode="reflect")
-    window = np.hanning(fft_length + 1)[:-1].astype(np.float32)
-    frames = np.lib.stride_tricks.sliding_window_view(padded, fft_length)[::hop] * window
-    spec = np.abs(np.fft.rfft(frames, n=fft_length, axis=1)[:, start_bin:stop_bin]).astype(np.float32)
-    if meta.get("normalization") != "log1p":
-        raise ValueError(f"chuẩn hóa không hỗ trợ: {meta.get('normalization')}")
-    spec = np.log1p(spec, dtype=np.float32)
-    return spec[np.newaxis, np.newaxis, :, :]
-
-
-def greedy_ctc_decode(log_probs: np.ndarray, chars: list[str], blank: int) -> str:
-    path = log_probs[0].argmax(axis=-1)
-    out: list[str] = []
-    prev: int | None = None
-    for raw in path:
-        idx = int(raw)
-        if idx == blank:
-            prev = None
-            continue
-        if idx != prev:
-            out.append(chars[idx])
-        prev = idx
-    return "".join(out)
-
-
-class Remapper:
-    """Chữ Latin của DeepCW -> mẫu chấm gạch -> chữ của profile đích (ru, kk-cyrl-ru)."""
-
-    def __init__(self) -> None:
-        self._src = load_profile("en")
-        self._dst: dict[str, object] = {}
-
-    def __call__(self, text: str, profile_id: str) -> str:
-        if profile_id == "en" or not text:
-            return text
-        if profile_id not in self._dst:
-            self._dst[profile_id] = load_profile(profile_id)
-        return translit_via_patterns(text, self._src, self._dst[profile_id])
-
-    def reachable_chars(self, profile_id: str, vocab: list[str]) -> set[str]:
-        """Tập ký tự mà DeepCW có thể sinh ra sau remap, để ước lượng sàn lỗi không tránh được."""
-        got = {" "}
-        for ch in vocab:
-            if not ch.strip():
-                continue
-            got.add(self(ch, profile_id))
-        return got
 
 
 def unreachable_ratio(rows: list[dict], remap: Remapper, vocab: list[str]) -> dict[str, dict]:
@@ -215,10 +122,10 @@ def decode_one(session, meta: dict, path: Path, resampler: str,
     if band is not None:
         audio = bandpass(audio, rate, band[0], band[1])
     target = int(meta["sample_rate"])
-    audio = resample_poly(audio, rate, target) if resampler == "poly" else resample_linear(audio, rate, target)
+    audio = resample_to(audio, rate, target) if resampler == "poly" else resample_linear(audio, rate, target)
     spec = audio_to_spectrogram(audio, meta)
     out = session.run([meta["onnx_output_name"]], {meta["onnx_input_name"]: spec})
-    return greedy_ctc_decode(out[0], list(meta["chars"]), int(meta["blank_index"]))
+    return emissions_to_text(greedy_ctc_emissions(out[0], list(meta["chars"]), int(meta["blank_index"])))
 
 
 def evaluate(rows: list[dict], session, meta: dict, resampler: str, remap_cyrillic: bool,
@@ -299,8 +206,8 @@ def build_summary(results: list[dict], meta: dict, args: argparse.Namespace, ela
 def main(argv: list[str] | None = None) -> int:
     force_utf8_streams()
     ap = argparse.ArgumentParser(description="Đo DeepCW pretrain trên T1 (thước đo, không nhúng)")
-    ap.add_argument("--model", type=Path, required=True, help="deepcw-engine/model.onnx")
-    ap.add_argument("--metadata", type=Path, required=True, help="deepcw-engine/model.onnx.json")
+    ap.add_argument("--model", type=Path, default=DEEPCW_MODEL_PATH, help="mặc định models/deepcw/model.onnx")
+    ap.add_argument("--metadata", type=Path, default=None, help="mặc định <model>.json")
     ap.add_argument("--manifest", type=Path, required=True, help="manifest.jsonl của T1")
     ap.add_argument("--out-dir", type=Path, default=Path("runs/bench_deepcw"))
     ap.add_argument("--limit", type=int, default=None, help="chỉ chạy N clip đầu")
@@ -313,6 +220,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--engine-commit", default="", help="commit của bản clone deepcw-engine")
     ap.add_argument("--model-sha256", default="", help="sha256 của model.onnx")
     args = ap.parse_args(argv)
+    if args.metadata is None:
+        args.metadata = Path(str(args.model) + ".json")
 
     import onnxruntime as ort
 

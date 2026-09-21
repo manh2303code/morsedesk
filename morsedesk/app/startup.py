@@ -7,16 +7,23 @@ from pathlib import Path
 from morsedesk.api import DEFAULT_MODEL_PATH
 from morsedesk.lm.profile import list_profiles, load_profile
 from morsedesk.lm.store import default_lm_dir, lm_file_for
+from morsedesk.model.deepcw import DEEPCW_META_PATH, DEEPCW_MODEL_PATH
 
 
 def check_models(model_path: Path | None, lm_dir: Path | None, engine: str = "onnx") -> list[Path]:
-    """Danh sách file thiếu: ONNX + metadata (nếu engine onnx) rồi các .bin LM theo thứ tự profile."""
+    """Danh sách file thiếu: model của engine rồi các .bin LM theo thứ tự profile."""
     missing: list[Path] = []
     # is_file() chứ không phải exists(): một thư mục tên `acoustic.onnx` từng lọt qua kiểm
     # tra, cửa sổ mở ra rồi mới chết ở lần giải mã đầu.
     if engine == "onnx":
         onnx = Path(model_path) if model_path else DEFAULT_MODEL_PATH
         for p in (onnx, onnx.with_suffix(".json")):
+            if not p.is_file():
+                missing.append(p)
+    elif engine == "deepcw":
+        base = Path(model_path) if model_path else DEEPCW_MODEL_PATH
+        meta = Path(str(base) + ".json") if model_path else DEEPCW_META_PATH
+        for p in (base, meta):
             if not p.is_file():
                 missing.append(p)
     lm_root = Path(lm_dir) if lm_dir else default_lm_dir()
@@ -31,6 +38,7 @@ def missing_models_message(missing: list[Path]) -> str:
     lines = ["Missing model files:"] + [f"  {p}" for p in missing] + [
         "",
         "Export the acoustic model: uv run python tools/export_onnx.py --checkpoint runs/<run>/best.pt --out models/acoustic.onnx",
+        "Fetch the DeepCW model (engine deepcw): uv run python tools/fetch_deepcw.py",
         "Build the language models: see README (fetch_corpus, normalize_corpus, build_lm.sh, arpa_to_bin) or tools/train_small_lm.py",
         "Or start with --model/--lm-dir pointing to existing files.",
     ]
