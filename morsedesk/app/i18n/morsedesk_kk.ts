@@ -4,93 +4,128 @@
 <context>
     <name>DecodePage</name>
     <message>
-        <location filename="../decode_page.py" line="116" />
+        <location filename="../decode_page.py" line="119" />
         <source>Open audio file</source>
         <translation>Аудиофайлды ашу</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="118" />
+        <location filename="../decode_page.py" line="121" />
         <source>Audio files ({exts})</source>
         <translation>Аудиофайлдар ({exts})</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="175" />
-        <location filename="../decode_page.py" line="249" />
+        <location filename="../decode_page.py" line="192" />
+        <location filename="../decode_page.py" line="309" />
         <source>DSP fallback result: {text}</source>
         <translation>DSP қосалқы нәтижесі: {text}</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="214" />
+        <location filename="../decode_page.py" line="203" />
+        <source>File not found: {path}</source>
+        <translation>Файл табылмады: {path}</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="205" />
+        <source>Cannot read {path}. Supported formats: {exts}</source>
+        <translation>{path} оқылмады. Қолдау көрсетілетін пішімдер: {exts}</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="209" />
+        <source>{path} is {minutes} min long; this version supports up to {limit} min.</source>
+        <translation>{path} ұзақтығы {minutes} мин; бұл нұсқа {limit} мин дейін қолдайды.</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="211" />
+        <source>Setup problem: a model or language model file is missing or unusable.</source>
+        <translation>Орнату мәселесі: модель немесе тіл моделі файлы жоқ не жарамсыз.</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="212" />
+        <source>Internal error while decoding. See the log file for details.</source>
+        <translation>Декодтау кезінде ішкі қате. Толығырақ журнал файлында.</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="257" />
         <source>Text files (*.txt)</source>
         <translation>Мәтін файлдары (*.txt)</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="214" />
+        <location filename="../decode_page.py" line="257" />
         <source>JSON files (*.json)</source>
         <translation>JSON файлдары (*.json)</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="215" />
+        <location filename="../decode_page.py" line="258" />
         <source>Export</source>
         <translation>Экспорттау</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="230" />
+        <location filename="../decode_page.py" line="272" />
+        <source>Cannot write {path}: {detail}</source>
+        <translation>{path} жазылмады: {detail}</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="288" />
         <source>Open file…</source>
         <translation>Файлды ашу…</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="231" />
+        <location filename="../decode_page.py" line="289" />
         <source>Message language:</source>
         <translation>Хабарлама тілі:</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="233" />
+        <location filename="../decode_page.py" line="291" />
         <source>Auto</source>
         <translation>Авто</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="234" />
+        <location filename="../decode_page.py" line="292" />
         <source>English</source>
         <translation>Ағылшын</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="235" />
+        <location filename="../decode_page.py" line="293" />
         <source>Russian</source>
         <translation>Орыс</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="236" />
+        <location filename="../decode_page.py" line="294" />
         <source>Kazakh</source>
         <translation>Қазақ</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="240" />
+        <location filename="../decode_page.py" line="298" />
         <source>Use language model</source>
         <translation>Тіл моделін қолдану</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="241" />
+        <location filename="../decode_page.py" line="299" />
+        <source>Auto always uses the language model.</source>
+        <translation>«Авто» режимі әрқашан тіл моделін пайдаланады.</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="301" />
         <source>Decode</source>
         <translation>Декодтау</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="242" />
+        <location filename="../decode_page.py" line="302" />
         <source>Copy</source>
         <translation>Көшіру</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="243" />
+        <location filename="../decode_page.py" line="303" />
         <source>Export TXT…</source>
         <translation>TXT экспорттау…</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="244" />
+        <location filename="../decode_page.py" line="304" />
         <source>Export JSON…</source>
         <translation>JSON экспорттау…</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="246" />
+        <location filename="../decode_page.py" line="306" />
         <source>No file selected. Drop an audio file here.</source>
         <translation>Файл таңдалмаған. Аудиофайлды осында сүйреп апарыңыз.</translation>
     </message>

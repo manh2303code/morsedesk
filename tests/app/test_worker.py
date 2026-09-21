@@ -1,3 +1,6 @@
+import threading
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -60,10 +63,13 @@ def test_worker_reports_errors_and_stays_alive(qtbot, tiny_lm_dir, tmp_path, wav
         bad.write_text("không phải audio", encoding="utf-8")
         with qtbot.waitSignal(w.failed, timeout=30000) as blocker:
             w.request(DecodeRequest(bad, "en", False))
-        assert "bad.wav" in blocker.args[0]
+        assert blocker.args == ["unsupported", blocker.args[1], str(bad)]
+        assert "bad.wav" in blocker.args[1]
+        missing = tmp_path / "missing.wav"
         with qtbot.waitSignal(w.failed, timeout=30000) as blocker:
-            w.request(DecodeRequest(tmp_path / "missing.wav", "en", False))
-        assert "missing.wav" in blocker.args[0]
+            w.request(DecodeRequest(missing, "en", False))
+        assert blocker.args[0] == "not_found" and blocker.args[2] == str(missing)
+        assert "missing.wav" in blocker.args[1]
         result, _, _ = _run(w, qtbot, DecodeRequest(wav_cq, "en", False))    # vẫn sống
         assert result.text == "CQ DE K"
     finally:
@@ -81,7 +87,9 @@ def test_worker_rejects_files_longer_than_limit(qtbot, tiny_lm_dir, tmp_path, mo
     try:
         with qtbot.waitSignal(w.failed, timeout=30000) as blocker:
             w.request(DecodeRequest(long_wav, "en", False))
-        assert "20" in blocker.args[0]
+        # detail của too_long là số phút đã format; UI ghép thành câu qua tr()
+        assert blocker.args[0] == "too_long" and blocker.args[1].startswith("20.")
+        assert blocker.args[2] == str(long_wav)
     finally:
         w.stop()
 
@@ -126,9 +134,61 @@ def test_worker_without_lm_files_reports_failure_for_auto_only(qtbot, tmp_path, 
         if bad == "auto":
             with qtbot.waitSignal(w.failed, timeout=30000) as blocker:
                 w.request(DecodeRequest(wav_cq, "auto", True))
-            assert "en.bin" in blocker.args[0]
+            assert blocker.args[0] == "config" and "en.bin" in blocker.args[1]
         else:
             result, _, _ = _run(w, qtbot, DecodeRequest(wav_cq, "en", False))
             assert result.text == "CQ DE K"
     finally:
         w.stop()
+
+
+class _GatedWorker(DecoderWorker):
+    """`DecoderWorker` thật (hàng đợi, vòng `run`, `stop_async`); chỉ phần giải mã được thay
+    bằng một cổng chờ để test giữ worker ở trạng thái bận đúng lúc bắn thêm yêu cầu."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.gate = threading.Event()
+        self.entered = threading.Event()
+        self.handled: list[str] = []
+
+    def _handle(self, req) -> None:
+        self.entered.set()
+        assert self.gate.wait(20.0), "test không mở cổng kịp"
+        self.handled.append(Path(req.path).name)
+
+
+def test_queue_keeps_only_the_last_request_while_busy(qtbot, tiny_lm_dir, tmp_path):
+    """Bất biến trung tâm của thiết kế: hàng đợi độ dài 1 — bắn dồn thì chỉ yêu cầu cuối chạy."""
+    w = _GatedWorker(engine="baseline", model_path=None, lm_dir=tiny_lm_dir)
+    w.start()
+    try:
+        w.request(DecodeRequest(tmp_path / "a.wav", "en", False))
+        assert w.entered.wait(5.0)                      # a đang chạy -> worker bận
+        for name in ("b.wav", "c.wav", "d.wav"):        # ba yêu cầu dồn trong lúc bận
+            w.request(DecodeRequest(tmp_path / name, "en", False))
+        w.gate.set()
+        qtbot.waitUntil(lambda: len(w.handled) == 2, timeout=10000)
+        qtbot.wait(300)                                 # không có yêu cầu thứ ba nào nữa
+        assert w.handled == ["a.wav", "d.wav"]          # b và c bị yêu cầu sau thay chỗ
+    finally:
+        w.gate.set()
+        w.stop()
+    assert w.isFinished()
+
+
+def test_stop_midway_finishes_cleanly(qtbot, tiny_lm_dir, tmp_path):
+    """Xin dừng lúc đang bận: yêu cầu đang chạy vẫn xong, rồi thread kết thúc sạch."""
+    w = _GatedWorker(engine="baseline", model_path=None, lm_dir=tiny_lm_dir)
+    w.start()
+    try:
+        w.request(DecodeRequest(tmp_path / "a.wav", "en", False))
+        assert w.entered.wait(5.0)
+        w.stop_async()                                  # không chờ -> worker vẫn đang chạy
+        assert w.isRunning()
+        w.gate.set()
+        assert w.wait(10000)
+    finally:
+        w.gate.set()
+        w.stop()
+    assert w.isFinished() and not w.isRunning() and w.handled == ["a.wav"]

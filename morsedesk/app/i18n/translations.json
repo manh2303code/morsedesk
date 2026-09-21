@@ -50,7 +50,14 @@
     "Hz": "Гц",
     "s": "с",
     "Finishing the current decode; the window will close right after.": "Завершается текущее декодирование; окно закроется сразу после этого.",
-    "Estimated audio is {minutes} min long; the limit is {limit} min. Shorten the text or raise the speed.": "Расчётная длительность аудио {minutes} мин, предел {limit} мин. Сократите текст или увеличьте скорость."
+    "Estimated audio is {minutes} min long; the limit is {limit} min. Shorten the text or raise the speed.": "Расчётная длительность аудио {minutes} мин, предел {limit} мин. Сократите текст или увеличьте скорость.",
+    "File not found: {path}": "Файл не найден: {path}",
+    "Cannot read {path}. Supported formats: {exts}": "Не удалось прочитать {path}. Поддерживаемые форматы: {exts}",
+    "{path} is {minutes} min long; this version supports up to {limit} min.": "Длительность {path} — {minutes} мин; эта версия поддерживает до {limit} мин.",
+    "Setup problem: a model or language model file is missing or unusable.": "Проблема установки: файл модели или языковой модели отсутствует либо непригоден.",
+    "Internal error while decoding. See the log file for details.": "Внутренняя ошибка при декодировании. Подробности в файле журнала.",
+    "Cannot write {path}: {detail}": "Не удалось записать {path}: {detail}",
+    "Auto always uses the language model.": "Режим «Авто» всегда использует языковую модель."
   },
   "kk": {
     "MorseDesk": "MorseDesk",
@@ -103,6 +110,13 @@
     "Hz": "Гц",
     "s": "с",
     "Finishing the current decode; the window will close right after.": "Ағымдағы декодтау аяқталуда; содан кейін терезе жабылады.",
-    "Estimated audio is {minutes} min long; the limit is {limit} min. Shorten the text or raise the speed.": "Аудионың болжамды ұзақтығы {minutes} мин, шегі {limit} мин. Мәтінді қысқартыңыз немесе жылдамдықты арттырыңыз."
+    "Estimated audio is {minutes} min long; the limit is {limit} min. Shorten the text or raise the speed.": "Аудионың болжамды ұзақтығы {minutes} мин, шегі {limit} мин. Мәтінді қысқартыңыз немесе жылдамдықты арттырыңыз.",
+    "File not found: {path}": "Файл табылмады: {path}",
+    "Cannot read {path}. Supported formats: {exts}": "{path} оқылмады. Қолдау көрсетілетін пішімдер: {exts}",
+    "{path} is {minutes} min long; this version supports up to {limit} min.": "{path} ұзақтығы {minutes} мин; бұл нұсқа {limit} мин дейін қолдайды.",
+    "Setup problem: a model or language model file is missing or unusable.": "Орнату мәселесі: модель немесе тіл моделі файлы жоқ не жарамсыз.",
+    "Internal error while decoding. See the log file for details.": "Декодтау кезінде ішкі қате. Толығырақ журнал файлында.",
+    "Cannot write {path}: {detail}": "{path} жазылмады: {detail}",
+    "Auto always uses the language model.": "«Авто» режимі әрқашан тіл моделін пайдаланады."
   }
 }

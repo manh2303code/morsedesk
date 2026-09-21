@@ -25,10 +25,11 @@ from morsedesk.app.widgets.banner import Banner
 from morsedesk.app.widgets.spectrogram import SpectrogramView
 from morsedesk.app.widgets.stats_bar import StatsBar
 from morsedesk.app.widgets.word_view import WordView
-from morsedesk.app.worker import DecodeRequest, DecoderWorker, Spectrogram
+from morsedesk.app.worker import MAX_SECONDS, DecodeRequest, DecoderWorker, Spectrogram
 from morsedesk.audio.io import SUPPORTED_EXT
 
 PROFILE_CHOICES = ("auto", "en", "ru", "kk-cyrl-ru")
+MAX_MINUTES = int(MAX_SECONDS // 60)
 
 
 class DecodePage(QWidget):
@@ -41,6 +42,7 @@ class DecodePage(QWidget):
         self.result: DecodeResult | None = None
         self._path: Path | None = None
         self._t0 = 0.0
+        self._busy = False
         self.setAcceptDrops(True)
 
         self.open_button = QPushButton(self)
@@ -96,7 +98,7 @@ class DecodePage(QWidget):
 
         self.open_button.clicked.connect(self._choose_file)
         self.decode_button.clicked.connect(self._request)
-        self.profile_combo.currentIndexChanged.connect(lambda _i: self._request())
+        self.profile_combo.currentIndexChanged.connect(self._on_profile_changed)
         self.lm_check.toggled.connect(lambda _c: self._request())
         self.copy_button.clicked.connect(self._copy)
         self.export_txt_button.clicked.connect(lambda: self._export("txt"))
@@ -105,6 +107,7 @@ class DecodePage(QWidget):
         worker.result_ready.connect(self.on_result)
         worker.failed.connect(self.on_failed)
         worker.busy.connect(self.on_busy)
+        self._sync_lm_check()
         self._set_has_result(False)
         self.retranslate()
 
@@ -133,6 +136,20 @@ class DecodePage(QWidget):
         if self._path is None:
             return None
         return DecodeRequest(self._path, str(self.profile_combo.currentData()), self.lm_check.isChecked())
+
+    def _on_profile_changed(self, _index: int) -> None:
+        self._sync_lm_check()
+        self._request()
+
+    def _sync_lm_check(self) -> None:
+        """Profile `auto` bắt buộc dùng mô hình ngôn ngữ (lõi ném ValueError nếu không).
+
+        Khóa ô đánh dấu và ép bật, để tổ hợp `auto` + tắt LM không bao giờ tới được lõi.
+        """
+        auto = str(self.profile_combo.currentData()) == "auto"
+        self.lm_check.setEnabled(not auto and not self._busy)
+        if auto and not self.lm_check.isChecked():
+            self.lm_check.setChecked(True)      # toggled -> _request; hàng đợi độ dài 1 nên vô hại
 
     def _request(self) -> None:
         req = self.current_request()
@@ -179,27 +196,53 @@ class DecodePage(QWidget):
             self.fallback_label.hide()
         self._set_has_result(True)
 
-    def on_failed(self, message: str) -> None:
-        """Slot nhận `DecoderWorker.failed`: xóa kết quả cũ, hiện banner đỏ, giữ trang dùng được."""
+    def failure_message(self, code: str, detail: str) -> str:
+        """Thông điệp hiển thị cho một mã lỗi của worker, dựng hoàn toàn bằng `self.tr()`."""
+        name = self._path.name if self._path else ""
+        if code == "not_found":
+            return self.tr("File not found: {path}").format(path=name)
+        if code == "unsupported":
+            return self.tr("Cannot read {path}. Supported formats: {exts}").format(
+                path=name, exts=" ".join(SUPPORTED_EXT)
+            )
+        if code == "too_long":
+            return self.tr("{path} is {minutes} min long; this version supports up to {limit} min.").format(path=name, minutes=detail, limit=MAX_MINUTES)
+        if code == "config":
+            return self.tr("Setup problem: a model or language model file is missing or unusable.")
+        return self.tr("Internal error while decoding. See the log file for details.")
+
+    def on_failed(self, code: str, detail: str, path: str) -> None:
+        """Slot nhận `DecoderWorker.failed`: xóa kết quả cũ, hiện banner đỏ, giữ trang dùng được.
+
+        `detail` (chuỗi gốc của lõi, không dịch) thành tooltip của banner. Lỗi của file không
+        còn mở bị bỏ qua, y hệt `on_result`.
+        """
+        if self._path is None or path != str(self._path):
+            return
         self.result = None
         self.word_view.clear()
         self.spectrogram.clear()
         self.stats.set_result(None, None)
         self.fallback_label.hide()
-        self.banner.show_error(message)
+        self.banner.show_error(self.failure_message(code, detail))
+        self.banner.setToolTip(detail)
         self._set_has_result(False)
 
     def on_busy(self, flag: bool) -> None:
         """Slot nhận `DecoderWorker.busy`: khóa các điều khiển và hiện tiến trình trong lúc giải mã."""
+        self._busy = flag
         self.stats.set_busy(flag)
-        for w in (self.open_button, self.profile_combo, self.lm_check):
+        for w in (self.open_button, self.profile_combo):
             w.setEnabled(not flag)
+        self._sync_lm_check()
         self.decode_button.setEnabled(not flag and self._path is not None)
+        self._set_has_result(self.result is not None)
         self.setAcceptDrops(not flag)  # khóa cả kéo-thả trong lúc giải mã, cùng tinh thần với các nút trên
 
     def _set_has_result(self, flag: bool) -> None:
+        """Nhóm nút cần kết quả; luôn tắt lúc bận để không sao chép/xuất kết quả của file trước."""
         for b in (self.copy_button, self.export_txt_button, self.export_json_button):
-            b.setEnabled(flag)
+            b.setEnabled(flag and not self._busy)
 
     # ---- xuất ----
     def _copy(self) -> None:
@@ -217,13 +260,28 @@ class DecodePage(QWidget):
             return
         (self.export_txt if kind == "txt" else self.export_json)(Path(path))
 
-    def export_txt(self, path: Path) -> None:
-        """Ghi văn bản đã giải mã ra file UTF-8 (rỗng nếu chưa có kết quả)."""
-        Path(path).write_text(self.result.text if self.result else "", encoding="utf-8")
+    def _write_text(self, path: Path, text: str) -> bool:
+        """Ghi UTF-8; lỗi hệ thống tệp (thư mục chỉ đọc, hết chỗ) -> banner đỏ, trả `False`.
 
-    def export_json(self, path: Path) -> None:
-        """Ghi `DecodeResult.to_json()` ra file UTF-8 (`{}` nếu chưa có kết quả)."""
-        Path(path).write_text(self.result.to_json() if self.result else "{}", encoding="utf-8")
+        Trước đây `write_text` không được bắt nên xuất thất bại chỉ để lại traceback ở stderr.
+        """
+        try:
+            Path(path).write_text(text, encoding="utf-8")
+        except OSError as e:
+            self.banner.show_error(
+                self.tr("Cannot write {path}: {detail}").format(path=Path(path).name, detail=e.strerror or str(e))
+            )
+            self.banner.setToolTip(str(e))
+            return False
+        return True
+
+    def export_txt(self, path: Path) -> bool:
+        """Ghi văn bản đã giải mã ra file UTF-8 (rỗng nếu chưa có kết quả)."""
+        return self._write_text(Path(path), self.result.text if self.result else "")
+
+    def export_json(self, path: Path) -> bool:
+        """Ghi `DecodeResult.to_json()` ra file UTF-8 (rỗng thành `{}` nếu chưa có kết quả)."""
+        return self._write_text(Path(path), self.result.to_json() if self.result else "{}")
 
     # ---- i18n ----
     def retranslate(self) -> None:
@@ -238,6 +296,8 @@ class DecodePage(QWidget):
         for i in range(self.profile_combo.count()):
             self.profile_combo.setItemText(i, names[self.profile_combo.itemData(i)])
         self.lm_check.setText(self.tr("Use language model"))
+        self.lm_check.setToolTip(self.tr("Auto always uses the language model."))
+        self._sync_lm_check()
         self.decode_button.setText(self.tr("Decode"))
         self.copy_button.setText(self.tr("Copy"))
         self.export_txt_button.setText(self.tr("Export TXT…"))

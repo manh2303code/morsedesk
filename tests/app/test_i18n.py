@@ -19,7 +19,7 @@ def test_translation_table_covers_all_tr_literals():
         assert not missing, f"{lang} thiếu bản dịch: {missing}"
         for src, dst in table[lang].items():
             assert dst.strip(), f"{lang}: bản dịch rỗng cho {src!r}"
-            for field in ("{v}", "{lang}", "{text}", "{exts}", "{ext}", "{chars}", "{path}", "{conf:.2f}"):
+            for field in ("{v}", "{lang}", "{text}", "{exts}", "{ext}", "{chars}", "{path}", "{conf:.2f}", "{minutes}", "{limit}", "{detail}"):
                 assert (field in src) == (field in dst), f"{lang}: {src!r} -> {dst!r} lệch placeholder {field}"
 
 

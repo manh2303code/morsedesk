@@ -23,6 +23,19 @@ MAX_COLUMNS = 4000
 MAX_FREQ_HZ = 2000.0
 DB_FLOOR = -60.0
 
+# Mã lỗi của tín hiệu `DecoderWorker.failed`; UI dựng thông điệp bằng tr() theo mã, không
+# hiển thị thẳng chuỗi của lõi (vốn trộn Việt–Anh và không dịch được).
+FAILURE_CODES = ("not_found", "unsupported", "too_long", "config", "internal")
+
+
+class DecodeFailure(Exception):
+    """Lỗi giải mã đã phân loại: `code` thuộc `FAILURE_CODES`, `detail` là chuỗi gốc để log/tooltip."""
+
+    def __init__(self, code: str, detail: str) -> None:
+        super().__init__(detail)
+        self.code = code
+        self.detail = detail
+
 
 @dataclass
 class Spectrogram:
@@ -70,7 +83,7 @@ class DecoderWorker(QThread):
     """
 
     result_ready = Signal(object, object, str)   # DecodeResult, Spectrogram, path
-    failed = Signal(str)
+    failed = Signal(str, str, str)               # code (FAILURE_CODES), detail gốc, path
     busy = Signal(bool)
 
     def __init__(
@@ -123,17 +136,23 @@ class DecoderWorker(QThread):
         return self._decoders[key]
 
     def _handle(self, req: DecodeRequest) -> None:
+        """Giải mã một yêu cầu; lỗi đã phân loại được ném dưới dạng `DecodeFailure`."""
         path = Path(req.path)
         if not path.exists():
-            raise FileNotFoundError(f"file not found: {path}")
+            raise DecodeFailure("not_found", f"file not found: {path}")
         try:
             _, _, seconds = audio_info(path)
         except Exception as e:  # soundfile không đọc được (định dạng lạ, file hỏng)
-            raise UnsupportedAudio(f"cannot read {path.name}: {e}") from e
+            raise DecodeFailure("unsupported", f"cannot read {path.name}: {e}") from e
         if seconds > MAX_SECONDS:
-            raise ValueError(f"file is {seconds / 60:.1f} min long; this version supports up to 20 min")
+            raise DecodeFailure("too_long", f"{seconds / 60:.1f}")   # detail: số phút đã format
         decoder = self._decoder(req)
-        x, sr = load_audio(path)
+        try:
+            x, sr = load_audio(path)
+        except FileNotFoundError as e:                # file biến mất sau lần kiểm exists()
+            raise DecodeFailure("not_found", str(e)) from e
+        except UnsupportedAudio as e:
+            raise DecodeFailure("unsupported", str(e)) from e
         result: DecodeResult = decoder.decode_array(x, sr)
         spec = Spectrogram.from_audio(x, SAMPLE_RATE)
         self.result_ready.emit(result, spec, str(path))
@@ -146,11 +165,16 @@ class DecoderWorker(QThread):
             self.busy.emit(True)
             try:
                 self._handle(req)
-            except (UnsupportedAudio, FileNotFoundError, ValueError) as e:
-                self.failed.emit(str(e))
+            except DecodeFailure as e:
+                log.warning("decode failed (%s): %s", e.code, e.detail)
+                self.failed.emit(e.code, e.detail, str(req.path))
+            except (FileNotFoundError, ValueError, NotImplementedError) as e:
+                # Cài đặt sai: thiếu file LM/model, engine chưa hỗ trợ, tổ hợp profile/LM không hợp lệ.
+                log.warning("decode config error: %s", e)
+                self.failed.emit("config", str(e), str(req.path))
             except Exception as e:  # không để worker chết vì một file lạ
                 log.exception("decode failed")
-                self.failed.emit(f"internal error: {type(e).__name__}: {e}")
+                self.failed.emit("internal", f"{type(e).__name__}: {e}", str(req.path))
             finally:
                 self.busy.emit(False)
 

@@ -3,9 +3,10 @@ from pathlib import Path
 
 from PySide6.QtCore import QSettings
 
-from morsedesk.app.decode_page import PROFILE_CHOICES, DecodePage
+from morsedesk.api import DecodeResult
+from morsedesk.app.decode_page import MAX_MINUTES, PROFILE_CHOICES, DecodePage
 from morsedesk.app.settings import AppSettings
-from morsedesk.app.worker import DecodeRequest, DecoderWorker
+from morsedesk.app.worker import FAILURE_CODES, DecodeRequest, DecoderWorker
 
 
 def _page(qtbot, tiny_lm_dir, tmp_path):
@@ -17,6 +18,10 @@ def _page(qtbot, tiny_lm_dir, tmp_path):
     page.show()
     return worker, page
 
+
+
+def _result(text):
+    return DecodeResult(text, [], None, None, None, "en", {}, [], "baseline")
 
 
 def _wait_idle(qtbot, page):
@@ -107,14 +112,25 @@ def test_warnings_go_to_banner_and_fallback_visible(qtbot, tiny_lm_dir, tmp_path
         worker.stop()
 
 
-def test_on_busy_blocks_drops_and_open_button(qtbot, tiny_lm_dir, tmp_path):
+def test_on_busy_blocks_drops_open_button_and_export(qtbot, tiny_lm_dir, tmp_path):
     worker, page = _page(qtbot, tiny_lm_dir, tmp_path)
     try:
         assert page.acceptDrops() and page.open_button.isEnabled()
+        page.result = _result("A")
+        page._set_has_result(True)
+        exports = (page.copy_button, page.export_txt_button, page.export_json_button)
+        assert all(b.isEnabled() for b in exports)
         page.on_busy(True)
         assert not page.acceptDrops() and not page.open_button.isEnabled()
+        # Xuất/sao chép trong lúc giải mã file khác sẽ ghi nội dung cũ dưới tên file mới.
+        assert not any(b.isEnabled() for b in exports)
         page.on_busy(False)
         assert page.acceptDrops() and page.open_button.isEnabled()
+        assert all(b.isEnabled() for b in exports)      # khôi phục theo self.result
+        page.result = None
+        page.on_busy(True)
+        page.on_busy(False)
+        assert not any(b.isEnabled() for b in exports)
     finally:
         worker.stop()
 
@@ -147,5 +163,69 @@ def test_stale_result_for_replaced_file_is_ignored(qtbot, tiny_lm_dir, tmp_path,
         page.on_result(fresh, Spectrogram.from_audio(np.zeros(800, np.float32)), str(page._path))
         assert [lb.text() for lb in page.word_view.labels()] == ["FRESH"]
         assert page.result.text == "FRESH"
+    finally:
+        worker.stop()
+
+
+def test_auto_profile_locks_language_model_checkbox(qtbot, tiny_lm_dir, tmp_path):
+    """`auto` + tắt LM là tổ hợp lõi từ chối; giao diện không được phép tạo ra nó."""
+    # Worker cố tình không start(): test chỉ kiểm trạng thái widget, không cần giải mã thật.
+    worker = DecoderWorker(engine="baseline", model_path=None, lm_dir=tiny_lm_dir)
+    settings = AppSettings(settings=QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+    page = DecodePage(worker, settings)
+    qtbot.addWidget(page)
+    page.show()
+    page._path = tmp_path / "x.wav"
+    assert page.profile_combo.currentData() == "auto"
+    assert page.lm_check.isChecked() and not page.lm_check.isEnabled() and page.lm_check.toolTip()
+    page.profile_combo.setCurrentIndex(PROFILE_CHOICES.index("en"))
+    assert page.lm_check.isEnabled()
+    page.lm_check.setChecked(False)
+    assert page.current_request().use_lm is False
+    page.profile_combo.setCurrentIndex(PROFILE_CHOICES.index("auto"))
+    assert page.lm_check.isChecked() and not page.lm_check.isEnabled()
+    assert page.current_request() == DecodeRequest(page._path, "auto", True)
+    assert page.banner.level is None
+
+
+def test_failed_builds_translated_message_per_code_and_skips_other_files(qtbot, tiny_lm_dir, tmp_path):
+    """Banner dựng bằng tr() theo mã lỗi; chuỗi gốc chỉ nằm ở tooltip; lỗi của file khác bị bỏ qua."""
+    worker, page = _page(qtbot, tiny_lm_dir, tmp_path)
+    try:
+        page._path = tmp_path / "x.wav"
+        page.on_failed("too_long", "19.5", str(page._path))
+        assert page.banner.level == "error" and page.banner.toolTip() == "19.5"
+        assert "19.5" in page.banner.text() and str(MAX_MINUTES) in page.banner.text()
+        assert "x.wav" in page.banner.text()
+        seen = set()
+        for code in FAILURE_CODES:
+            page.on_failed(code, f"loi goc {code}", str(page._path))
+            text = page.banner.text()
+            if code != "too_long":      # too_long cố tình chèn detail (số phút) vào câu
+                assert text and f"loi goc {code}" not in text      # không đổ chuỗi lõi vào banner
+            assert page.banner.toolTip() == f"loi goc {code}"
+            seen.add(text)
+        assert len(seen) == len(FAILURE_CODES)                     # mỗi mã một thông điệp riêng
+        before = page.banner.text()
+        page.on_failed("internal", "cua file khac", str(tmp_path / "other.wav"))
+        assert page.banner.text() == before and page.banner.toolTip() != "cua file khac"
+    finally:
+        worker.stop()
+
+
+def test_export_reports_write_errors_in_banner(qtbot, tiny_lm_dir, tmp_path):
+    """Ghi hỏng (đường dẫn là thư mục) phải cho banner đỏ, không chỉ traceback ra stderr."""
+    worker, page = _page(qtbot, tiny_lm_dir, tmp_path)
+    try:
+        page._path = tmp_path / "x.wav"
+        page.result = _result("CQ")
+        blocked = tmp_path / "thu-muc"
+        blocked.mkdir()
+        assert page.export_txt(blocked) is False
+        assert page.banner.level == "error" and blocked.name in page.banner.text()
+        assert page.export_json(blocked) is False
+        out = tmp_path / "ok.json"
+        assert page.export_json(out) is True
+        assert json.loads(out.read_text(encoding="utf-8"))["text"] == "CQ"
     finally:
         worker.stop()
