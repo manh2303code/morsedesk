@@ -1,0 +1,311 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE TS>
+<TS version="2.1" language="ru_RU">
+<context>
+    <name>DecodePage</name>
+    <message>
+        <location filename="../decode_page.py" line="116" />
+        <source>Open audio file</source>
+        <translation>Открыть аудиофайл</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="118" />
+        <source>Audio files ({exts})</source>
+        <translation>Аудиофайлы ({exts})</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="175" />
+        <location filename="../decode_page.py" line="249" />
+        <source>DSP fallback result: {text}</source>
+        <translation>Резервный результат DSP: {text}</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="214" />
+        <source>Text files (*.txt)</source>
+        <translation>Текстовые файлы (*.txt)</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="214" />
+        <source>JSON files (*.json)</source>
+        <translation>Файлы JSON (*.json)</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="215" />
+        <source>Export</source>
+        <translation>Экспорт</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="230" />
+        <source>Open file…</source>
+        <translation>Открыть файл…</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="231" />
+        <source>Message language:</source>
+        <translation>Язык сообщения:</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="233" />
+        <source>Auto</source>
+        <translation>Авто</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="234" />
+        <source>English</source>
+        <translation>Английский</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="235" />
+        <source>Russian</source>
+        <translation>Русский</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="236" />
+        <source>Kazakh</source>
+        <translation>Казахский</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="240" />
+        <source>Use language model</source>
+        <translation>Использовать языковую модель</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="241" />
+        <source>Decode</source>
+        <translation>Декодирование</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="242" />
+        <source>Copy</source>
+        <translation>Копировать</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="243" />
+        <source>Export TXT…</source>
+        <translation>Экспорт TXT…</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="244" />
+        <source>Export JSON…</source>
+        <translation>Экспорт JSON…</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="246" />
+        <source>No file selected. Drop an audio file here.</source>
+        <translation>Файл не выбран. Перетащите аудиофайл сюда.</translation>
+    </message>
+</context>
+<context>
+    <name>EncodePage</name>
+    <message>
+        <location filename="../encode_page.py" line="184" />
+        <source>Unsupported characters skipped: {chars}</source>
+        <translation>Пропущены неподдерживаемые символы: {chars}</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="222" />
+        <source>Save audio</source>
+        <translation>Сохранить аудио</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="222" />
+        <source>Audio ({ext})</source>
+        <translation>Аудио ({ext})</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="242" />
+        <source>Text to encode</source>
+        <translation>Текст для кодирования</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="243" />
+        <source>Morse code:</source>
+        <translation>Код Морзе:</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="244" />
+        <source>Type text to see its Morse code.</source>
+        <translation>Введите текст, чтобы увидеть код Морзе.</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="245" />
+        <source>English</source>
+        <translation>Английский</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="245" />
+        <source>Russian</source>
+        <translation>Русский</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="245" />
+        <source>Kazakh</source>
+        <translation>Казахский</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="251" />
+        <source>Profile:</source>
+        <translation>Профиль:</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="252" />
+        <source>Speed (WPM):</source>
+        <translation>Скорость (WPM):</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="253" />
+        <source>Farnsworth (WPM):</source>
+        <translation>Фарнсворт (WPM):</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="254" />
+        <source>Weight:</source>
+        <translation>Вес:</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="255" />
+        <source>Tone (Hz):</source>
+        <translation>Тон (Гц):</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="256" />
+        <source>Add noise, SNR (dB):</source>
+        <translation>Добавить шум, ОСШ (дБ):</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="257" />
+        <source>Format:</source>
+        <translation>Формат:</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="262" />
+        <source>Play</source>
+        <translation>Воспроизвести</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="263" />
+        <source>Stop</source>
+        <translation>Стоп</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="264" />
+        <source>Save…</source>
+        <translation>Сохранить…</translation>
+    </message>
+</context>
+<context>
+    <name>MainWindow</name>
+    <message>
+        <location filename="../main_window.py" line="87" />
+        <source>MorseDesk</source>
+        <translation>MorseDesk</translation>
+    </message>
+    <message>
+        <location filename="../main_window.py" line="88" />
+        <source>UI language:</source>
+        <translation>Язык интерфейса:</translation>
+    </message>
+    <message>
+        <location filename="../main_window.py" line="89" />
+        <source>Decode</source>
+        <translation>Декодирование</translation>
+    </message>
+    <message>
+        <location filename="../main_window.py" line="90" />
+        <source>Encode</source>
+        <translation>Кодирование</translation>
+    </message>
+</context>
+<context>
+    <name>SpectrogramView</name>
+    <message>
+        <location filename="../widgets/spectrogram.py" line="35" />
+        <source>s</source>
+        <translation>с</translation>
+    </message>
+    <message>
+        <location filename="../widgets/spectrogram.py" line="36" />
+        <source>Hz</source>
+        <translation>Гц</translation>
+    </message>
+</context>
+<context>
+    <name>StatsBar</name>
+    <message>
+        <location filename="../widgets/stats_bar.py" line="34" />
+        <source>English</source>
+        <translation>Английский</translation>
+    </message>
+    <message>
+        <location filename="../widgets/stats_bar.py" line="35" />
+        <source>Russian</source>
+        <translation>Русский</translation>
+    </message>
+    <message>
+        <location filename="../widgets/stats_bar.py" line="36" />
+        <source>Kazakh</source>
+        <translation>Казахский</translation>
+    </message>
+    <message>
+        <location filename="../widgets/stats_bar.py" line="37" />
+        <source>Auto</source>
+        <translation>Авто</translation>
+    </message>
+    <message>
+        <location filename="../widgets/stats_bar.py" line="40" />
+        <source>not detected</source>
+        <translation>не определён</translation>
+    </message>
+    <message>
+        <location filename="../widgets/stats_bar.py" line="58" />
+        <source>No result yet.</source>
+        <translation>Результата пока нет.</translation>
+    </message>
+    <message>
+        <location filename="../widgets/stats_bar.py" line="63" />
+        <source>WPM {v}</source>
+        <translation>WPM {v}</translation>
+    </message>
+    <message>
+        <location filename="../widgets/stats_bar.py" line="64" />
+        <source>Tone {v}</source>
+        <translation>Тон {v}</translation>
+    </message>
+    <message>
+        <location filename="../widgets/stats_bar.py" line="65" />
+        <source>SNR {v}</source>
+        <translation>ОСШ {v}</translation>
+    </message>
+    <message>
+        <location filename="../widgets/stats_bar.py" line="68" />
+        <source>{v} s</source>
+        <translation>{v} с</translation>
+    </message>
+    <message>
+        <location filename="../widgets/stats_bar.py" line="72" />
+        <source>{lang} (auto)</source>
+        <translation>{lang} (авто)</translation>
+    </message>
+    <message>
+        <location filename="../widgets/stats_bar.py" line="78" />
+        <source>Language: {lang}</source>
+        <translation>Язык: {lang}</translation>
+    </message>
+</context>
+<context>
+    <name>WordLabel</name>
+    <message>
+        <location filename="../widgets/word_view.py" line="41" />
+        <source>confidence {conf:.2f} · {start:.2f}–{end:.2f} s</source>
+        <translation>уверенность {conf:.2f} · {start:.2f}–{end:.2f} с</translation>
+    </message>
+</context>
+<context>
+    <name>WordView</name>
+    <message>
+        <location filename="../widgets/word_view.py" line="94" />
+        <source>Open an audio file to decode.</source>
+        <translation>Откройте аудиофайл для декодирования.</translation>
+    </message>
+</context>
+</TS>
