@@ -84,10 +84,56 @@ def test_warnings_go_to_banner_and_fallback_visible(qtbot, tiny_lm_dir, tmp_path
 
     worker, page = _page(qtbot, tiny_lm_dir, tmp_path)
     try:
+        # on_result giờ chỉ áp dụng kết quả khớp với file đang mở (self._path) -> đặt trước
+        # để test không đụng tới đường dẫn thật (không cần load_file/giải mã thật).
+        page._path = tmp_path / "x.wav"
         r = DecodeResult("A", [Word("A", 0.0, 0.2, 0.3)], None, 700.0, None, "", {}, ["độ tin cậy thấp"], "onnx", "B")
         page.on_result(r, Spectrogram.from_audio(np.zeros(800, np.float32)), str(tmp_path / "x.wav"))
         assert page.banner.level == "warning" and "độ tin cậy thấp" in page.banner.text()
         assert not page.fallback_label.isHidden() and "B" in page.fallback_label.text()
         assert page.stats.language_label("") in page.stats.text()
+    finally:
+        worker.stop()
+
+
+def test_on_busy_blocks_drops_and_open_button(qtbot, tiny_lm_dir, tmp_path):
+    worker, page = _page(qtbot, tiny_lm_dir, tmp_path)
+    try:
+        assert page.acceptDrops() and page.open_button.isEnabled()
+        page.on_busy(True)
+        assert not page.acceptDrops() and not page.open_button.isEnabled()
+        page.on_busy(False)
+        assert page.acceptDrops() and page.open_button.isEnabled()
+    finally:
+        worker.stop()
+
+
+def test_stale_result_for_replaced_file_is_ignored(qtbot, tiny_lm_dir, tmp_path, wav_cq):
+    import numpy as np
+
+    from morsedesk.api import DecodeResult, Word
+    from morsedesk.app.worker import Spectrogram
+
+    worker, page = _page(qtbot, tiny_lm_dir, tmp_path)
+    try:
+        with qtbot.waitSignal(worker.result_ready, timeout=60000):
+            page.load_file(wav_cq)
+        qtbot.waitUntil(lambda: page.result is not None, timeout=5000)
+        words_before = [lb.text() for lb in page.word_view.labels()]
+        stats_before = page.stats.text()
+
+        # Kết quả trễ của một file khác (vd. file A trả lời sau khi người dùng đã kéo-thả
+        # file B) -> phải bị bỏ qua, không được vẽ đè lên UI của file đang mở.
+        stale = DecodeResult("STALE", [Word("STALE", 0.0, 0.5, 0.9)], None, 700.0, None, "", {}, [], "onnx")
+        page.on_result(stale, Spectrogram.from_audio(np.zeros(800, np.float32)), str(tmp_path / "other.wav"))
+        assert [lb.text() for lb in page.word_view.labels()] == words_before
+        assert page.stats.text() == stats_before
+        assert page.result.text == "CQ DE K"
+
+        # Kết quả đúng của file đang mở thì phải được áp dụng bình thường.
+        fresh = DecodeResult("FRESH", [Word("FRESH", 0.0, 0.5, 0.9)], None, 700.0, None, "", {}, [], "onnx")
+        page.on_result(fresh, Spectrogram.from_audio(np.zeros(800, np.float32)), str(page._path))
+        assert [lb.text() for lb in page.word_view.labels()] == ["FRESH"]
+        assert page.result.text == "FRESH"
     finally:
         worker.stop()

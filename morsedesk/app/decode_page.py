@@ -157,6 +157,10 @@ class DecodePage(QWidget):
     # ---- kết quả ----
     def on_result(self, result: DecodeResult, spec: Spectrogram, path: str) -> None:
         """Slot nhận `DecoderWorker.result_ready`: cập nhật mọi widget hiển thị kết quả."""
+        if self._path is None or path != str(self._path):
+            # Kết quả trễ của file đã bị thay (vd. do một load_file khác chen vào trước khi
+            # worker kịp trả lời) -> bỏ qua, tránh vẽ đè kết quả sai lên file đang mở.
+            return
         self.result = result
         self.word_view.set_words(result.words)
         self.spectrogram.set_spectrogram(spec)
@@ -191,6 +195,7 @@ class DecodePage(QWidget):
         for w in (self.open_button, self.profile_combo, self.lm_check):
             w.setEnabled(not flag)
         self.decode_button.setEnabled(not flag and self._path is not None)
+        self.setAcceptDrops(not flag)  # khóa cả kéo-thả trong lúc giải mã, cùng tinh thần với các nút trên
 
     def _set_has_result(self, flag: bool) -> None:
         for b in (self.copy_button, self.export_txt_button, self.export_json_button):
