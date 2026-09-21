@@ -148,14 +148,35 @@ Ghi lại sau khi chạy Task 1–7. Mỗi mục là lệch so với mục 2 ở
 - `DecodePage` được gia cố ngoài mục 2.4 sau review: `on_result` bỏ qua kết quả không khớp file đang mở, và `on_busy` khóa cả kéo-thả. Không có việc này thì thả file B trong lúc giải mã file A sẽ vẽ kết quả A dưới tên B (và xuất ra file sai nội dung).
 - Tên định dạng lưu ("WAV", "FLAC", "OGG") không qua `self.tr()`: là tên định dạng file, giữ nguyên ở cả ba ngôn ngữ.
 
+**Lệch so với mục 2 (phát hiện khi review toàn nhánh)**
+
+- `startup.check_models` đòi **cả** `acoustic.onnx` lẫn `acoustic.json` (metadata của model), mục 2.2 chỉ nói tới file ONNX. Thư mục trùng tên cũng bị coi là thiếu (`is_file()`, không phải `exists()`).
+- Không sinh `morsedesk_en.ts`: tiếng Anh là ngôn ngữ nguồn, `tools/build_i18n.py` chỉ dựng `ru` và `kk` (mục 2.2/2.6 có nhắc `morsedesk_en.ts` "để làm mốc").
+- `CharMap` bị **ẩn hoàn toàn** với profile `en` (mục 2.5 chỉ nói nhóm Kazakh ẩn khi không phải `kk`).
+- `path_label` **không** elide đường dẫn dài như mục 2.4; `fallback_text` hiện trong một `QLabel` phẳng có word-wrap, không phải "khối mở rộng được"; trạng thái bận **không** đổi con trỏ chuột thành con trỏ chờ.
+- `MainWindow` có thêm một `Banner` mức cửa sổ (mục 2.2 đã dự tính) dùng cho thông báo lúc hoãn đóng cửa sổ.
+- Extra `gui` khai `PySide6-Essentials>=6.6,<7` thay cho meta `PySide6>=6.6` của mục 2.1 (meta kéo theo `PySide6-Addons` với QtCharts/QtDataVisualization/QtGraphs/QtWebEngine — không LGPL, mà dự án đóng nguồn), và `pyqtgraph>=0.13,<0.15` có trần.
+- Tất cả thông điệp lỗi của `DecoderWorker` đi qua `failed(code, detail, path)` với `code` thuộc `FAILURE_CODES`; `DecodePage` dựng câu bằng `tr()`, `detail` chỉ làm tooltip. Mục 2.3 vẽ `failed(message)`.
+
 **Hành vi phát hiện khi chạy**
 
 - Profile `ru` và `kk-cyrl-ru` không chứa chữ Latin, nên gõ văn bản Latin ở tab Tạo mã rồi đổi sang hai profile này sẽ cảnh báo "ký tự không hỗ trợ" cho từng chữ Latin, không phải chuyển tự. Đây là hệ quả đúng của bảng mã, cần nhớ khi viết test.
-- Đóng cửa sổ trong lúc đang giải mã sẽ chờ yêu cầu hiện tại chạy xong (`DecoderWorker.stop()` chờ tối đa 10 giây) trước khi thoát. Với file ngắn là tức thì; file dài vẫn có độ trễ.
-- Trong lúc giải mã file mới, kết quả cũ vẫn hiển thị dưới tên file mới cho tới khi có kết quả; các điều khiển bị khóa và StatsBar hiện tiến trình. Chấp nhận ở tuần 4.
+- Đóng cửa sổ trong lúc đang giải mã: `closeEvent` gọi `DecoderWorker.stop_async()` rồi chờ ngắn 500 ms; nếu yêu cầu hiện tại chưa xong thì **hoãn đóng** (`event.ignore()`), khóa `QTabWidget`, hiện banner "đang hoàn tất giải mã" và nối `worker.finished` vào `close()`. Cửa sổ đóng ngay khi worker kết thúc. QThread không bao giờ bị hủy khi đang chạy (trước khi sửa, file dài hơn ~1 phút làm tiến trình chết `0xC0000409`).
+- Trong lúc giải mã file mới, kết quả cũ vẫn hiển thị dưới tên file mới cho tới khi có kết quả. Các điều khiển bị khóa là: "Mở file…", combo ngôn ngữ bản tin, ô "Dùng mô hình ngôn ngữ", "Giải mã", ba nút "Sao chép"/"Xuất TXT…"/"Xuất JSON…" và cả kéo-thả; StatsBar hiện thanh tiến trình vô định. Chấp nhận ở tuần 4.
 
 **Kiểm chứng Task 7 (2026-09-21, engine ONNX thật + 3 LM thật, offscreen)**
 
 29/29 mục kiểm đạt, gồm: mở file T1 và giải mã 0,55 giây lần đầu (đã gồm nạp ONNX + LM) và 0,41 giây các lần sau; StatsBar đủ WPM/tone/SNR; spectrogram có vạch tone; đổi profile Kazakh cho ra Cyrillic; profile Tự động trả đủ điểm ba ngôn ngữ và tooltip; kéo thả file `.wav` chạy, kéo thả `README.md` bị từ chối ở `dragEnterEvent` và cho banner đỏ khi ép nạp; xuất TXT/JSON đúng; đổi giao diện en → ru → kk → en đổi nhãn ngay và lưu vào `QSettings`; tab Tạo mã gõ "СӘЛЕМ" bằng bảng ký tự, lưu WAV rồi giải mã lại đúng "СӘЛЕМ"; đóng cửa sổ dừng worker dưới 2 giây.
 
 Hai điều chưa kiểm được bằng cách này: chữ hiển thị (Qt headless không có font nên mọi ký tự vẽ thành ô vuông — càng cho thấy phải đóng gói DejaVu/Noto như §4 spec gốc yêu cầu, việc của tuần 6) và âm thanh phát ra loa thật.
+
+**Đợt sửa sau hai vòng review (`.superpowers/sdd/fix-list-week4.md`)**
+
+Đã sửa: đóng cửa sổ giữa lúc giải mã không còn hủy QThread; tab Tạo mã ước lượng thời lượng trước khi dựng audio và dùng chung trần 20 phút với tab Giải mã; `save_audio` chỉ ép `PCM_16` cho container PCM nên lưu OGG chạy được (sửa cả `morsedesk encode --out`); ô "Dùng mô hình ngôn ngữ" bị khóa khi profile là `auto`; thông điệp lỗi dựng bằng `tr()` theo mã; `on_failed` bỏ qua lỗi của file không còn mở; xuất TXT/JSON báo lỗi ghi file; nút xuất/sao chép bị khóa lúc bận; Nghe thử báo lỗi tham số timing như Lưu; không còn cắt tên file có dấu chấm; log ghi vào `AppDataLocation` đúng; `check_models` đòi file thật; `last_dir` hỏng trả về thư mục nhà; phụ thuộc đổi sang `PySide6-Essentials` (tránh module Qt chỉ-GPL) và đặt trần `pyqtgraph<0.15`.
+
+**Giới hạn còn lại sau đợt sửa (để tuần 5–6)**
+
+- Thả nhiều file cùng lúc: chỉ nhận file đầu, không báo gì (`decode_page.dropEvent`).
+- Sát trần 20 phút vẫn nặng: file 19,5 phút mất **3,7 phút** và **~2,1 GB** RAM, trong suốt thời gian đó chỉ có thanh tiến trình vô định, chưa có nút Hủy. Chế độ live, nút Hủy và tiến trình theo phần trăm thuộc tuần 5.
+- Hồ sơ giấy phép bên thứ ba (văn bản LGPL cho Qt, cam kết relink, đóng gói font DejaVu/Noto) là việc chặn tuần 6, cùng lúc dựng AppImage.
+- Bản dịch `ru`/`kk` chưa có người bản ngữ soát (phong cách nút, "SNR" so với "ОСШ").
