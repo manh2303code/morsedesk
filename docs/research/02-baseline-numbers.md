@@ -153,5 +153,5 @@ SNR\WPM    12.0    18.0    25.0    35.0
 
 Theo kênh (greedy → LM): clean=17.87%→17.42%, mp3=15.22%→14.90%, qrm=18.41%→16.40%, qrn=18.43%→17.07%, qsb=62.34%→60.55%. Theo profile (greedy en/ru/kk-text → LM en/ru/kk-orig): 27.89%/27.49%/23.97% → 23.67%/26.45%/25.69%.
 
-`uv run pytest -m gate` với model này: <điền sau khi chạy>
+`uv run pytest -m gate` với model này (2026-09-21, 12 phút): 3 FAIL, đúng như spec §3.3 cho phép khi chưa đạt gate — `test_t1_gate_onnx` (CER greedy 26,45% > 2%); `test_t1_lm_not_worse_than_greedy_and_language_acc` (phần LM ≤ greedy đạt cho cả ba profile, trượt `language_acc` 0,584 < 0,95); `test_trained_model_roundtrip` (en đạt; ru "ПРИВЕТ МЕРН" cho "ПРИВЕТ МИР", CER 0,2 > 0,1).
 
