@@ -262,7 +262,14 @@ class EncodePage(QWidget):
         """Chỗ dựng audio dùng chung cho Nghe thử và Lưu: lỗi -> banner đỏ qua tr(), trả `None`.
 
         Trước đây Lưu hiện banner còn Nghe thử nuốt ngoại lệ nên bấm không thấy gì xảy ra.
+
+        Ngưỡng 20 phút được kiểm lại ngay tại đây chứ không chỉ dựa vào việc nút bị vô hiệu:
+        nút tắt chỉ là chỉ dẫn giao diện, còn `play()`/`save_to()` là API công khai của trang
+        (test và mã tương lai gọi thẳng). Thiếu chốt này, một lần gọi trực tiếp vẫn cấp phát
+        mảng nhiều GB.
         """
+        if self._over_limit_seconds() is not None:
+            return None          # banner cảnh báo đã do _over_limit_seconds hiện
         try:
             return self.build_audio()
         except ValueError as e:          # TimingParams: Farnsworth > WPM, weight/wpm ngoài miền

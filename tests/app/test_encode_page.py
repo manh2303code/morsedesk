@@ -136,6 +136,12 @@ def test_text_over_duration_limit_disables_audio_without_building_it(qtbot, tmp_
     page.play_button.click()
     page.save_button.click()
     assert calls == []
+    # Gọi thẳng API công khai (không qua nút đã bị vô hiệu) cũng không được dựng audio.
+    page.play()
+    page.save_to(tmp_path / "qua-dai.wav")
+    assert calls == []
+    assert not (tmp_path / "qua-dai.wav").exists()
+    assert page.banner.level == "warning"
     page.text_edit.setPlainText("SOS")                    # về dưới ngưỡng -> bật lại, xóa banner
     assert page.play_button.isEnabled() and page.save_button.isEnabled()
     assert page.banner.level is None
