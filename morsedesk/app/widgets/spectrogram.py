@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import QRectF
+from PySide6.QtCore import QEvent, QRectF
 
 from morsedesk.app.worker import DB_FLOOR, MAX_FREQ_HZ, Spectrogram
 
@@ -17,8 +17,7 @@ class SpectrogramView(pg.PlotWidget):
         # PlotWidget.__init__ gán self.clear = plotItem.clear làm thuộc tính instance
         # (che mất phương thức clear() của lớp con này); bỏ nó để clear() bên dưới có hiệu lực.
         self.__dict__.pop("clear", None)
-        self.setLabel("bottom", "s")
-        self.setLabel("left", "Hz")
+        self.retranslate()
         self.setYRange(0, MAX_FREQ_HZ, padding=0)
         self.setMouseEnabled(x=True, y=False)
         self.image = pg.ImageItem()
@@ -31,6 +30,15 @@ class SpectrogramView(pg.PlotWidget):
         self.cursor_line.setVisible(False)
         self.addItem(self.cursor_line)
         self.word_lines: list[pg.InfiniteLine] = []
+
+    def retranslate(self) -> None:
+        self.setLabel("bottom", self.tr("s"))
+        self.setLabel("left", self.tr("Hz"))
+
+    def changeEvent(self, event: QEvent) -> None:  # noqa: N802 (tên Qt)
+        if event.type() == QEvent.Type.LanguageChange:
+            self.retranslate()
+        super().changeEvent(event)
 
     def set_spectrogram(self, spec: Spectrogram | None) -> None:
         """Vẽ spectrogram mới; `None` hoặc rỗng (audio 0 mẫu) chỉ xóa ảnh, không lỗi."""

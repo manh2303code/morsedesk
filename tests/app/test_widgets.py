@@ -1,5 +1,6 @@
 import numpy as np
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt
+from PySide6.QtWidgets import QApplication
 
 from morsedesk.api import DecodeResult, Encoder, Word
 from morsedesk.app.widgets.banner import Banner
@@ -99,3 +100,22 @@ def test_spectrogram_view_sets_image_tone_marks(qtbot):
     v.clear()
     assert v.image.image is None and v.word_lines == [] and not v.cursor_line.isVisible()
     v.set_spectrogram(Spectrogram.from_audio(np.zeros(0, np.float32)))   # rỗng không lỗi
+
+
+def test_language_change_event_triggers_retranslate(qtbot):
+    widgets = [WordView(), StatsBar(), SpectrogramView()]
+    calls: dict[str, int] = {}
+    for w in widgets:
+        qtbot.addWidget(w)
+        name = type(w).__name__
+        original = w.retranslate
+
+        def counted(name=name, original=original):
+            calls[name] = calls.get(name, 0) + 1
+            original()
+
+        w.retranslate = counted
+        QApplication.sendEvent(w, QEvent(QEvent.Type.LanguageChange))
+    assert calls == {"WordView": 1, "StatsBar": 1, "SpectrogramView": 1}
+    view = widgets[2]
+    assert view.getAxis("bottom").labelText == "s" and view.getAxis("left").labelText == "Hz"
