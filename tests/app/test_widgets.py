@@ -19,8 +19,12 @@ def test_banner_levels_and_close(qtbot):
     assert b.level == "error" and b.text() == "boom" and not b.isHidden()
     b.show_warning("careful")
     assert b.level == "warning" and b.text() == "careful"
+    b.setToolTip("chi tiet")
+    b.show_warning("again")
+    assert b.toolTip() == ""            # tooltip của lần trước không được sót lại
+    b.setToolTip("chi tiet")
     b.close_button.click()
-    assert b.level is None and b.isHidden()
+    assert b.level is None and b.isHidden() and b.toolTip() == ""
 
 
 def test_confidence_colors_thresholds():

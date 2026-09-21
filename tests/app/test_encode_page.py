@@ -139,3 +139,41 @@ def test_text_over_duration_limit_disables_audio_without_building_it(qtbot, tmp_
     page.text_edit.setPlainText("SOS")                    # về dưới ngưỡng -> bật lại, xóa banner
     assert page.play_button.isEnabled() and page.save_button.isEnabled()
     assert page.banner.level is None
+
+
+def test_farnsworth_above_wpm_errors_for_both_play_and_save(qtbot, tmp_path, monkeypatch):
+    """Farnsworth > WPM: cả Nghe thử lẫn Lưu phải cho banner đỏ bằng tr(), không im lặng."""
+    import sounddevice as sd
+
+    calls = []
+    monkeypatch.setattr(sd, "play", lambda x, sr, **kw: calls.append("play"))
+    page = _page(qtbot, tmp_path)
+    page.text_edit.setPlainText("SOS")
+    page.wpm_spin.setValue(10)
+    page.farnsworth_check.setChecked(True)
+    page.farnsworth_spin.setValue(30)
+    page.play_button.click()
+    assert page.banner.level == "error" and calls == []
+    assert "farnsworth_wpm" not in page.banner.text()        # thông điệp của tr(), không phải chuỗi lõi
+    assert "farnsworth_wpm" in page.banner.toolTip()
+    page.banner.clear()
+    out = tmp_path / "x.wav"
+    page.save_to(out)
+    assert page.banner.level == "error" and not out.exists()
+    page.farnsworth_spin.setValue(5)                         # hợp lệ trở lại
+    page.save_to(out)
+    assert out.exists() and page.banner.level is None
+
+
+def test_save_to_keeps_dots_in_file_names(qtbot, tmp_path):
+    """with_suffix từng cắt "toc do 1.5 wpm" thành "toc do 1.wav" và đè file khác."""
+    page = _page(qtbot, tmp_path)
+    page.text_edit.setPlainText("E")
+    page.save_to(tmp_path / "toc do 1.5 wpm")
+    assert (tmp_path / "toc do 1.5 wpm.wav").exists()
+    assert not (tmp_path / "toc do 1.wav").exists()
+    page.save_to(tmp_path / "a.b.wav")                       # đuôi đã đúng -> giữ nguyên
+    assert (tmp_path / "a.b.wav").exists()
+    page.format_combo.setCurrentIndex(page.format_combo.findData(".flac"))
+    assert page.format_path(tmp_path / "a.b.wav") == tmp_path / "a.b.flac"   # đuôi audio -> thay
+    assert page.format_path(tmp_path / "toc do 1.5 wpm") == tmp_path / "toc do 1.5 wpm.flac"

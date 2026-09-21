@@ -30,6 +30,7 @@ class Banner(QFrame):
     def _show(self, level: str, text: str) -> None:
         self.level = level
         self._label.setText(text)
+        self.setToolTip("")     # người gọi tự đặt tooltip sau; không để sót tooltip của lần trước
         self.setStyleSheet(f"Banner {{ {_STYLE[level]} }}")
         self.show()
 
@@ -45,6 +46,7 @@ class Banner(QFrame):
         """Xóa nội dung và ẩn banner (cũng là handler của nút đóng)."""
         self.level = None
         self._label.setText("")
+        self.setToolTip("")
         self.hide()
 
     def text(self) -> str:

@@ -26,7 +26,7 @@ from morsedesk.app.settings import AppSettings
 from morsedesk.app.widgets.banner import Banner
 from morsedesk.app.widgets.charmap import CharMap
 from morsedesk.app.worker import MAX_SECONDS, Player
-from morsedesk.audio.io import save_audio
+from morsedesk.audio.io import SUPPORTED_EXT, save_audio
 from morsedesk.constants import SAMPLE_RATE
 from morsedesk.encode.text import normalize
 from morsedesk.encode.timing import TimingParams, tokens_to_elements, total_seconds
@@ -35,6 +35,8 @@ from morsedesk.lm.profile import Profile, load_profile
 FORMATS = (("WAV", ".wav"), ("FLAC", ".flac"), ("OGG", ".ogg"))
 PROFILES = ("en", "ru", "kk-cyrl-ru")
 PAD_S = 0.3         # `Encoder.to_audio` đệm im lặng PAD_S giây ở mỗi đầu (mặc định của lõi)
+# Đuôi được coi là "đuôi audio biết trước" khi đổi định dạng lưu; đuôi lạ thì nối thêm.
+AUDIO_SUFFIXES = frozenset(SUPPORTED_EXT) | {ext for _, ext in FORMATS}
 MAX_MINUTES = int(MAX_SECONDS // 60)    # dùng chung ngưỡng 20 phút với phía giải mã
 
 
@@ -256,9 +258,28 @@ class EncodePage(QWidget):
             strict=False,
         )
 
+    def audio_or_error(self) -> np.ndarray | None:
+        """Chỗ dựng audio dùng chung cho Nghe thử và Lưu: lỗi -> banner đỏ qua tr(), trả `None`.
+
+        Trước đây Lưu hiện banner còn Nghe thử nuốt ngoại lệ nên bấm không thấy gì xảy ra.
+        """
+        try:
+            return self.build_audio()
+        except ValueError as e:          # TimingParams: Farnsworth > WPM, weight/wpm ngoài miền
+            self.banner.show_error(self.tr("Invalid timing settings: the Farnsworth speed must not exceed the speed in WPM."))
+            self.banner.setToolTip(str(e))
+        except Exception as e:           # lỗi lạ khi dựng audio (vd. hết bộ nhớ)
+            self.banner.show_error(self.tr("Could not build the audio."))
+            self.banner.setToolTip(str(e))
+        return None
+
     def play(self) -> None:
         self.banner.clear()
-        err = self.player.play(self.build_audio(), SAMPLE_RATE)
+        self._limit_banner = False
+        x = self.audio_or_error()
+        if x is None:
+            return
+        err = self.player.play(x, SAMPLE_RATE)
         if err:
             self.banner.show_warning(err)
 
@@ -274,18 +295,33 @@ class EncodePage(QWidget):
         if path:
             self.save_to(Path(path))
 
-    def save_to(self, path: Path) -> None:
+    def format_path(self, path: Path) -> Path:
+        """Đặt đuôi theo định dạng đang chọn.
+
+        Chỉ **thay** đuôi khi đuôi hiện tại nằm trong `AUDIO_SUFFIXES`; ngược lại **nối thêm**.
+        `Path.with_suffix` cắt phần sau dấu chấm cuối nên "toc do 1.5 wpm" từng thành
+        "toc do 1.wav" — đè một file khác mà hộp thoại chưa hề hỏi.
+        """
         path = Path(path)
         ext = str(self.format_combo.currentData())
-        if path.suffix.lower() != ext:
-            path = path.with_suffix(ext)
+        if path.suffix.lower() == ext:
+            return path
+        return path.with_suffix(ext) if path.suffix.lower() in AUDIO_SUFFIXES else path.with_name(path.name + ext)
+
+    def save_to(self, path: Path) -> None:
+        path = self.format_path(path)
+        x = self.audio_or_error()
+        if x is None:
+            return
         try:
-            save_audio(path, self.build_audio(), SAMPLE_RATE)
+            save_audio(path, x, SAMPLE_RATE)
         except Exception as e:  # soundfile báo lỗi định dạng/quyền ghi
-            self.banner.show_error(str(e))
+            self.banner.show_error(self.tr("Cannot write {path}: {detail}").format(path=path.name, detail=getattr(e, "strerror", None) or e))
+            self.banner.setToolTip(str(e))
             return
         self.settings.last_dir = str(path.parent)
         self.banner.clear()
+        self._limit_banner = False
 
     # ---- i18n ----
     def retranslate(self) -> None:

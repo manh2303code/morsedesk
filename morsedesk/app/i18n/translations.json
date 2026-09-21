@@ -57,7 +57,9 @@
     "Setup problem: a model or language model file is missing or unusable.": "Проблема установки: файл модели или языковой модели отсутствует либо непригоден.",
     "Internal error while decoding. See the log file for details.": "Внутренняя ошибка при декодировании. Подробности в файле журнала.",
     "Cannot write {path}: {detail}": "Не удалось записать {path}: {detail}",
-    "Auto always uses the language model.": "Режим «Авто» всегда использует языковую модель."
+    "Auto always uses the language model.": "Режим «Авто» всегда использует языковую модель.",
+    "Invalid timing settings: the Farnsworth speed must not exceed the speed in WPM.": "Неверные параметры тайминга: скорость Фарнсворта не должна превышать скорость в WPM.",
+    "Could not build the audio.": "Не удалось построить аудио."
   },
   "kk": {
     "MorseDesk": "MorseDesk",
@@ -117,6 +119,8 @@
     "Setup problem: a model or language model file is missing or unusable.": "Орнату мәселесі: модель немесе тіл моделі файлы жоқ не жарамсыз.",
     "Internal error while decoding. See the log file for details.": "Декодтау кезінде ішкі қате. Толығырақ журнал файлында.",
     "Cannot write {path}: {detail}": "{path} жазылмады: {detail}",
-    "Auto always uses the language model.": "«Авто» режимі әрқашан тіл моделін пайдаланады."
+    "Auto always uses the language model.": "«Авто» режимі әрқашан тіл моделін пайдаланады.",
+    "Invalid timing settings: the Farnsworth speed must not exceed the speed in WPM.": "Тайминг параметрлері қате: Фарнсворт жылдамдығы WPM жылдамдығынан аспауы тиіс.",
+    "Could not build the audio.": "Аудионы құру мүмкін болмады."
   }
 }
