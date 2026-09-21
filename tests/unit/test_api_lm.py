@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -80,6 +81,16 @@ def test_baseline_auto_recovers_kazakh_letters(lm_dir):
 def test_lm_available(lm_dir, tmp_path):
     assert Decoder.lm_available(lm_dir) is True
     assert Decoder.lm_available(tmp_path / "trống") is False
+
+
+def test_decoder_accepts_shared_lm_store(lm_dir):
+    from morsedesk.lm.store import LMStore
+
+    store = LMStore(lm_dir)
+    d1 = Decoder("auto", engine="baseline", lm_store=store)
+    d2 = Decoder("ru", engine="baseline", lm_store=store, lm_dir=Path("/nonexistent"))
+    assert d1._store is store and d2._store is store
+    assert d1._lms["en"] is store.get("en")
 
 
 def test_onnx_beam_lm_recovers_kazakh_letters(monkeypatch, lm_dir):
