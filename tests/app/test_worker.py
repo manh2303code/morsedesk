@@ -1,3 +1,4 @@
+import sys
 import threading
 from pathlib import Path
 
@@ -107,12 +108,9 @@ def test_worker_busy_signal_brackets_each_request(qtbot, tiny_lm_dir, wav_cq):
     assert states[0] is True and states[-1] is False
 
 
-def test_player_wraps_sounddevice(monkeypatch):
-    import sounddevice as sd
-
-    calls = []
-    monkeypatch.setattr(sd, "play", lambda x, sr, **kw: calls.append(("play", len(x), sr)))
-    monkeypatch.setattr(sd, "stop", lambda: calls.append(("stop",)))
+def test_player_wraps_sounddevice(fake_sounddevice):
+    sd = fake_sounddevice
+    calls = sd.calls
     p = Player()
     assert p.play(np.zeros(800, np.float32), 8000) is None       # play gọi stop() trước để phát lại từ đầu
     p.stop()
@@ -121,9 +119,21 @@ def test_player_wraps_sounddevice(monkeypatch):
     def boom(x, sr, **kw):
         raise sd.PortAudioError("no device")
 
-    monkeypatch.setattr(sd, "play", boom)
+    sd.play = boom
     msg = p.play(np.zeros(8, np.float32), 8000)
     assert msg and "no device" in msg
+
+
+def test_player_reports_when_sounddevice_is_missing(monkeypatch):
+    """Máy Linux tối giản không có libportaudio2: `import sounddevice` hỏng ngay.
+
+    `Player` phải trả thông điệp để giao diện hiện banner, tuyệt đối không ném ngoại lệ.
+    """
+    monkeypatch.setitem(sys.modules, "sounddevice", None)   # làm `import sounddevice` ném ImportError
+    p = Player()
+    msg = p.play(np.zeros(8, np.float32), 8000)
+    assert msg and "cannot play audio" in msg
+    p.stop()                                                # không được ném
 
 
 @pytest.mark.parametrize("bad", ["auto", "en"])

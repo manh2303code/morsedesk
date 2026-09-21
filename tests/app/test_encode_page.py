@@ -87,23 +87,20 @@ def test_farnsworth_and_noise_change_audio(qtbot, tmp_path):
     assert len(noisy) == len(base) and float(abs(noisy - base).mean()) > 0.01
 
 
-def test_play_and_stop_use_player(qtbot, tmp_path, monkeypatch):
-    import sounddevice as sd
-
-    calls = []
-    monkeypatch.setattr(sd, "play", lambda x, sr, **kw: calls.append(("play", sr)))
-    monkeypatch.setattr(sd, "stop", lambda: calls.append(("stop",)))
+def test_play_and_stop_use_player(qtbot, tmp_path, fake_sounddevice):
+    sd = fake_sounddevice
+    calls = sd.calls
     page = _page(qtbot, tmp_path)
     page.text_edit.setPlainText("E")
     page.play_button.click()
-    assert ("play", 8000) in calls and page.banner.level is None
+    assert any(c[0] == "play" and c[2] == 8000 for c in calls) and page.banner.level is None
     page.stop_button.click()
     assert calls[-1] == ("stop",)
 
     def boom(x, sr, **kw):
         raise sd.PortAudioError("no device")
 
-    monkeypatch.setattr(sd, "play", boom)
+    sd.play = boom
     page.play_button.click()
     assert page.banner.level == "warning" and "no device" in page.banner.text()
     assert wk.Player is Player
@@ -162,12 +159,9 @@ def test_duration_limit_follows_timing_controls(qtbot, tmp_path):
     assert not page.play_button.isEnabled() and page.banner.level == "warning"
 
 
-def test_farnsworth_above_wpm_errors_for_both_play_and_save(qtbot, tmp_path, monkeypatch):
+def test_farnsworth_above_wpm_errors_for_both_play_and_save(qtbot, tmp_path, fake_sounddevice):
     """Farnsworth > WPM: cả Nghe thử lẫn Lưu phải cho banner đỏ bằng tr(), không im lặng."""
-    import sounddevice as sd
-
-    calls = []
-    monkeypatch.setattr(sd, "play", lambda x, sr, **kw: calls.append("play"))
+    calls = fake_sounddevice.calls
     page = _page(qtbot, tmp_path)
     page.text_edit.setPlainText("SOS")
     page.wpm_spin.setValue(10)
