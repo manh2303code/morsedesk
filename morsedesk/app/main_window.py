@@ -5,11 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication, QEvent, QTranslator
-from PySide6.QtWidgets import QComboBox, QLabel, QMainWindow, QTabWidget, QToolBar, QWidget
+from PySide6.QtWidgets import QComboBox, QLabel, QMainWindow, QTabWidget, QToolBar
 
 from morsedesk.app.decode_page import DecodePage
+from morsedesk.app.encode_page import EncodePage
 from morsedesk.app.settings import UI_LANGUAGES, AppSettings
-from morsedesk.app.worker import DecoderWorker
+from morsedesk.app.worker import DecoderWorker, Player
 
 # Tên hiển thị ngôn ngữ giao diện; "Қазақша (nháp)" đánh dấu bản dịch KK còn là bản nháp (Task 6).
 LANGUAGE_NAMES = {"en": "English", "ru": "Русский", "kk": "Қазақша (nháp)"}
@@ -18,9 +19,12 @@ LANGUAGE_NAMES = {"en": "English", "ru": "Русский", "kk": "Қазақша
 class MainWindow(QMainWindow):
     """Cửa sổ chính: chọn ngôn ngữ giao diện trên toolbar, tab Giải mã (Task 4) và Tạo mã (Task 5)."""
 
-    def __init__(self, worker: DecoderWorker, settings: AppSettings, i18n_dir: Path, parent=None) -> None:
+    def __init__(
+        self, worker: DecoderWorker, player: Player, settings: AppSettings, i18n_dir: Path, parent=None
+    ) -> None:
         super().__init__(parent)
         self.worker = worker
+        self.player = player
         self.settings = settings
         self.i18n_dir = Path(i18n_dir)
         self.current_language = "en"
@@ -40,17 +44,11 @@ class MainWindow(QMainWindow):
 
         self.tabs = QTabWidget(self)
         self.decode_page = DecodePage(worker, settings, self)
-        self.encode_page: QWidget = self._make_encode_page()
+        self.encode_page = EncodePage(player, settings, self)
         self.tabs.addTab(self.decode_page, "")
         self.tabs.addTab(self.encode_page, "")
         self.setCentralWidget(self.tabs)
         self.retranslate()
-
-    def _make_encode_page(self) -> QWidget:
-        # Task 5 thay bằng EncodePage thật; giữ chỗ ở đây để cửa sổ chạy được ngay từ Task 4.
-        page = QWidget(self)
-        page.retranslate = lambda: None  # type: ignore[attr-defined]
-        return page
 
     # ---- i18n ----
     def set_language(self, code: str) -> bool:

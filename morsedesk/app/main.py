@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from morsedesk.app.main_window import MainWindow
 from morsedesk.app.settings import AppSettings, default_language
 from morsedesk.app.startup import check_models, missing_models_message
-from morsedesk.app.worker import DecoderWorker
+from morsedesk.app.worker import DecoderWorker, Player
 from morsedesk.textio import force_utf8_streams
 
 I18N_DIR = Path(__file__).resolve().parent / "i18n"
@@ -66,7 +66,7 @@ def create_app(args: argparse.Namespace) -> tuple[QApplication, MainWindow]:
     settings = load_settings()
     worker = DecoderWorker(engine=args.engine, model_path=args.model, lm_dir=args.lm_dir)
     worker.start()
-    window = MainWindow(worker, settings, I18N_DIR)
+    window = MainWindow(worker, Player(), settings, I18N_DIR)
     window.set_language(default_language(args.lang, settings.ui_language, QLocale.system().name()))
     return app, window
 

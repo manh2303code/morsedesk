@@ -28,6 +28,9 @@ def test_create_app_builds_window_with_language(qtbot, tiny_lm_dir, tmp_path, mo
         assert window.tabs.count() == 2
         assert window.language_combo.currentData() == "ru"
         assert window.decode_page is not None and window.worker.isRunning()
+        from morsedesk.app.encode_page import EncodePage
+
+        assert isinstance(window.encode_page, EncodePage)
     finally:
         window.close()
     assert not window.worker.isRunning()
