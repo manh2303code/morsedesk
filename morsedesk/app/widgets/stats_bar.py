@@ -59,10 +59,14 @@ class StatsBar(QWidget):
             self.language_widget.setText("")
             self.language_widget.setToolTip("")
             return
+        # Đơn vị cũng phải dịch ("Тон 570 Hz" lẫn tiếng Anh giữa câu tiếng Nga), và phải gọi
+        # tr() ở câu lệnh riêng: pyside6-lupdate không trích được tr() nằm trong f-string.
+        hz = self.tr("Hz")
+        db = self.tr("dB")
         parts = [
             self.tr("WPM {v}").format(v=f"{r.wpm:.1f}" if r.wpm is not None else "–"),
-            self.tr("Tone {v}").format(v=f"{r.tone_hz:.0f} Hz" if r.tone_hz is not None else "–"),
-            self.tr("SNR {v}").format(v=f"{r.snr_db:.1f} dB" if r.snr_db is not None else "–"),
+            self.tr("Tone {v}").format(v=f"{r.tone_hz:.0f} {hz}" if r.tone_hz is not None else "–"),
+            self.tr("SNR {v}").format(v=f"{r.snr_db:.1f} {db}" if r.snr_db is not None else "–"),
         ]
         if self._seconds is not None:
             parts.append(self.tr("{v} s").format(v=f"{self._seconds:.2f}"))

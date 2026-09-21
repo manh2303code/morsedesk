@@ -10,6 +10,10 @@ from morsedesk.app.widgets.flow_layout import FlowLayout
 
 WORD_GOOD = 0.8
 COLOR_GOOD, COLOR_MID, COLOR_LOW = "#c8f0c8", "#fff2b3", "#f7c6c6"
+# Ba màu nền trên đều nhạt, nên phải ghim màu chữ tối thay vì để widget lấy màu chữ của
+# bảng màu hệ thống: ở giao diện tối của Windows/KDE màu đó là trắng, cho tương phản
+# 1,25:1 (đo trên ảnh chụp thật) tức là không đọc được.
+TEXT_COLOR = "#1a1a1a"
 
 
 def confidence_color(c: float) -> str:
@@ -30,8 +34,8 @@ class WordLabel(QLabel):
         super().__init__(word.text, parent)
         self.word = word
         self.setStyleSheet(
-            f"QLabel {{ background:{confidence_color(word.confidence)}; padding:3px 6px; "
-            "border-radius:4px; font-size:16pt; }"
+            f"QLabel {{ background:{confidence_color(word.confidence)}; color:{TEXT_COLOR}; "
+            "padding:3px 6px; border-radius:4px; font-size:16pt; }"
         )
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.retranslate()

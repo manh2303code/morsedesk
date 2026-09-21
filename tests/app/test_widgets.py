@@ -7,7 +7,15 @@ from morsedesk.app.widgets.banner import Banner
 from morsedesk.app.widgets.charmap import CYRILLIC, KAZAKH_EXTRA, CharMap
 from morsedesk.app.widgets.spectrogram import SpectrogramView
 from morsedesk.app.widgets.stats_bar import StatsBar
-from morsedesk.app.widgets.word_view import WORD_GOOD, WordView, confidence_color
+from morsedesk.app.widgets.word_view import (
+    COLOR_GOOD,
+    COLOR_LOW,
+    COLOR_MID,
+    TEXT_COLOR,
+    WORD_GOOD,
+    WordView,
+    confidence_color,
+)
 from morsedesk.app.worker import Spectrogram
 
 
@@ -123,3 +131,34 @@ def test_language_change_event_triggers_retranslate(qtbot):
     assert calls == {"WordView": 1, "StatsBar": 1, "SpectrogramView": 1}
     view = widgets[2]
     assert view.getAxis("bottom").labelText == "s" and view.getAxis("left").labelText == "Hz"
+
+
+def _relative_luminance(hex_color: str) -> float:
+    r, g, b = (int(hex_color[i:i + 2], 16) / 255 for i in (1, 3, 5))
+
+    def channel(v: float) -> float:
+        return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
+
+def _contrast(a: str, b: str) -> float:
+    hi, lo = sorted((_relative_luminance(a), _relative_luminance(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def test_word_colors_are_readable_on_any_system_theme(qtbot):
+    """Màu chữ phải được ghim tối, không lấy theo bảng màu hệ thống.
+
+    Ảnh chụp thật ở giao diện tối của Windows cho chữ trắng trên nền #c8f0c8 = 1,25:1.
+    Ngưỡng 4,5:1 là mức AA của WCAG cho chữ thường.
+    """
+    for bg in (COLOR_GOOD, COLOR_MID, COLOR_LOW):
+        assert _contrast(bg, TEXT_COLOR) >= 4.5, f"{bg} trên {TEXT_COLOR}"
+    w = WordView()
+    qtbot.addWidget(w)
+    w.set_words([Word("CQ", 0.0, 0.5, 0.95), Word("DE", 0.6, 0.9, 0.6), Word("K", 1.0, 1.2, 0.2)])
+    for label in w.labels():
+        css = label.styleSheet()
+        assert f"color:{TEXT_COLOR}" in css, css
+        assert confidence_color(label.word.confidence) in css

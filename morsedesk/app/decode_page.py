@@ -50,6 +50,9 @@ class DecodePage(QWidget):
         self.path_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.profile_label = QLabel(self)
         self.profile_combo = QComboBox(self)
+        # Tên ngôn ngữ dịch ra dài hơn tiếng Anh ('Английский' cần 65px so với
+        # 'English' 40px): để mặc định combo giữ nguyên bề rộng và cắt mất chữ.
+        self.profile_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         for pid in PROFILE_CHOICES:
             self.profile_combo.addItem(pid, pid)
         self.lm_check = QCheckBox(self)

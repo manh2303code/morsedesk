@@ -34,6 +34,36 @@ def tr_literals(paths: list[Path]) -> set[str]:
     return out
 
 
+def ts_sources(ts_path: Path) -> set[str]:
+    """Tập `<source>` mà `pyside6-lupdate` thực sự trích được, đọc từ file `.ts` đã commit."""
+    return {
+        src for msg in ET.parse(ts_path).getroot().iter("message")
+        if (src := msg.findtext("source")) is not None
+    }
+
+
+def report_drift(literals: set[str]) -> int:
+    """In và đếm chênh lệch giữa chuỗi `tr()` quét được trong mã và `<source>` trong các `.ts`.
+
+    Hai nguồn độc lập: regex ở đây và `pyside6-lupdate`. Lệch nghĩa là hoặc quên chạy lại
+    `build_i18n.py`, hoặc viết `tr()` theo kiểu lupdate không trích được (đã gặp: `tr()` lồng
+    trong f-string) — chuỗi đó sẽ không bao giờ được dịch mà không ai biết.
+    """
+    drift = 0
+    for lang in LANGS:
+        ts = I18N_DIR / f"morsedesk_{lang}.ts"
+        if not ts.exists():
+            continue
+        found = ts_sources(ts)
+        for s in sorted(literals - found):
+            print(f"{lang}: {s!r} có trong mã nhưng KHÔNG có trong {ts.name} (lupdate bỏ sót?)")
+            drift += 1
+        for s in sorted(found - literals):
+            print(f"{lang}: {s!r} có trong {ts.name} nhưng không còn trong mã")
+            drift += 1
+    return drift
+
+
 def fill_ts(ts_path: Path, table: dict[str, str]) -> int:
     """Điền `<translation>` cho mỗi `<message>` theo `<source>` khớp khóa trong `table`.
 
@@ -85,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
         for s in miss:
             print(f"{lang}: thiếu {s!r}")
     if a.check:
-        return 1 if any(missing.values()) else 0
+        return 1 if any(missing.values()) or report_drift(literals) else 0
     ts_files = [I18N_DIR / f"morsedesk_{lang}.ts" for lang in LANGS]
     subprocess.run(
         [_tool("pyside6-lupdate"), *map(str, SOURCES), "-no-obsolete", "-ts", *map(str, ts_files)],
@@ -95,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
         left = fill_ts(ts, table[lang])
         subprocess.run([_tool("pyside6-lrelease"), str(ts), "-qm", str(ts.with_suffix(".qm"))], check=True)
         print(f"{lang}: {ts.name} -> {ts.with_suffix('.qm').name}, chưa dịch {left}")
-    return 1 if any(missing.values()) else 0
+    return 1 if any(missing.values()) or report_drift(literals) else 0
 
 
 if __name__ == "__main__":

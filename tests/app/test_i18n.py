@@ -67,3 +67,39 @@ def test_set_language_switches_ui_text(qtbot, tiny_lm_dir, tmp_path):
         w.set_language("en")
         QCoreApplication.processEvents()
         w.close()
+
+
+def test_translated_combos_grow_and_units_are_localised(qtbot, tiny_lm_dir, tmp_path, monkeypatch):
+    """Ảnh chụp thật ở giao diện Nga cho thấy combo cắt mất 'Английский' và thanh chỉ số ghi
+    'Тон 570 Hz' lẫn tiếng Anh. Kiểm cả hai: combo tự giãn theo nội dung, đơn vị đi qua tr()."""
+    from PySide6.QtCore import QSettings
+    from PySide6.QtWidgets import QComboBox
+
+    import morsedesk.app.main as app_main
+    from morsedesk.api import DecodeResult
+    from morsedesk.app.settings import AppSettings
+
+    settings = AppSettings(settings=QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+    monkeypatch.setattr(app_main, "load_settings", lambda: settings)
+    args = app_main.build_parser().parse_args(["--engine", "baseline", "--lm-dir", str(tiny_lm_dir)])
+    app, window = app_main.create_app(args)
+    qtbot.addWidget(window)
+    try:
+        combos = (window.decode_page.profile_combo, window.encode_page.profile_combo)
+        for combo in combos:
+            assert combo.sizeAdjustPolicy() == QComboBox.SizeAdjustPolicy.AdjustToContents
+        result = DecodeResult("CQ", [], 20.0, 700.0, 12.0, "en", {}, [], "baseline")
+        for code in ("en", "ru", "kk"):
+            window.set_language(code)
+            for combo in combos:
+                fm = combo.fontMetrics()
+                widest = max(fm.horizontalAdvance(combo.itemText(i)) for i in range(combo.count()))
+                assert combo.sizeHint().width() >= widest, (code, combo.sizeHint().width(), widest)
+            window.decode_page.stats.set_result(result, 0.5)
+            text = window.decode_page.stats.text()
+            if code == "en":
+                assert "Hz" in text and "dB" in text
+            else:                                   # đơn vị phải theo ngôn ngữ, không lẫn tiếng Anh
+                assert "Гц" in text and "дБ" in text and " Hz" not in text and " dB" not in text
+    finally:
+        window.close()
