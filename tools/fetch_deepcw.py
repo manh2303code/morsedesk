@@ -35,14 +35,27 @@ def sha256_file(path: Path) -> str:
 
 
 def fetch_one(name: str, src_dir: Path | None, dst_dir: Path) -> Path:
+    """Lấy một file về `dst_dir/name`, ghi qua file `.part` rồi mới đổi tên.
+
+    Ghi thẳng vào tên chính thức là nguy hiểm: mạng rớt giữa `copyfileobj` sẽ để lại một file
+    mang đúng tên nhưng nội dung dở dang, mà `startup.check_models` chỉ kiểm file có tồn tại
+    nên model hỏng lọt qua cửa khởi động và chỉ lộ ra bằng ngoại lệ khó hiểu của onnxruntime.
+    `os.replace` là thao tác nguyên tử trên cùng một phân vùng.
+    """
     dst = dst_dir / name
-    if src_dir is not None:
-        shutil.copyfile(src_dir / name, dst)
-    else:
-        url = f"{BASE_URL}/{name}"
-        print(f"tải {url}", flush=True)
-        with urllib.request.urlopen(url, timeout=120) as r, open(dst, "wb") as f:
-            shutil.copyfileobj(r, f)
+    part = dst.with_name(dst.name + ".part")
+    try:
+        if src_dir is not None:
+            shutil.copyfile(src_dir / name, part)
+        else:
+            url = f"{BASE_URL}/{name}"
+            print(f"tải {url}", flush=True)
+            with urllib.request.urlopen(url, timeout=120) as r, open(part, "wb") as f:
+                shutil.copyfileobj(r, f)
+        os.replace(part, dst)
+    except BaseException:
+        part.unlink(missing_ok=True)   # kể cả Ctrl+C: không để lại rác mang tên .part
+        raise
     return dst
 
 
@@ -57,6 +70,10 @@ def main(argv: list[str] | None = None) -> int:
 
     src = a.src if a.src is not None else (Path(os.environ["DEEPCW_SRC"]) if os.environ.get("DEEPCW_SRC") else None)
     a.out.mkdir(parents=True, exist_ok=True)
+    model_ok = (a.out / "model.onnx").is_file() and (a.out / "model.onnx.json").is_file()
+    if model_ok and not a.no_verify and sha256_file(a.out / "model.onnx") == MODEL_SHA256:
+        print(f"{a.out / 'model.onnx'} đã đúng sha256, bỏ qua tải lại")
+        return 0
     written: list[Path] = []
     for name in FILES:
         try:

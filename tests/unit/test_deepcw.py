@@ -191,3 +191,50 @@ def test_check_models_knows_deepcw_engine(tmp_path, monkeypatch):
     missing = startup.check_models(None, tmp_path / "lm", engine="deepcw")
     assert [p.name for p in missing[:2]] == ["model.onnx", "model.onnx.json"]
     assert "fetch_deepcw" in startup.missing_models_message(missing)
+
+
+def test_fetch_deepcw_leaves_no_partial_file_when_copy_fails(tmp_path, monkeypatch, capsys):
+    """Mạng rớt giữa chừng không được để lại file mang tên chính thức.
+
+    check_models chỉ kiểm file có tồn tại, nên một model dở dang sẽ lọt qua cửa khởi động và
+    chỉ lộ ra bằng ngoại lệ khó hiểu của onnxruntime thay vì thông điệp "chạy fetch_deepcw.py".
+    """
+    import shutil as _shutil
+
+    import tools.fetch_deepcw as fd
+
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "model.onnx").write_bytes(b"x" * 64)
+    (src / "model.onnx.json").write_text("{}", encoding="utf-8")
+    out = tmp_path / "out"
+
+    real_copyfile = _shutil.copyfile
+
+    def copy_then_die(a, b, *args, **kw):
+        real_copyfile(a, b, *args, **kw)          # tạo file .part rồi mới hỏng, như mạng rớt
+        raise OSError("mạng rớt giữa chừng")
+
+    monkeypatch.setattr(fd.shutil, "copyfile", copy_then_die)
+    assert fd.main(["--src", str(src), "--out", str(out)]) == 2
+    assert not (out / "model.onnx").exists(), "để lại file dở dang mang tên chính thức"
+    assert list(out.glob("*.part")) == [], "để lại rác .part"
+
+
+def test_fetch_deepcw_skips_when_already_correct(tmp_path, monkeypatch, capsys):
+    """Đã có đúng sha256 thì không tải lại 15 MB."""
+    import tools.fetch_deepcw as fd
+
+    out = tmp_path / "out"
+    out.mkdir()
+    payload = b"morsedesk"
+    (out / "model.onnx").write_bytes(payload)
+    (out / "model.onnx.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(fd, "MODEL_SHA256", __import__("hashlib").sha256(payload).hexdigest())
+
+    def must_not_run(*a, **kw):
+        raise AssertionError("đã đúng sha256 mà vẫn tải lại")
+
+    monkeypatch.setattr(fd, "fetch_one", must_not_run)
+    assert fd.main(["--out", str(out)]) == 0
+    assert "bỏ qua tải lại" in capsys.readouterr().out
