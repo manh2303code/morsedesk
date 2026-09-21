@@ -5,11 +5,20 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication, QEvent, QTranslator
-from PySide6.QtWidgets import QComboBox, QLabel, QMainWindow, QTabWidget, QToolBar
+from PySide6.QtWidgets import (
+    QComboBox,
+    QLabel,
+    QMainWindow,
+    QTabWidget,
+    QToolBar,
+    QVBoxLayout,
+    QWidget,
+)
 
 from morsedesk.app.decode_page import DecodePage
 from morsedesk.app.encode_page import EncodePage
 from morsedesk.app.settings import UI_LANGUAGES, AppSettings
+from morsedesk.app.widgets.banner import Banner
 from morsedesk.app.worker import DecoderWorker, Player
 
 # Tên hiển thị ngôn ngữ giao diện; "Қазақша (nháp)" đánh dấu bản dịch KK còn là bản nháp (Task 6).
@@ -29,6 +38,7 @@ class MainWindow(QMainWindow):
         self.i18n_dir = Path(i18n_dir)
         self.current_language = "en"
         self._translator: QTranslator | None = None
+        self._closing = False   # đã hoãn một lần đóng để chờ worker chạy xong chưa
         self.resize(1000, 700)
 
         bar = QToolBar(self)
@@ -42,12 +52,18 @@ class MainWindow(QMainWindow):
         bar.addWidget(self.language_combo)
         self.language_combo.currentIndexChanged.connect(self._on_language_combo)
 
+        self.banner = Banner(self)      # thông báo mức cửa sổ (vd. đang chờ worker để đóng)
         self.tabs = QTabWidget(self)
         self.decode_page = DecodePage(worker, settings, self)
         self.encode_page = EncodePage(player, settings, self)
         self.tabs.addTab(self.decode_page, "")
         self.tabs.addTab(self.encode_page, "")
-        self.setCentralWidget(self.tabs)
+        central = QWidget(self)
+        lay = QVBoxLayout(central)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(self.banner)
+        lay.addWidget(self.tabs, 1)
+        self.setCentralWidget(central)
         self.retranslate()
 
     # ---- i18n ----
@@ -97,6 +113,24 @@ class MainWindow(QMainWindow):
         super().changeEvent(event)
 
     def closeEvent(self, event) -> None:
-        """Dừng `DecoderWorker` khi đóng cửa sổ để không rò rỉ QThread đang chạy."""
-        self.worker.stop()
+        """Đóng cửa sổ mà không bao giờ hủy QThread đang chạy.
+
+        Worker còn chạy -> xin dừng không chờ rồi chờ ngắn 500 ms. Nếu yêu cầu hiện tại vẫn
+        chưa xong (file dài có thể mất vài phút) thì **hoãn đóng**: `event.ignore()`, khóa
+        giao diện, hiện banner, và nối `worker.finished` vào `close()` đúng một lần. Khi worker
+        kết thúc, `close()` chạy lại, `isRunning()` là False và cửa sổ đóng bình thường.
+        """
+        if self.worker.isRunning():
+            self.worker.stop_async()
+            self.worker.wait(500)
+        if self.worker.isRunning():
+            if not self._closing:
+                self._closing = True
+                self.worker.finished.connect(self.close)
+                self.tabs.setEnabled(False)
+                self.banner.show_warning(
+                    self.tr("Finishing the current decode; the window will close right after.")
+                )
+            event.ignore()
+            return
         super().closeEvent(event)

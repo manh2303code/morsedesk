@@ -196,24 +196,29 @@
 <context>
     <name>MainWindow</name>
     <message>
-        <location filename="../main_window.py" line="87" />
+        <location filename="../main_window.py" line="103" />
         <source>MorseDesk</source>
         <translation>MorseDesk</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="88" />
+        <location filename="../main_window.py" line="104" />
         <source>UI language:</source>
         <translation>Интерфейс тілі:</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="89" />
+        <location filename="../main_window.py" line="105" />
         <source>Decode</source>
         <translation>Декодтау</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="90" />
+        <location filename="../main_window.py" line="106" />
         <source>Encode</source>
         <translation>Кодтау</translation>
+    </message>
+    <message>
+        <location filename="../main_window.py" line="132" />
+        <source>Finishing the current decode; the window will close right after.</source>
+        <translation>Ағымдағы декодтау аяқталуда; содан кейін терезе жабылады.</translation>
     </message>
 </context>
 <context>

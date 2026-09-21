@@ -48,7 +48,8 @@
     "Save audio": "Сохранить аудио",
     "Audio ({ext})": "Аудио ({ext})",
     "Hz": "Гц",
-    "s": "с"
+    "s": "с",
+    "Finishing the current decode; the window will close right after.": "Завершается текущее декодирование; окно закроется сразу после этого."
   },
   "kk": {
     "MorseDesk": "MorseDesk",
@@ -99,6 +100,7 @@
     "Save audio": "Аудионы сақтау",
     "Audio ({ext})": "Аудио ({ext})",
     "Hz": "Гц",
-    "s": "с"
+    "s": "с",
+    "Finishing the current decode; the window will close right after.": "Ағымдағы декодтау аяқталуда; содан кейін терезе жабылады."
   }
 }

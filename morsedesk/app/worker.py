@@ -94,8 +94,16 @@ class DecoderWorker(QThread):
                 break
         self._queue.put(req)
 
-    def stop(self) -> None:
+    def stop_async(self) -> None:
+        """Xin worker dừng nhưng KHÔNG chờ: gọi được từ `closeEvent` mà không treo giao diện.
+
+        Người gọi phải tự bảo đảm QThread chạy xong trước khi bị hủy (xem `MainWindow.closeEvent`).
+        """
         self.request(None)  # type: ignore[arg-type]
+
+    def stop(self) -> None:
+        """Xin dừng rồi chờ tối đa 10 giây; dùng ở lối thoát đồng bộ (test, script)."""
+        self.stop_async()
         self.wait(10000)
 
     # ---- chạy trong thread ----
