@@ -455,6 +455,6 @@ class Decoder:
                             lang, scores, [w.vi() for w in warnings], "onnx", fallback_text,
                             warning_codes=list(warnings))
 
-    def decode_file(self, path: str | Path) -> DecodeResult:
+    def decode_file(self, path: str | Path, progress: DecodeProgress | None = None) -> DecodeResult:
         x, sr = load_audio(path)
-        return self.decode_array(x, sr)
+        return self.decode_array(x, sr, progress=progress)
