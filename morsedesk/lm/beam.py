@@ -36,7 +36,10 @@ def _lse(a: float, b: float) -> float:
 @dataclass(frozen=True)
 class BeamParams:
     beam: int = 64
-    alpha: float = 0.2   # tinh chỉnh trên T1 v2 với E2 (spec gốc 0.6 làm xấu CER mọi profile)
+    # Quét lại cùng char_bonus trên T1 (200 clip qsb+clean): tại cb=1,25 thì alpha 0,15 -> 33,85 %;
+    # 0,20 -> 32,99; 0,30 -> 32,21; 0,45 -> 33,16. Giá trị 0,2 cũ tinh chỉnh khi chưa có char_bonus;
+    # thưởng ký tự làm beam dám phát ký tự hơn nên LM cũng đáng tin hơn (spec gốc 0,6 vẫn quá cao).
+    alpha: float = 0.3
     beta: float = 1.0    # thưởng mỗi từ; 1.0 tốt hơn 0.5 trên T1 v2
     lexicon_bonus: float = 1.0
     # Thưởng mỗi KÝ TỰ phát ra (khác `beta` là thưởng mỗi TỪ). Đo 22/09 trên T1: 74 % lỗi của

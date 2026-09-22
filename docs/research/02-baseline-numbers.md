@@ -256,3 +256,62 @@ Vùng gate gồm cả ô `qsb` ở 0 dB, nơi d' = 1,54. Muốn đạt 2 % trên
 chứng. Đây là số liệu mới, không phải ý kiến; người dùng đã chốt giữ ngưỡng 2 % và kế hoạch vẫn
 nhắm đúng ngưỡng đó, nhưng nên biết khoản nào trong khoảng cách là vật lý và khoản nào là kỹ thuật.
 
+
+## Hai giả thuyết về lỗi xóa, cả hai đều bị số đo bác bỏ (2026-09-22)
+
+Chẩn đoán ở mục trên cho thấy **74 % lỗi là xóa ký tự**. Hai cơ chế có vẻ giải thích được điều đó
+đã được kiểm riêng rẽ, và cả hai đều không phải nguyên nhân chính.
+
+### 1. Lệch tone giữa huấn luyện và chạy thật
+
+Lúc huấn luyện, `example_features` truyền `f0_hint = ex.f0_hz`, tức **tone thật** của bộ sinh.
+Lúc chạy thật, đặc trưng được dựng theo tone **ước lượng**, và với clip không dò ra tone thì theo
+đỉnh phổ. Nếu mô hình quen với đặc trưng luôn đặt đúng tâm tần số, sai lệch lúc chạy sẽ làm hậu
+nghiệm dàn phẳng và sinh lỗi xóa.
+
+Sai số ước lượng đo trên toàn T1 (tone thật suy ra từ `seed`, xem `tone_hz_for_seed`):
+
+| Kênh | Sai số trung vị | Sai > 25 Hz | Không dò được |
+|---|---|---|---|
+| clean | 0,2 Hz | 0 % | 3 % |
+| mp3 | 0,2 Hz | 0 % | 1 % |
+| qrm | 0,2 Hz | 0 % | 1 % |
+| qrn | 0,2 Hz | 0 % | 1 % |
+| qsb | 0,3 Hz | 0 % | **33 %** |
+
+Khi dò được thì gần như hoàn hảo. Chỉ `qsb` có một phần ba clip phải đoán. Giải mã lại 100 clip
+`qsb` với tone thật ép vào (`estimate_tone` bị vá) so với đường hiện tại:
+
+| Nhóm | n | Hiện tại | Tone thật | Chênh |
+|---|---|---|---|---|
+| Dò được | 67 | 40,57 % | 40,57 % | 0,00 |
+| Không dò được | 33 | 75,49 % | 74,40 % | +1,09 |
+| Toàn kênh `qsb` | 100 | 52,09 % | 51,73 % | +0,36 |
+
+**Toàn bộ khâu dò tone chỉ đáng 0,36 điểm trên kênh xấu nhất**, tức dưới 0,08 điểm trên toàn T1.
+Đáng chú ý hơn: nhóm không dò được vẫn 74 % **ngay cả khi biết tone chính xác**, nên vấn đề của
+nhóm đó là tín hiệu quá yếu, không phải đặt sai tâm tần số — khớp với phép đo d' ở mục trước.
+Hướng "huấn luyện với tone hint nhiễu để khớp lúc chạy thật" vì vậy bị loại, tiết kiệm một lượt
+huấn luyện.
+
+### 2. Ngưỡng cắt tỉa `min_prob` chặn ký tự yếu
+
+`min_prob = 1e-3` khiến khung không có lớp nào vượt ngưỡng đi đường tắt chỉ-blank, nên ký tự ở
+khung đó **không thể được phát ra về mặt cấu trúc** — đúng cơ chế sinh lỗi xóa khi fade làm hậu
+nghiệm dàn phẳng. Quét trên 200 clip `qsb`+`clean` tại `alpha=0,3`, `char_bonus=1,25`:
+
+| `min_prob` | `topk_per_frame` | CER | Giây |
+|---|---|---|---|
+| 1e-3 | 8 | 32,21 % | 91 |
+| 1e-4 | 8 | 32,06 % | 181 |
+
+Nới ngưỡng xuống một trăm lần chỉ đổi **0,15 điểm** nhưng tốn gấp đôi thời gian. Cắt tỉa không
+phải chỗ mất ký tự; hậu nghiệm ở những khung đó không chỉ yếu mà thực sự nghiêng về blank.
+
+### Kết luận chung
+
+Hai cơ chế "rẻ" đã bị loại bằng số đo thay vì bằng lượt huấn luyện. Lỗi xóa còn lại nằm ở **năng
+lực mô hình âm thanh**, không ở khâu tiền xử lý hay khâu giải mã — nhất quán với chênh lệch trên
+kênh sạch (mình 13,88 % so với DeepCW 7,06 %), nơi không có fade nào để đổ lỗi. Vì vậy bước tiếp
+theo là tăng năng lực mô hình (thí nghiệm E9, `hidden` 128 → 256), chứ không tiếp tục tinh chỉnh
+tham số giải mã.
