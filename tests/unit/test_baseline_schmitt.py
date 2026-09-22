@@ -70,3 +70,24 @@ def test_decoder_survives_speckled_envelope():
 
     res = BaselineDecoder().decode_envelope(env)
     assert load_profile("en").render(res.tokens) == "SOS"
+
+
+def test_vectorised_schmitt_matches_the_obvious_loop():
+    """Bản vector hóa phải cho đúng kết quả của vòng lặp trạng thái, trên dữ liệu ngẫu nhiên."""
+    rng = np.random.default_rng(7)
+    for _ in range(20):
+        env = rng.random(500) * rng.choice([0.5, 1.0, 2.0])
+        thr = float(rng.choice([0.15, 0.45, 0.65]))
+        lo = thr * HYSTERESIS_RATIO
+        want = np.zeros(len(env), dtype=bool)
+        on = False
+        for i, v in enumerate(env):
+            on = v > lo if on else v > thr
+            want[i] = on
+        assert (schmitt_mask(env, thr) == want).all()
+
+
+def test_schmitt_handles_empty_and_single_frame():
+    assert len(schmitt_mask(np.zeros(0), 0.45)) == 0
+    assert not schmitt_mask(np.array([0.1]), 0.45)[0]
+    assert schmitt_mask(np.array([0.9]), 0.45)[0]

@@ -94,21 +94,26 @@ def run_lengths(mask: np.ndarray) -> list[tuple[bool, int, int]]:
 
 
 def schmitt_mask(env: np.ndarray, threshold: float, ratio: float = HYSTERESIS_RATIO) -> np.ndarray:
-    """Mask bật/tắt với trễ Schmitt: bật khi vượt `threshold`, tắt khi rơi dưới `ratio*threshold`.
+    """Mask bật/tắt với trễ Schmitt: bật khi vượt `threshold`, tắt khi rơi xuống `ratio*threshold`.
 
-    Một ngưỡng cứng cắt mỗi lần envelope rung qua ngưỡng thành một run mới, và mỗi run thừa là một
-    ký tự thừa. Vòng lặp vectơ hóa được vì trạng thái phụ thuộc quá khứ, nên giữ dạng lặp: envelope
-    dài nhất trong spec là 20 phút x 200 khung/s = 240k khung, đo 0,05 s.
+    Một ngưỡng cứng cắt mỗi lần envelope rung qua ngưỡng thành một run mới, và mỗi run thừa là
+    một ký tự thừa.
+
+    Viết không vòng lặp: trạng thái tại khung i chỉ phụ thuộc sự kiện gần nhất trước đó — nếu
+    lần vượt ngưỡng cao gần nhất mới hơn lần rơi xuống ngưỡng thấp gần nhất thì đang bật. Hai
+    "lần gần nhất" đó chính là `np.maximum.accumulate` trên chỉ số. Đáng làm vì bộ DSP quét sáu
+    ngưỡng trên clip dài tới 20 phút, tức 240 000 khung mỗi lượt.
     """
+    n = len(env)
+    if n == 0:
+        return np.zeros(0, dtype=bool)
+    v = np.asarray(env, dtype=np.float64)
     hi = float(threshold)
     lo = hi * float(ratio)
-    mask = np.zeros(len(env), dtype=bool)
-    on = False
-    for i in range(len(env)):
-        v = float(env[i])
-        on = v > lo if on else v > hi
-        mask[i] = on
-    return mask
+    idx = np.arange(n)
+    last_hi = np.maximum.accumulate(np.where(v > hi, idx, -1))
+    last_lo = np.maximum.accumulate(np.where(v <= lo, idx, -1))
+    return last_hi > last_lo        # chưa có sự kiện nào: cả hai bằng -1 -> tắt, đúng trạng thái đầu
 
 
 def despeckle(mask: np.ndarray, min_len: int) -> np.ndarray:
