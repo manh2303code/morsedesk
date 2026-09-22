@@ -9,8 +9,8 @@ import numpy as np
 import pytest
 
 from morsedesk.api import Decoder
-from morsedesk.dsp.tone import estimate_tone
 from morsedesk.dsp.dither import SNR_CEILING_DB, SNR_TARGET_DB, dither_to_ceiling
+from morsedesk.dsp.tone import estimate_tone
 from tests.helpers import make_morse
 
 
