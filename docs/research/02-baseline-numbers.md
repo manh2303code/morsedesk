@@ -212,3 +212,47 @@ Mọi kênh đều tốt lên. Không huấn luyện lại. Chỉ áp khi có m�
 giữ nguyên hành vi cũ.
 
 Tổng trong ngày 22/09, không huấn luyện lại lần nào: **25,27 % → 21,58 %**.
+
+## QSB: giới hạn vật lý chứ không phải lỗi xử lý (2026-09-22)
+
+Trước khi tiêu thêm lượt huấn luyện cho ô QSB (52 % CER, tệ nhất), đo xem thông tin còn sống sót
+trong đặc trưng đến đâu. Chỉ số là **d'**: khoảng cách giữa trung bình đặc trưng AGC ở khung có dấu
+và khung im lặng, chia độ lệch chuẩn gộp. d' càng cao thì hai lớp càng tách bạch; d' quanh 1 nghĩa
+là chồng lấn gần như hoàn toàn và không bộ giải mã nào tách được theo từng khung.
+
+Tín hiệu "PARIS" lặp ở 20 WPM, fade hình sin chu kỳ 4 s:
+
+| SNR | fade 0 dB | fade 10 dB | fade 20 dB |
+|---|---|---|---|
+| 20 dB | 8,20 | 6,95 | 4,51 |
+| 10 dB | 8,45 | 5,90 | 2,99 |
+| 3 dB | 7,35 | 4,04 | 1,96 |
+| **0 dB** | 6,52 | 3,19 | **1,54** |
+
+**Fade một mình không nguy hiểm**: ở SNR 20 dB, fade sâu 20 dB vẫn cho d' = 4,51, bằng đúng tín
+hiệu sạch không nhiễu. Chỉ khi **fade cộng với SNR thấp** thì thông tin mới biến mất: ở 0 dB kèm
+fade 20 dB, đáy mỗi chu kỳ dìm tín hiệu xuống dưới nền nhiễu và d' còn 1,54.
+
+Ô `qsb` của T1 chính là tổ hợp đó. Nên 52 % CER ở ô này **gần với giới hạn vật lý hơn là lỗi xử
+lý**. Bằng chứng độc lập: DeepCW, model pretrain tốt nhất đo được, cũng chỉ đạt 47 % ở đúng ô này.
+Hai hệ thống khác hẳn nhau rơi vào cùng một khoảng.
+
+### Ba hướng đã bị loại nhờ phép đo này
+
+| Hướng | d' đo được | Kết luận |
+|---|---|---|
+| AGC hiện tại, tau 1,0 s | 4,50 / 4,58 / 4,59 (fade 0/10/20 dB) | mốc |
+| Rút tau xuống 0,4 s (kế hoạch E7) | 3,95 / 4,02 / 4,06 | **xấu hơn**, bỏ |
+| Nền có cổng kiểu HamFist | 2,56 / 2,62 / 2,69 | **xấu hơn nhiều**, bỏ |
+
+Tiết kiệm được hai lượt huấn luyện. Lý do cách có cổng thua: envelope của mình đã trộn hẹp băng và
+chuẩn hóa trong miền log, nên việc đóng băng cập nhật làm bộ ước lượng thiếu dữ liệu chứ không giúp.
+Cơ chế đó sinh ra cho tín hiệu thô trên vi điều khiển, không cho đường đặc trưng như của mình.
+
+### Hệ quả cho ngưỡng 2 %
+
+Vùng gate gồm cả ô `qsb` ở 0 dB, nơi d' = 1,54. Muốn đạt 2 % trên toàn vùng gate thì phải giải mã
+đúng ở mức tách bạch đó, với clip trung bình chỉ 13 ký tự nên không đủ thời gian tích lũy bằng
+chứng. Đây là số liệu mới, không phải ý kiến; người dùng đã chốt giữ ngưỡng 2 % và kế hoạch vẫn
+nhắm đúng ngưỡng đó, nhưng nên biết khoản nào trong khoảng cách là vật lý và khoản nào là kỹ thuật.
+
