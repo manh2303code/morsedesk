@@ -65,7 +65,9 @@
     "Tone not detected clearly; guessing from the spectral peak, so the result may be wrong.": "Тон определён нечётко; берётся пик спектра, поэтому результат может быть неверным.",
     "A second tone was found at {second_hz:.0f} Hz; tracking {tracked_hz:.0f} Hz.": "Обнаружен второй тон на {second_hz:.0f} Гц; отслеживается {tracked_hz:.0f} Гц.",
     "Low confidence.": "Низкая уверенность.",
-    "Low confidence; the DSP decoder result is shown too.": "Низкая уверенность; показан также результат DSP-декодера."
+    "Low confidence; the DSP decoder result is shown too.": "Низкая уверенность; показан также результат DSP-декодера.",
+    "Cancel": "Отмена",
+    "Decoding cancelled.": "Декодирование отменено."
   },
   "kk": {
     "MorseDesk": "MorseDesk",
@@ -133,6 +135,8 @@
     "Tone not detected clearly; guessing from the spectral peak, so the result may be wrong.": "Тон анық анықталмады; спектр шыңы бойынша болжанды, сондықтан нәтиже қате болуы мүмкін.",
     "A second tone was found at {second_hz:.0f} Hz; tracking {tracked_hz:.0f} Hz.": "{second_hz:.0f} Гц жиілігінде екінші тон табылды; {tracked_hz:.0f} Гц бақылануда.",
     "Low confidence.": "Сенімділік төмен.",
-    "Low confidence; the DSP decoder result is shown too.": "Сенімділік төмен; DSP декодерінің нәтижесі де көрсетілген."
+    "Low confidence; the DSP decoder result is shown too.": "Сенімділік төмен; DSP декодерінің нәтижесі де көрсетілген.",
+    "Cancel": "Бас тарту",
+    "Decoding cancelled.": "Декодтау тоқтатылды."
   }
 }

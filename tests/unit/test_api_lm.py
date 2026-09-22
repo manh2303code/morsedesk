@@ -46,7 +46,9 @@ def lm_dir(tmp_path_factory):
 
 def patch_lattice(monkeypatch, text, pid):
     lat = lattice_from_tokens(text_to_tokens(text, P[pid]), gap=8)
-    monkeypatch.setattr(Decoder, "_log_probs", lambda self, x, f0: (lat, 2 * len(lat)))
+    # chữ ký thật có thêm `windows` và `progress`; nuốt chúng bằng **kw để test không phải
+    # dựng cửa sổ giả, nhưng vẫn vỡ nếu tên tham số bắt buộc đổi.
+    monkeypatch.setattr(Decoder, "_log_probs", lambda self, x, f0, *a, **kw: (lat, 2 * len(lat)))
     return lat
 
 
@@ -185,7 +187,7 @@ def test_bench_cli_reports_argument_error(tmp_path, capsys):
 def test_auto_reports_empty_language_when_nothing_decoded(monkeypatch, lm_dir):
     """Lưới toàn blank -> không segment nào có profile_id -> language rỗng, language_scores rỗng."""
     lat = lattice_from_tokens([], gap=0, lead=60)
-    monkeypatch.setattr(Decoder, "_log_probs", lambda self, x, f0: (lat, 2 * 60))
+    monkeypatch.setattr(Decoder, "_log_probs", lambda self, x, f0, *a, **kw: (lat, 2 * 60))
     x = Encoder("en").to_audio("E", wpm=20)
     dec = Decoder("auto", engine="onnx", acoustic_model=FakeAcousticModel(), lm_dir=lm_dir, beam=4)
     r = dec.decode_array(x)

@@ -15,6 +15,7 @@ from morsedesk.dsp.windowing import (  # noqa: F401  (re-export cho import cũ)
     frame_windows,
 )
 from morsedesk.model.protocol import AcousticModel
+from morsedesk.progress import DecodeProgress
 
 
 def _merge_pieces(pieces: list[tuple[int, int, np.ndarray]], n_frames: int, stride: int,
@@ -41,23 +42,34 @@ def _merge_pieces(pieces: list[tuple[int, int, np.ndarray]], n_frames: int, stri
 
 
 def run_chunked(model: AcousticModel, feats: np.ndarray, window: int = WINDOW_FRAMES,
-                step: int = STEP_FRAMES) -> np.ndarray:
+                step: int = STEP_FRAMES, progress: DecodeProgress | None = None) -> np.ndarray:
     """Đặc trưng đã tính cho cả clip (chế độ 'clip')."""
     n = feats.shape[0]
-    pieces = [(s, e, model(feats[s:e])) for s, e in frame_windows(n, window, step)]
+    bounds = list(frame_windows(n, window, step))
+    pieces = []
+    for i, (s, e) in enumerate(bounds, 1):
+        pieces.append((s, e, model(feats[s:e])))
+        if progress is not None:
+            progress.step(i, len(bounds))
     return _merge_pieces(pieces, n, int(model.time_stride), len(model.meta["vocab"]))
 
 
-def run_chunked_windows(model: AcousticModel, windows: list[Window], n_frames: int) -> np.ndarray:
+def run_chunked_windows(model: AcousticModel, windows: list[Window], n_frames: int,
+                        progress: DecodeProgress | None = None) -> np.ndarray:
     """Chế độ 'window' với đặc trưng đã tính sẵn (tránh tính lại khi bên gọi đã có cửa sổ)."""
-    pieces = [(w.start_frame, w.end_frame, model(w.feats)) for w in windows]
+    pieces = []
+    for i, w in enumerate(windows, 1):
+        pieces.append((w.start_frame, w.end_frame, model(w.feats)))
+        if progress is not None:
+            progress.step(i, len(windows))
     return _merge_pieces(pieces, n_frames, int(model.time_stride), len(model.meta["vocab"]))
 
 
 def run_chunked_audio(model: AcousticModel, x: np.ndarray, f0_hint: float | None = None,
                       window: int = WINDOW_FRAMES, step: int = STEP_FRAMES,
-                      cfg: FrontendConfig | None = None) -> tuple[np.ndarray, int]:
+                      cfg: FrontendConfig | None = None,
+                      progress: DecodeProgress | None = None) -> tuple[np.ndarray, int]:
     """Chế độ 'window': đặc trưng và tone tính riêng từng cửa sổ. Trả (log-prob gộp, số khung đầu vào)."""
     n_frames = len(x) // HOP
     windows = compute_features_windowed(x, f0_hint, window_frames=window, step_frames=step, cfg=cfg)
-    return run_chunked_windows(model, windows, n_frames), n_frames
+    return run_chunked_windows(model, windows, n_frames, progress), n_frames

@@ -60,6 +60,9 @@ class DecodePage(QWidget):
         self.lm_check.setChecked(True)
         self.decode_button = QPushButton(self)
         self.decode_button.setEnabled(False)
+        # Nút Hủy chỉ hiện trong lúc giải mã (CP-09); để cạnh nút Giải mã nên không làm nhảy bố cục.
+        self.cancel_button = QPushButton(self)
+        self.cancel_button.hide()
         top = QHBoxLayout()
         for w, stretch in (
             (self.open_button, 0),
@@ -68,6 +71,7 @@ class DecodePage(QWidget):
             (self.profile_combo, 0),
             (self.lm_check, 0),
             (self.decode_button, 0),
+            (self.cancel_button, 0),
         ):
             top.addWidget(w, stretch)
 
@@ -102,6 +106,7 @@ class DecodePage(QWidget):
 
         self.open_button.clicked.connect(self._choose_file)
         self.decode_button.clicked.connect(self._request)
+        self.cancel_button.clicked.connect(self.on_cancel_clicked)
         self.profile_combo.currentIndexChanged.connect(self._on_profile_changed)
         self.lm_check.toggled.connect(lambda _c: self._request())
         self.copy_button.clicked.connect(self._copy)
@@ -111,6 +116,8 @@ class DecodePage(QWidget):
         worker.result_ready.connect(self.on_result)
         worker.failed.connect(self.on_failed)
         worker.busy.connect(self.on_busy)
+        worker.progress.connect(self.on_progress)
+        worker.cancelled.connect(self.on_cancelled)
         self._sync_lm_check()
         self._set_has_result(False)
         self.retranslate()
@@ -270,12 +277,27 @@ class DecodePage(QWidget):
         """Slot nhận `DecoderWorker.busy`: khóa các điều khiển và hiện tiến trình trong lúc giải mã."""
         self._busy = flag
         self.stats.set_busy(flag)
+        self.cancel_button.setVisible(flag)
+        self.cancel_button.setEnabled(flag)
         for w in (self.open_button, self.profile_combo):
             w.setEnabled(not flag)
         self._sync_lm_check()
         self.decode_button.setEnabled(not flag and self._path is not None)
         self._set_has_result(self.result is not None)
         self.setAcceptDrops(not flag)  # khóa cả kéo-thả trong lúc giải mã, cùng tinh thần với các nút trên
+
+    def on_progress(self, done: int, total: int) -> None:
+        """Slot nhận `DecoderWorker.progress`: đổi thanh vô định thành phần trăm (CP-08)."""
+        self.stats.set_progress(done, total)
+
+    def on_cancel_clicked(self) -> None:
+        """Xin worker dừng; nút tự mờ đi để không bấm hai lần, `busy(False)` sẽ ẩn hẳn."""
+        self.cancel_button.setEnabled(False)
+        self.worker.cancel()
+
+    def on_cancelled(self, path: str) -> None:
+        """Slot nhận `DecoderWorker.cancelled`: báo ngắn gọn, giữ nguyên kết quả cũ trên màn hình."""
+        self.banner.show_warning(self.tr("Decoding cancelled."))
 
     def _set_has_result(self, flag: bool) -> None:
         """Nhóm nút cần kết quả; luôn tắt lúc bận để không sao chép/xuất kết quả của file trước."""
@@ -337,6 +359,7 @@ class DecodePage(QWidget):
         self.lm_check.setToolTip(self.tr("Auto always uses the language model."))
         self._sync_lm_check()
         self.decode_button.setText(self.tr("Decode"))
+        self.cancel_button.setText(self.tr("Cancel"))
         self.copy_button.setText(self.tr("Copy"))
         self.export_txt_button.setText(self.tr("Export TXT…"))
         self.export_json_button.setText(self.tr("Export JSON…"))

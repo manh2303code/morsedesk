@@ -4,153 +4,163 @@
 <context>
     <name>DecodePage</name>
     <message>
-        <location filename="../decode_page.py" line="123" />
+        <location filename="../decode_page.py" line="130" />
         <source>Open audio file</source>
         <translation>Открыть аудиофайл</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="125" />
+        <location filename="../decode_page.py" line="132" />
         <source>Audio files ({exts})</source>
         <translation>Аудиофайлы ({exts})</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="198" />
-        <location filename="../decode_page.py" line="347" />
+        <location filename="../decode_page.py" line="205" />
+        <location filename="../decode_page.py" line="370" />
         <source>DSP fallback result: {text}</source>
         <translation>Резервный результат DSP: {text}</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="214" />
+        <location filename="../decode_page.py" line="221" />
         <source>No Morse signal found in this audio.</source>
         <translation>В этом аудио не найден сигнал Морзе.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="216" />
+        <location filename="../decode_page.py" line="223" />
         <source>Tone not detected clearly; guessing from the spectral peak, so the result may be wrong.</source>
         <translation>Тон определён нечётко; берётся пик спектра, поэтому результат может быть неверным.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="219" />
+        <location filename="../decode_page.py" line="226" />
         <source>A second tone was found at {second_hz:.0f} Hz; tracking {tracked_hz:.0f} Hz.</source>
         <translation>Обнаружен второй тон на {second_hz:.0f} Гц; отслеживается {tracked_hz:.0f} Гц.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="221" />
+        <location filename="../decode_page.py" line="228" />
         <source>Low confidence.</source>
         <translation>Низкая уверенность.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="223" />
+        <location filename="../decode_page.py" line="230" />
         <source>Low confidence; the DSP decoder result is shown too.</source>
         <translation>Низкая уверенность; показан также результат DSP-декодера.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="241" />
+        <location filename="../decode_page.py" line="248" />
         <source>File not found: {path}</source>
         <translation>Файл не найден: {path}</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="243" />
+        <location filename="../decode_page.py" line="250" />
         <source>Cannot read {path}. Supported formats: {exts}</source>
         <translation>Не удалось прочитать {path}. Поддерживаемые форматы: {exts}</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="247" />
+        <location filename="../decode_page.py" line="254" />
         <source>{path} is {minutes} min long; this version supports up to {limit} min.</source>
         <translation>Длительность {path} — {minutes} мин; эта версия поддерживает до {limit} мин.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="249" />
+        <location filename="../decode_page.py" line="256" />
         <source>Setup problem: a model or language model file is missing or unusable.</source>
         <translation>Проблема установки: файл модели или языковой модели отсутствует либо непригоден.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="250" />
+        <location filename="../decode_page.py" line="257" />
         <source>Internal error while decoding. See the log file for details.</source>
         <translation>Внутренняя ошибка при декодировании. Подробности в файле журнала.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="295" />
+        <location filename="../decode_page.py" line="300" />
+        <source>Decoding cancelled.</source>
+        <translation>Декодирование отменено.</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="317" />
         <source>Text files (*.txt)</source>
         <translation>Текстовые файлы (*.txt)</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="295" />
+        <location filename="../decode_page.py" line="317" />
         <source>JSON files (*.json)</source>
         <translation>Файлы JSON (*.json)</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="296" />
+        <location filename="../decode_page.py" line="318" />
         <source>Export</source>
         <translation>Экспорт</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="310" />
+        <location filename="../decode_page.py" line="332" />
         <source>Cannot write {path}: {detail}</source>
         <translation>Не удалось записать {path}: {detail}</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="326" />
+        <location filename="../decode_page.py" line="348" />
         <source>Open file…</source>
         <translation>Открыть файл…</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="327" />
+        <location filename="../decode_page.py" line="349" />
         <source>Message language:</source>
         <translation>Язык сообщения:</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="329" />
+        <location filename="../decode_page.py" line="351" />
         <source>Auto</source>
         <translation>Авто</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="330" />
+        <location filename="../decode_page.py" line="352" />
         <source>English</source>
         <translation>Английский</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="331" />
+        <location filename="../decode_page.py" line="353" />
         <source>Russian</source>
         <translation>Русский</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="332" />
+        <location filename="../decode_page.py" line="354" />
         <source>Kazakh</source>
         <translation>Казахский</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="336" />
+        <location filename="../decode_page.py" line="358" />
         <source>Use language model</source>
         <translation>Использовать языковую модель</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="337" />
+        <location filename="../decode_page.py" line="359" />
         <source>Auto always uses the language model.</source>
         <translation>Режим «Авто» всегда использует языковую модель.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="339" />
+        <location filename="../decode_page.py" line="361" />
         <source>Decode</source>
         <translation>Декодирование</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="340" />
+        <location filename="../decode_page.py" line="362" />
+        <source>Cancel</source>
+        <translation>Отмена</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="363" />
         <source>Copy</source>
         <translation>Копировать</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="341" />
+        <location filename="../decode_page.py" line="364" />
         <source>Export TXT…</source>
         <translation>Экспорт TXT…</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="342" />
+        <location filename="../decode_page.py" line="365" />
         <source>Export JSON…</source>
         <translation>Экспорт JSON…</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="344" />
+        <location filename="../decode_page.py" line="367" />
         <source>No file selected. Drop an audio file here.</source>
         <translation>Файл не выбран. Перетащите аудиофайл сюда.</translation>
     </message>
@@ -342,47 +352,47 @@
         <translation>не определён</translation>
     </message>
     <message>
-        <location filename="../widgets/stats_bar.py" line="58" />
+        <location filename="../widgets/stats_bar.py" line="75" />
         <source>No result yet.</source>
         <translation>Результата пока нет.</translation>
     </message>
     <message>
-        <location filename="../widgets/stats_bar.py" line="64" />
+        <location filename="../widgets/stats_bar.py" line="81" />
         <source>Hz</source>
         <translation>Гц</translation>
     </message>
     <message>
-        <location filename="../widgets/stats_bar.py" line="65" />
+        <location filename="../widgets/stats_bar.py" line="82" />
         <source>dB</source>
         <translation>дБ</translation>
     </message>
     <message>
-        <location filename="../widgets/stats_bar.py" line="67" />
+        <location filename="../widgets/stats_bar.py" line="84" />
         <source>WPM {v}</source>
         <translation>WPM {v}</translation>
     </message>
     <message>
-        <location filename="../widgets/stats_bar.py" line="68" />
+        <location filename="../widgets/stats_bar.py" line="85" />
         <source>Tone {v}</source>
         <translation>Тон {v}</translation>
     </message>
     <message>
-        <location filename="../widgets/stats_bar.py" line="69" />
+        <location filename="../widgets/stats_bar.py" line="86" />
         <source>SNR {v}</source>
         <translation>ОСШ {v}</translation>
     </message>
     <message>
-        <location filename="../widgets/stats_bar.py" line="72" />
+        <location filename="../widgets/stats_bar.py" line="89" />
         <source>{v} s</source>
         <translation>{v} с</translation>
     </message>
     <message>
-        <location filename="../widgets/stats_bar.py" line="76" />
+        <location filename="../widgets/stats_bar.py" line="93" />
         <source>{lang} (auto)</source>
         <translation>{lang} (авто)</translation>
     </message>
     <message>
-        <location filename="../widgets/stats_bar.py" line="82" />
+        <location filename="../widgets/stats_bar.py" line="99" />
         <source>Language: {lang}</source>
         <translation>Язык: {lang}</translation>
     </message>

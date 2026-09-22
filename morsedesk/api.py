@@ -30,6 +30,7 @@ from morsedesk.lm.store import LMStore
 from morsedesk.model.ctc import greedy_decode_with_frames
 from morsedesk.model.protocol import AcousticModel
 from morsedesk.model.vocab import SPACE, UNK, VOCAB
+from morsedesk.progress import DecodeProgress
 from morsedesk.warnings import DecodeWarning, WarningCode, warn
 
 LOW_CONFIDENCE = 0.6
@@ -276,7 +277,8 @@ class Decoder:
     def _windowed(self) -> bool:
         return self.engine == "onnx" and getattr(self._model, "feature_mode", "clip") == "window"
 
-    def decode_array(self, x: np.ndarray, sample_rate: int = SAMPLE_RATE) -> DecodeResult:
+    def decode_array(self, x: np.ndarray, sample_rate: int = SAMPLE_RATE,
+                     progress: DecodeProgress | None = None) -> DecodeResult:
         """Ước lượng tone toàn clip chỉ là gợi ý ở chế độ 'window': clip dài chủ yếu là nhiễu vẫn
         giải mã được nếu có cửa sổ 4 s nào dò ra tone (spec §3.1)."""
         if sample_rate != SAMPLE_RATE:
@@ -308,12 +310,17 @@ class Decoder:
         if guessed_tone:
             warnings.append(warn(WarningCode.GUESSED_TONE))
         snr_db = est.snr_db if est.has_signal else None
-        if self.engine == "baseline":
-            return self._decode_baseline(x, tone_hz, snr_db, warnings)
-        if self.engine == "deepcw":
+        if self.engine in ("baseline", "deepcw"):
+            # Hai engine này không chia cửa sổ nên chỉ có một bước; vẫn gọi `step` để bên gọi
+            # hủy được trước khi vào đoạn tính nặng.
+            if progress is not None:
+                progress.step(1, 1)
+            if self.engine == "baseline":
+                return self._decode_baseline(x, tone_hz, snr_db, warnings)
             return self._decode_deepcw(x, tone_hz, snr_db, warnings)
         # chế độ 'clip' gọi đúng hai đối số: test thay `_log_probs` bằng hàm hai tham số
-        logp, n_in = self._log_probs(x, tone_hz) if windows is None else self._log_probs(x, tone_hz, windows)
+        logp, n_in = (self._log_probs(x, tone_hz, progress=progress) if windows is None
+                      else self._log_probs(x, tone_hz, windows, progress=progress))
         return self._decode_onnx(x, logp, n_in, tone_hz, snr_db, warnings)
 
     @staticmethod
@@ -343,18 +350,19 @@ class Decoder:
                             lang, scores, [w.vi() for w in warnings], "baseline",
                             warning_codes=list(warnings))
 
-    def _log_probs(self, x: np.ndarray, f0_hz: float,
-                   windows: list[Window] | None = None) -> tuple[np.ndarray, int]:
+    def _log_probs(self, x: np.ndarray, f0_hz: float, windows: list[Window] | None = None,
+                   progress: DecodeProgress | None = None) -> tuple[np.ndarray, int]:
         """Nơi duy nhất biến âm thanh thành log-prob. `windows`: đặc trưng cửa sổ đã tính sẵn."""
         from morsedesk.model.chunker import run_chunked, run_chunked_audio, run_chunked_windows
 
         if getattr(self._model, "feature_mode", "clip") == "window":
             if windows is None:
-                return run_chunked_audio(self._model, x, f0_hint=f0_hz, cfg=self.feature_cfg)
+                return run_chunked_audio(self._model, x, f0_hint=f0_hz, cfg=self.feature_cfg,
+                                         progress=progress)
             n_frames = len(x) // HOP
-            return run_chunked_windows(self._model, windows, n_frames), n_frames
+            return run_chunked_windows(self._model, windows, n_frames, progress), n_frames
         feats = compute_features(x, f0_hz)
-        return run_chunked(self._model, feats), len(feats)
+        return run_chunked(self._model, feats, progress=progress), len(feats)
 
     def _beam_words(self, logp: np.ndarray, stride: int, n_in: int):
         if not self.auto:
