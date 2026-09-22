@@ -26,9 +26,12 @@ Engine ONNX là bộ giải mã chính; baseline vừa là đối chứng, vừa
 cậy của model thấp, vừa là đường chính khi tín hiệu sạch hơn dải huấn luyện của model (xem
 `morsedesk/dsp/selection.py`).
 
-Hướng cải tiến sau: nội suy ranh giới dưới khung trong run_lengths. Lưu ý nó giúp ở tốc độ CAO
-chứ không phải tốc độ thấp: ở 40 WPM một dit chỉ dài 6 khung nên sai số nửa khung là 8 %, còn ở
-5 WPM dit dài 48 khung nên cùng sai số đó chỉ là 1 %.
+Đã thử và bỏ: nội suy ranh giới dưới khung. Lập luận nghe rất chắc — ở 40 WPM một dit chỉ dài
+6 khung nên sai số nửa khung là 8 % — nhưng đo thì T1 xấu đi 5,6 điểm (40,73 % so với 35,12 %)
+và **cả mười bản ghi thật của T2 không đổi một chữ số nào**. Lý do: bộ giải mã so TỈ LỆ giữa
+dấu và khoảng lặng, mà lượng tử hóa dời cả hai cùng chiều nên phần lớn sai số tự triệt tiêu;
+đổi lại, trên tín hiệu nhiễu thì điểm cắt ngưỡng dao động theo nhiễu và biên nội suy kém ổn
+định hơn biên làm tròn. Chi tiết: docs/research/02-baseline-numbers.md.
 """
 
 from __future__ import annotations
@@ -194,17 +197,19 @@ def split_gap_threshold(gap_units: np.ndarray) -> float:
     return float(np.sqrt(lo * hi))
 
 
-def runs_to_symbols(runs: list[tuple[bool, int, int]], unit: float) -> list[Symbol]:
+def runs_to_symbols(runs: list[tuple[bool, float, float]], unit: float) -> list[Symbol]:
+    """Ranh giới có thể là số thực sau khi nội suy dưới khung; `Symbol` vẫn đếm theo khung nên
+    làm tròn ở đây, còn mọi phép so tỉ lệ bên trong dùng giá trị thực."""
     gaps = np.array([(e - s) / unit for on, s, e in runs[1:-1] if not on and (e - s) / unit >= 2.0])
     word_thr = split_gap_threshold(gaps)
     symbols: list[Symbol] = []
     cur = ""
-    cur_start = 0
+    cur_start = 0.0
 
-    def flush(end: int) -> None:
+    def flush(end: float) -> None:
         nonlocal cur
         if cur:
-            symbols.append(Symbol(cur, cur_start, end))
+            symbols.append(Symbol(cur, int(round(cur_start)), int(round(end))))
             cur = ""
 
     for on, s, e in runs:
@@ -218,7 +223,7 @@ def runs_to_symbols(runs: list[tuple[bool, int, int]], unit: float) -> list[Symb
             continue
         flush(s)
         if r >= word_thr and symbols and symbols[-1].token != SPACE:
-            symbols.append(Symbol(SPACE, s, e))
+            symbols.append(Symbol(SPACE, int(round(s)), int(round(e))))
     flush(runs[-1][2] if runs else 0)
     while symbols and symbols[-1].token == SPACE:
         symbols.pop()

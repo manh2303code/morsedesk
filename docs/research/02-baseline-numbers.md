@@ -599,3 +599,33 @@ nhất profile hiện tại. Chỉ khi không bật LM mới phải nhường h�
 
 Lưu ý phạm vi: đây là audio **sạch không nhiễu**. Ô nhiễu vẫn do mô hình âm thanh gánh, và đó
 là nội dung của yêu cầu A1 (gate 2 % trên T1) — chưa đạt.
+
+## Nội suy ranh giới dưới khung — kết quả ÂM (2026-09-22)
+
+Lập luận nghe rất chắc và đã nằm sẵn trong docstring của `morsedesk/dsp/baseline.py` từ tuần 3:
+envelope lấy mẫu mỗi 5 ms nên ranh giới bật/tắt thật gần như luôn nằm giữa hai khung, và ở 40 WPM
+một dit chỉ dài 6 khung nên sai số nửa khung là 8 %. Nội suy tuyến tính tại ngưỡng đang xét sẽ
+lấy lại phần đó.
+
+Cài đặt cẩn thận: cả biên lên lẫn biên xuống nội suy tại **cùng một ngưỡng tham chiếu** (dùng
+ngưỡng bật cho biên lên và ngưỡng tắt cho biên xuống sẽ kéo dài mọi dấu một cách hệ thống), dò
+ngược tối đa 4 khung để tìm chỗ cắt vì trễ Schmitt tắt muộn hơn, và giữ nguyên biên khi không có
+cặp khung nào kẹp ngưỡng.
+
+| Bộ đo | Trước | Sau |
+|---|---|---|
+| Bộ DSP trên T1, 500 clip | **35,12 %** | 40,73 % |
+| 10 bản ghi thật của ARRL | 4,0 % | **4,0 %** — từng ô giống hệt |
+
+**Bị loại.** Hai lý do, và cái thứ nhất mới là cái đáng nhớ:
+
+1. **Sai số lượng tử phần lớn tự triệt tiêu.** Bộ giải mã không đo độ dài tuyệt đối mà so **tỉ
+   lệ** giữa dấu và khoảng lặng với lưới 1/3/7 dit. Làm tròn dời cả hai biên của mọi đoạn cùng
+   một chiều, nên tỉ lệ gần như không đổi. Con số 8 % ở trên là sai số của một phép đo tuyệt
+   đối mà bộ giải mã không hề thực hiện.
+2. **Trên tín hiệu nhiễu, nội suy khuếch đại nhiễu.** Điểm cắt ngưỡng dao động theo nhiễu của
+   envelope, nên biên nội suy kém ổn định hơn biên làm tròn — đúng chỗ T1 mất 5,6 điểm.
+
+Mã đã gỡ; giữ lại đây để người sau không mất thêm một lượt. Bài học chung với ngày hôm nay: một
+lập luận vật lý đúng về mặt số học vẫn có thể nhắm sai chỗ, nếu nó đo đại lượng mà thuật toán
+không dùng.
