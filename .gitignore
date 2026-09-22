@@ -25,3 +25,4 @@ models/lm/*.bin
 models/lm/*.arpa
 # model bên ngoài tải về (DeepCW 15 MB); mẫu models/*.onnx không khớp thư mục con
 models/deepcw/
+morsedesk/app/fonts/
