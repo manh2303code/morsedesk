@@ -175,3 +175,40 @@ lượng tone. Bỏ cổng cho riêng nó đưa CER tập `en` của T1 từ 27,
 có thể sai" và độ tin cậy thấp (tô đỏ trong giao diện). Đây là **lệch spec gốc §7**, chỗ nói không
 dò được tone thì trả rỗng — đổi lại vì bỏ cuộc là chắc chắn sai, còn đoán thì sai ít hơn và người
 dùng vẫn được cảnh báo. Engine `baseline` giữ hành vi cũ: bộ giải mã DSP với tone sai chỉ ra nhiễu.
+
+## Chẩn đoán loại lỗi và thưởng ký tự: 2,27 điểm nữa, vẫn không cần huấn luyện (2026-09-22)
+
+Trước khi thử tiếp cách cải thiện, phân tích lỗi thành ba loại trên toàn T1 (beam+LM, model E3):
+
+| Kênh | Thay | Chèn thừa | Xóa |
+|---|---|---|---|
+| clean | 4,3 % | 0,2 % | 9,3 % |
+| mp3 | 4,5 % | 0,5 % | 8,6 % |
+| qrm | 3,3 % | 0,2 % | 11,0 % |
+| qrn | 4,9 % | 0,7 % | 11,1 % |
+| **qsb** | 11,0 % | **0,0 %** | **43,5 %** |
+| **Tổng** | 5,6 % | **0,3 %** | **16,6 %** |
+
+**74 % lỗi là XÓA ký tự, chỉ 1 % là chèn thừa.** Model bỏ sót chữ khi tín hiệu fade chứ không
+bịa thêm. Điều này loại bỏ cả một nhóm giải pháp: mọi cách phạt chèn thừa (duration penalty,
+DPDP, phạt quá phân đoạn) đều nhắm sai chỗ.
+
+`BeamParams.beta` của mình là thưởng mỗi **từ**, không chạm tới việc xóa ký tự bên trong từ. Thêm
+`char_bonus` là thưởng mỗi **ký tự** phát ra (đúng "character insertion bonus" của Deep Speech 2
+công thức 12 cho mô hình mức ký tự). Quét trên 200 clip qsb+clean:
+
+| char_bonus | 0,0 | 0,75 | 1,0 | **1,25** | 1,5 | 2,0 | 3,0 | 5,0 |
+|---|---|---|---|---|---|---|---|---|
+| CER | 35,73 % | 34,06 % | 33,25 % | **32,99 %** | 33,38 % | 35,20 % | 43,26 % | 94,99 % |
+
+Toàn bộ T1 với `char_bonus = 1.25`:
+
+| | clean | mp3 | qrm | qrn | qsb | **gate** |
+|---|---|---|---|---|---|---|
+| Trước | 16,04 % | 14,90 % | 16,40 % | 16,47 % | 55,42 % | 23,85 % |
+| Sau | **13,88 %** | **13,34 %** | **14,26 %** | **14,35 %** | **52,09 %** | **21,58 %** |
+
+Mọi kênh đều tốt lên. Không huấn luyện lại. Chỉ áp khi có mô hình ngôn ngữ; chế độ thuần âm học
+giữ nguyên hành vi cũ.
+
+Tổng trong ngày 22/09, không huấn luyện lại lần nào: **25,27 % → 21,58 %**.

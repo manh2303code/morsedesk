@@ -194,4 +194,7 @@ def test_prosign_does_not_close_word():
     assert h.text == "73 <SK> "                                         # dấu cách cuối vẫn render " "
     assert h.n_words == 1                                                # prosign không đóng từ rỗng
     p = BeamParams()
-    assert math.isclose(h.score - h.acoustic_logp - p.alpha * h.lm_logp, p.beta + p.lexicon_bonus)
+    # Thưởng gồm: 1 từ ("73") + lexicon + char_bonus cho đúng 2 ký tự "7" và "3".
+    # Prosign <SK> không có trong bảng chữ LM nên thoát sớm, không nhận char_bonus.
+    assert math.isclose(h.score - h.acoustic_logp - p.alpha * h.lm_logp,
+                        p.beta + p.lexicon_bonus + 2 * p.char_bonus)

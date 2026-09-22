@@ -39,6 +39,15 @@ class BeamParams:
     alpha: float = 0.2   # tinh chỉnh trên T1 v2 với E2 (spec gốc 0.6 làm xấu CER mọi profile)
     beta: float = 1.0    # thưởng mỗi từ; 1.0 tốt hơn 0.5 trên T1 v2
     lexicon_bonus: float = 1.0
+    # Thưởng mỗi KÝ TỰ phát ra (khác `beta` là thưởng mỗi TỪ). Đo 22/09 trên T1: 74 % lỗi của
+    # model là XÓA ký tự và chỉ 1 % là chèn thừa (riêng kênh qsb: xóa 43,5 % so với thay 11,0 %),
+    # nghĩa là beam đang quá dè dặt khi tín hiệu fade. Thưởng theo từ không chạm tới lỗi xóa bên
+    # trong từ. Đây là "character insertion bonus" của Deep Speech 2 (công thức 12) cho mô hình
+    # mức ký tự. 0.0 = giữ nguyên hành vi cũ.
+    # Quét trên T1 (200 clip qsb+clean): 0,0 -> 35,73 %; 0,75 -> 34,06; 1,0 -> 33,25;
+    # 1,25 -> 32,99; 1,5 -> 33,38; 2,0 -> 35,20; 3,0 -> 43,26; 5,0 -> 94,99 (chèn thừa tràn lan).
+    # Trên toàn T1: gate 23,85 % -> 21,58 %, mọi kênh đều tốt lên.
+    char_bonus: float = 1.25
     topk_per_frame: int = 8
     unk_logp: float = math.log(1e-4)
     min_prob: float = 1e-3
@@ -187,6 +196,8 @@ class BeamState:
             ext.word = ""
         else:
             ext.word = pre.word + display
+            if self.lm is not None:         # thuần âm thanh: không cộng thưởng nào, như beta
+                ext.bonus += p.char_bonus   # bù xu hướng xóa ký tự khi tín hiệu yếu
         return ext
 
     # ---- một khung ----
