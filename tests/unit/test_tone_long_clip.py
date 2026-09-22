@@ -51,3 +51,21 @@ def test_memory_does_not_grow_with_clip_length():
 
 def test_analysis_window_is_a_documented_constant():
     assert 20.0 <= MAX_ANALYSIS_SECONDS <= 180.0
+
+
+@pytest.mark.parametrize("n_slices", [1, 2, 7])
+def test_slice_count_edge_cases(n_slices):
+    """`n_slices=1` từng chia cho 0 khi tính bước nhảy giữa các đoạn."""
+    from morsedesk.dsp.tone import analysis_slice
+
+    x = tone_clip(5 * 60.0)
+    out = analysis_slice(x, max_seconds=30.0, n_slices=n_slices)
+    assert 0 < len(out) <= 30 * SAMPLE_RATE
+    assert out.dtype == x.dtype
+
+
+def test_short_clip_is_returned_untouched():
+    from morsedesk.dsp.tone import analysis_slice
+
+    x = tone_clip(5.0)
+    assert analysis_slice(x, max_seconds=60.0) is x

@@ -77,6 +77,10 @@ def analysis_slice(x: np.ndarray, sample_rate: int = SAMPLE_RATE,
     limit = int(max_seconds * sample_rate)
     if len(x) <= limit:
         return x
+    n_slices = max(1, int(n_slices))
+    if n_slices == 1:                       # một đoạn: lấy giữa clip, nơi ít khi là im lặng đầu/cuối
+        start = (len(x) - limit) // 2
+        return x[start: start + limit]
     per = limit // n_slices
     step = (len(x) - per) // (n_slices - 1)
     return np.concatenate([x[i * step: i * step + per] for i in range(n_slices)])
