@@ -89,9 +89,10 @@ def collate(batch):
 @torch.no_grad()
 def token_error_rate(model: nn.Module, items: list[tuple[torch.Tensor, list[str]]]) -> float:
     model.eval()
+    dev = next(model.parameters()).device      # val_items nằm trên CPU, model có thể ở GPU
     errs = total = 0
     for feats, tokens in items:
-        logp = model(feats[None])[0].cpu().numpy()
+        logp = model(feats[None].to(dev))[0].cpu().numpy()
         hyp = [VOCAB.token(i) for i in greedy_decode(logp)]
         errs += edit_distance(tokens, hyp)
         total += len(tokens)
@@ -126,8 +127,10 @@ def load_ckpt(path: Path) -> dict:
 
 
 def train_loop(model, loader, opt, ctc, steps, val_items, run_dir: Path, config: dict, log_every=50,
-               val_every=500, start_step: int = 0, lr_fn=None, history: list[dict] | None = None) -> dict:
+               val_every=500, start_step: int = 0, lr_fn=None, history: list[dict] | None = None,
+               device: torch.device | None = None) -> dict:
     history = list(history or [])
+    device = device or next(model.parameters()).device
     best = min([h["val_ter"] for h in history], default=float("inf"))
     step = start_step
     t0 = time.time()
@@ -137,6 +140,9 @@ def train_loop(model, loader, opt, ctc, steps, val_items, run_dir: Path, config:
             lr = lr_fn(step)
             for g in opt.param_groups:
                 g["lr"] = lr
+        # `feat_lens`/`target_lens` phải ở CPU: đó là yêu cầu của cuDNN CTC.
+        feats = feats.to(device, non_blocking=True)
+        targets = targets.to(device, non_blocking=True)
         logp = model(feats)
         loss = ctc(logp.transpose(0, 1), targets, feat_lens, target_lens)
         opt.zero_grad()
@@ -182,6 +188,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="lấy mẫu QSB đúng độ khó ô qsb của T1 (E6): 60 %% clip, sâu 10–24 dB, chu kỳ 2–8 s")
     ap.add_argument("--agc-tau", type=float, default=1.0,
                     help="hằng số thời gian AGC (giây) dùng cả khi huấn luyện lẫn suy luận (E7)")
+    ap.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto",
+                    help="auto = dùng CUDA nếu có (máy dev có RTX 5090); mô hình xuất ra vẫn là ONNX CPU")
     ap.add_argument("--resume", type=Path, default=None,
                     help="checkpoint để tiếp tục; --lr/--lr-schedule/--warmup/--steps không lưu "
                          "trong checkpoint nên phải truyền lại đúng như lần chạy trước")
@@ -190,10 +198,14 @@ def main(argv: list[str] | None = None) -> int:
     assert a.seed * 1_000_000 + a.steps * a.batch < VAL_SEED_BASE, "seed/steps quá lớn: trùng dải seed validation"
 
     torch.manual_seed(a.seed)
+    torch.cuda.manual_seed_all(a.seed)   # manual_seed không chạm RNG của CUDA
     torch.set_num_threads(max(1, torch.get_num_threads()))
     config = dict(CONFIG_DEFAULT, hidden=a.hidden, feature_mode=a.feature_mode,
                   qsb_hard=bool(a.qsb_hard), agc_tau_s=float(a.agc_tau))
-    model = MorseNet(config["feat_dim"], config["n_classes"], config["hidden"])
+    if a.device == "cuda" and not torch.cuda.is_available():
+        raise SystemExit("--device cuda nhưng torch không thấy CUDA (bản torch CPU-only?)")
+    dev = torch.device("cuda" if (a.device != "cpu" and torch.cuda.is_available()) else "cpu")
+    model = MorseNet(config["feat_dim"], config["n_classes"], config["hidden"]).to(dev)
     opt = torch.optim.AdamW(model.parameters(), lr=a.lr)
     run_dir = Path("runs") / a.name
     start_step = 0
@@ -217,7 +229,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"cảnh báo: checkpoint feature_mode={ck_cfg.get('feature_mode', 'clip')}, đang train {a.feature_mode}")
     if start_step >= a.steps:
         raise SystemExit(f"--steps ({a.steps}) phải lớn hơn bước đã có trong checkpoint ({start_step})")
-    print(f"tham số: {count_params(model):,} (hidden {a.hidden}, feature_mode {a.feature_mode})")
+    name = torch.cuda.get_device_name(0) if dev.type == "cuda" else f"CPU {torch.get_num_threads()} luồng"
+    print(f"tham số: {count_params(model):,} (hidden {a.hidden}, feature_mode {a.feature_mode}) | thiết bị: {name}")
 
     gen = SynthGenerator(SynthConfig(mp3_enabled=not a.no_mp3, channel_sampling=sampling_for(a.qsb_hard)))
     val_items = []
@@ -228,7 +241,8 @@ def main(argv: list[str] | None = None) -> int:
     ds = SynthDataset(gen, seed_start=a.seed * 1_000_000 + start_step * a.batch,
                       n_items=(a.steps - start_step) * a.batch, feature_mode=a.feature_mode,
                       agc_tau_s=a.agc_tau)
-    loader = DataLoader(ds, batch_size=a.batch, collate_fn=collate, num_workers=a.workers)
+    loader = DataLoader(ds, batch_size=a.batch, collate_fn=collate, num_workers=a.workers,
+                        pin_memory=(dev.type == "cuda"))
     ctc = nn.CTCLoss(blank=VOCAB.blank_id, zero_infinity=True)
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "args.json").write_text(json.dumps(vars(a), default=str, indent=2), encoding="utf-8")
@@ -237,7 +251,7 @@ def main(argv: list[str] | None = None) -> int:
         return lr_at(step, a.lr, a.steps, a.lr_schedule, a.warmup)
 
     result = train_loop(model, loader, opt, ctc, a.steps, val_items, run_dir, config, val_every=a.val_every,
-                        start_step=start_step, lr_fn=lr_fn, history=history)
+                        start_step=start_step, lr_fn=lr_fn, history=history, device=dev)
     print(json.dumps(result))
     return 0
 
