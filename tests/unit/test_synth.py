@@ -19,7 +19,9 @@ def test_tone_rms_and_silence():
     x = elements_to_audio(els, tone_hz=700.0, amplitude=0.8)
     on = x[400:7600]                      # bỏ sườn lên xuống
     assert math.isclose(np.sqrt(np.mean(on**2)), 0.8 / math.sqrt(2), rel_tol=0.02)
-    assert np.all(x[8000:] == 0)
+    # Sườn xuống cưỡi lên ranh giới nên lấn sang khoảng lặng nửa sườn (5 ms / 2 = 20 mẫu);
+    # phần còn lại của khoảng lặng phải im tuyệt đối.
+    assert np.all(x[8000 + 20:] == 0)
 
 
 def test_ramps_avoid_clicks():

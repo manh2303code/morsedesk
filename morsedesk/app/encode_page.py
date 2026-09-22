@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import QEvent
+from PySide6.QtGui import QFont, QFontDatabase
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -28,6 +29,7 @@ from morsedesk.app.widgets.charmap import CharMap
 from morsedesk.app.worker import MAX_SECONDS, Player
 from morsedesk.audio.io import SUPPORTED_EXT, save_audio
 from morsedesk.constants import SAMPLE_RATE
+from morsedesk.encode.detect import detect_profile
 from morsedesk.encode.text import normalize
 from morsedesk.encode.timing import TimingParams, tokens_to_elements, total_seconds
 from morsedesk.lm.profile import Profile, load_profile
@@ -37,6 +39,11 @@ PROFILES = ("en", "ru", "kk-cyrl-ru")
 PAD_S = 0.3         # `Encoder.to_audio` đệm im lặng PAD_S giây ở mỗi đầu (mặc định của lõi)
 # Đuôi được coi là "đuôi audio biết trước" khi đổi định dạng lưu; đuôi lạ thì nối thêm.
 AUDIO_SUFFIXES = frozenset(SUPPORTED_EXT) | {ext for _, ext in FORMATS}
+# Mục "Tự động" của combo bảng mã. Việc chọn là TẤT ĐỊNH, không phải đoán: xem
+# `morsedesk/encode/detect.py`. Khi nhiều bảng cùng phủ được văn bản, chúng sinh ra đúng cùng
+# một chuỗi Morse, nên tín hiệu phát ra không phụ thuộc lựa chọn.
+AUTO_PROFILE = "auto"
+
 MAX_MINUTES = int(MAX_SECONDS // 60)    # dùng chung ngưỡng với phía giải mã (spec mục 7: 1 giờ)
 
 
@@ -62,6 +69,7 @@ class EncodePage(QWidget):
         self.settings = settings
         self._profiles = {pid: load_profile(pid) for pid in PROFILES}
         self._limit_banner = False      # banner đang hiện có phải cảnh báo quá thời lượng không
+        self._unsupported: list[str] = []   # ký tự văn bản hiện tại không mã hóa được
 
         self.text_label = QLabel(self)
         self.text_edit = QPlainTextEdit(self)
@@ -69,9 +77,21 @@ class EncodePage(QWidget):
         self.morse_label = QLabel(self)
         self.morse_view = QPlainTextEdit(self)
         self.morse_view.setReadOnly(True)
-        self.morse_view.setMaximumHeight(90)
+        # Chuỗi chấm gạch luôn dài gấp năm sáu lần văn bản gốc, nên ô của nó không thể thấp hơn
+        # ô nhập nhiều đến thế; và font tỉ lệ làm dấu chấm với gạch khó phân biệt khi đọc soát.
+        self.morse_view.setMaximumHeight(200)
+        morse_font = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
+        morse_font.setPointSize(max(12, morse_font.pointSize() + 2))
+        # `systemFont` trả đúng họ font nhưng không đặt styleHint, nên nếu họ đó thiếu trên máy
+        # đích Qt sẽ thay bằng một font tỉ lệ bất kỳ. Nói rõ ý định để bản thay thế cũng đều nét.
+        morse_font.setStyleHint(QFont.StyleHint.Monospace)
+        morse_font.setFixedPitch(True)
+        self.morse_view.setFont(morse_font)
+        self.auto_label = QLabel(self)
+        self.auto_label.setStyleSheet("color:#2c5d2f;")
+        self.auto_label.hide()
         self.warn_label = QLabel(self)
-        self.warn_label.setStyleSheet("color:#4a3b00; background:#fff2b3; padding:3px;")
+        self.warn_label.setStyleSheet("color:#7a1414; background:#ffd9d9; padding:3px;")
         self.warn_label.hide()
         left = QVBoxLayout()
         left.addWidget(self.text_label)
@@ -79,12 +99,14 @@ class EncodePage(QWidget):
         left.addWidget(self.charmap)
         left.addWidget(self.morse_label)
         left.addWidget(self.morse_view)
+        left.addWidget(self.auto_label)
         left.addWidget(self.warn_label)
 
         self.profile_combo = QComboBox(self)
         # Tên ngôn ngữ dịch ra dài hơn tiếng Anh ('Английский' cần 65px so với
         # 'English' 40px): để mặc định combo giữ nguyên bề rộng và cắt mất chữ.
         self.profile_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.profile_combo.addItem(AUTO_PROFILE, AUTO_PROFILE)
         for pid in PROFILES:
             self.profile_combo.addItem(pid, pid)
         self.wpm_spin = QSpinBox(self)
@@ -170,17 +192,45 @@ class EncodePage(QWidget):
 
     # ---- trạng thái ----
     def current_profile_id(self) -> str:
+        """Lựa chọn trong combo, có thể là `AUTO_PROFILE`."""
         return str(self.profile_combo.currentData())
+
+    def effective_profile_id(self) -> str:
+        """Bảng mã thật sự dùng: chọn tay nếu có, ngược lại suy từ văn bản đang gõ.
+
+        Văn bản rỗng hoặc trộn hệ chữ thì `detect_profile` trả None; khi đó giữ `en` để giao
+        diện vẫn dựng được chuỗi Morse cho phần hợp lệ, còn phần không hợp lệ đã có cảnh báo
+        ký tự riêng lo.
+        """
+        chosen = self.current_profile_id()
+        if chosen != AUTO_PROFILE:
+            return chosen
+        return detect_profile(self.current_text()) or "en"
 
     def current_text(self) -> str:
         return self.text_edit.toPlainText()
 
     def _encoder(self) -> Encoder:
-        return Encoder(self._profiles[self.current_profile_id()])
+        return Encoder(self._profiles[self.effective_profile_id()])
 
     def _on_profile(self) -> None:
-        self.charmap.set_profile(self.current_profile_id())
         self.refresh_morse()
+
+    def _show_auto_choice(self, pid: str) -> None:
+        """Nói rõ bảng nào đang được dùng khi combo để ở Tự động.
+
+        Im lặng tự đổi bảng là kiểu tự động tệ nhất: người vận hành không biết bản tin sắp phát
+        đi được mã theo bảng nào.
+        """
+        if self.current_profile_id() != AUTO_PROFILE or not self.current_text().strip():
+            self.auto_label.setText("")
+            self.auto_label.hide()
+            return
+        names = {"en": self.tr("English"), "ru": self.tr("Russian"), "kk-cyrl-ru": self.tr("Kazakh")}
+        self.auto_label.setText(
+            self.tr("Detected alphabet: {name}").format(name=names.get(pid, pid))
+        )
+        self.auto_label.show()
 
     def _insert_char(self, ch: str) -> None:
         self.text_edit.insertPlainText(ch)
@@ -188,22 +238,30 @@ class EncodePage(QWidget):
 
     def refresh_morse(self) -> None:
         """Cập nhật chuỗi chấm gạch và cảnh báo ký tự không hỗ trợ mỗi khi văn bản đổi."""
-        profile = self._profiles[self.current_profile_id()]
+        pid = self.effective_profile_id()
+        profile = self._profiles[pid]
         text = self.current_text()
+        self.charmap.set_profile(pid)
+        self._show_auto_choice(pid)
         morse = self._encoder().to_morse_string(text, strict=False) if text.strip() else ""
         self.morse_view.setPlainText(morse)
         bad = unsupported_chars(text, profile)
+        self._unsupported = list(bad)
         if bad:
+            # Đỏ chứ không vàng, và chặn hẳn Nghe thử/Lưu: phát đi một bản tin đã bị cắt mất chữ
+            # nguy hiểm hơn nhiều so với việc phải sửa văn bản trước.
             self.warn_label.setText(
-                self.tr("Unsupported characters skipped: {chars}").format(chars=", ".join(bad))
+                self.tr("Cannot encode {chars} — fix the text or switch alphabet before sending.").format(chars=", ".join(bad))
             )
             self.warn_label.show()
         else:
+            self.warn_label.setText("")
             self.warn_label.hide()
         has = bool(morse)
         over = has and self._over_limit_seconds() is not None
-        self.play_button.setEnabled(has and not over)
-        self.save_button.setEnabled(has and not over)
+        ready = has and not over and not bad
+        self.play_button.setEnabled(ready)
+        self.save_button.setEnabled(ready)
 
     def _over_limit_seconds(self) -> float | None:
         """Thời lượng ước tính nếu vượt `MAX_SECONDS` (và hiện banner), ngược lại `None`.
@@ -278,6 +336,13 @@ class EncodePage(QWidget):
         """
         if self._over_limit_seconds() is not None:
             return None          # banner cảnh báo đã do _over_limit_seconds hiện
+        # Chốt thứ hai cho ký tự ngoài bảng, cùng lý do như ngưỡng thời lượng: `play()` và
+        # `save_to()` là API công khai, nút bị vô hiệu chỉ là chỉ dẫn giao diện.
+        if self._unsupported:
+            self.banner.show_error(
+                self.tr("Cannot encode {chars} — fix the text or switch alphabet before sending.").format(chars=", ".join(self._unsupported))
+            )
+            return None
         try:
             return self.build_audio()
         except ValueError as e:          # TimingParams: Farnsworth > WPM, weight/wpm ngoài miền
@@ -343,9 +408,11 @@ class EncodePage(QWidget):
         self.text_label.setText(self.tr("Text to encode"))
         self.morse_label.setText(self.tr("Morse code:"))
         self.text_edit.setPlaceholderText(self.tr("Type text to see its Morse code."))
-        names = {"en": self.tr("English"), "ru": self.tr("Russian"), "kk-cyrl-ru": self.tr("Kazakh")}
+        names = {AUTO_PROFILE: self.tr("Auto"), "en": self.tr("English"),
+                 "ru": self.tr("Russian"), "kk-cyrl-ru": self.tr("Kazakh")}
         for i in range(self.profile_combo.count()):
             self.profile_combo.setItemText(i, names[self.profile_combo.itemData(i)])
+        self._show_auto_choice(self.effective_profile_id())
         for label, text in zip(
             self.form_labels,
             (

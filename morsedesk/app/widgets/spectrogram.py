@@ -18,7 +18,9 @@ class SpectrogramView(pg.PlotWidget):
         # (che mất phương thức clear() của lớp con này); bỏ nó để clear() bên dưới có hiệu lực.
         self.__dict__.pop("clear", None)
         self.retranslate()
-        self.setYRange(0, MAX_FREQ_HZ, padding=0)
+        # Chừa 4 % phía trên: với padding=0 thì nhãn trên cùng (2000) nằm đúng mép và bị cắt
+        # mất nửa — thấy rõ trên ảnh chụp GUI chạy thật.
+        self.setYRange(0, MAX_FREQ_HZ * 1.04, padding=0)
         self.setMouseEnabled(x=True, y=False)
         self.image = pg.ImageItem()
         self.image.setLookupTable(pg.colormap.get("viridis").getLookupTable())

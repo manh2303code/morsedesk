@@ -40,18 +40,32 @@ def elements_to_audio(
 
     ramp = max(1, int(round(ramp_ms * 1e-3 * sample_rate)))
     gate = np.zeros(n)
-    for on, s, e in segs:
+    for i, (on, s, e) in enumerate(segs):
         if not on or e <= s:
             continue
-        length = e - s
-        r = min(ramp, length // 2)
+        # Sườn CƯỠI LÊN ranh giới: nửa nằm trong khoảng lặng kề, nửa nằm trong dấu. Đặt cả sườn
+        # bên trong dấu làm mọi dấu ngắn đi đúng một `ramp` khi đo ở 50 % biên độ và mọi khoảng
+        # lặng dài thêm chừng ấy — ở 30 WPM điều đó đẩy tỉ lệ dah/dit từ 3,00 lên 3,29, đủ để
+        # một máy thu đo tỉ lệ thấy lệch. Với sườn đối xứng, độ dài ở 50 % đúng bằng danh nghĩa.
+        r = min(ramp, e - s)
+        before = segs[i - 1] if i > 0 else None
+        after = segs[i + 1] if i + 1 < len(segs) else None
+        gap_before = (before[2] - before[1]) if before is not None and not before[0] else s
+        gap_after = (after[2] - after[1]) if after is not None and not after[0] else n - e
+        # Lấn tối đa NỬA khoảng lặng mỗi bên: nửa còn lại dành cho dấu bên kia, nếu không hai
+        # dấu cách nhau đúng một dit sẽ dính vào nhau. Ở mép clip không có gì để lấn nên phần
+        # sườn đó nằm trong dấu — chuyện đó không ảnh hưởng tỉ lệ giữa các dấu.
+        head = min(r // 2, max(0, gap_before) // 2, s)
+        tail = min(r - r // 2, max(0, gap_after) // 2, n - e)
+        lo, hi = s - head, e + tail
+        length = hi - lo
         env = np.ones(length)
-        if r > 0:
+        if r > 0 and length >= 2 * r:
             k = np.arange(r)
             rc = 0.5 * (1.0 - np.cos(np.pi * k / r))
             env[:r] = rc
             env[length - r:] = rc[::-1]
-        gate[s:e] = env
+        gate[lo:hi] = np.maximum(gate[lo:hi], env)
     return (amplitude * carrier * gate).astype(np.float32)
 
 
