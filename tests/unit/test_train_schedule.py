@@ -51,7 +51,8 @@ def test_train_resume_restores_optimizer_and_step(tmp_path, monkeypatch, capsys)
     assert train.main(["--name", "r", "--steps", "3", "--lr-schedule", "cosine", "--warmup", "1", *COMMON]) == 0
     last = train.load_ckpt(tmp_path / "runs/r/last.pt")
     assert last["step"] == 3 and "optimizer" in last
-    assert last["config"] == {"feat_dim": 11, "n_classes": 65, "hidden": 32, "feature_mode": "window"}
+    assert last["config"] == {"feat_dim": 11, "n_classes": 65, "hidden": 32, "feature_mode": "window",
+                              "qsb_hard": False, "agc_tau_s": 1.0}
     hist = json.loads((tmp_path / "runs/r/history.json").read_text(encoding="utf-8"))
     assert len(hist) == 1 and {"step", "loss", "val_ter", "lr", "elapsed_s"} <= set(hist[0])
     assert json.loads((tmp_path / "runs/r/args.json").read_text(encoding="utf-8"))["hidden"] == 32

@@ -6,7 +6,7 @@ from __future__ import annotations
 import numpy as np
 
 from morsedesk.constants import HOP
-from morsedesk.dsp.frontend import Window, compute_features_windowed
+from morsedesk.dsp.frontend import FrontendConfig, Window, compute_features_windowed
 from morsedesk.dsp.windowing import (  # noqa: F401  (re-export cho import cũ)
     LIVE_STEP_FRAMES,
     LIVE_WINDOW_FRAMES,
@@ -55,8 +55,9 @@ def run_chunked_windows(model: AcousticModel, windows: list[Window], n_frames: i
 
 
 def run_chunked_audio(model: AcousticModel, x: np.ndarray, f0_hint: float | None = None,
-                      window: int = WINDOW_FRAMES, step: int = STEP_FRAMES) -> tuple[np.ndarray, int]:
+                      window: int = WINDOW_FRAMES, step: int = STEP_FRAMES,
+                      cfg: FrontendConfig | None = None) -> tuple[np.ndarray, int]:
     """Chế độ 'window': đặc trưng và tone tính riêng từng cửa sổ. Trả (log-prob gộp, số khung đầu vào)."""
     n_frames = len(x) // HOP
-    windows = compute_features_windowed(x, f0_hint, window_frames=window, step_frames=step)
+    windows = compute_features_windowed(x, f0_hint, window_frames=window, step_frames=step, cfg=cfg)
     return run_chunked_windows(model, windows, n_frames), n_frames

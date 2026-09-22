@@ -24,7 +24,12 @@ class FrontendConfig:
     agc_init_s: float = 1.0     # đoạn đầu dùng khởi tạo mức nền AGC
 
 
-WINDOW_CFG = FrontendConfig(agc_init_s=0.5)
+def window_cfg(agc_tau_s: float = 1.0) -> FrontendConfig:
+    """Cấu hình đặc trưng cho chế độ cửa sổ; `agc_tau_s` đến từ metadata của model đang dùng."""
+    return FrontendConfig(agc_tau_s=agc_tau_s, agc_init_s=0.5)
+
+
+WINDOW_CFG = window_cfg()
 
 
 def mix_envelope(

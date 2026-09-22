@@ -11,7 +11,13 @@ import numpy as np
 from morsedesk.audio.io import load_audio, resample
 from morsedesk.constants import FRAME_RATE, HOP, SAMPLE_RATE
 from morsedesk.dsp.baseline import BaselineDecoder, Symbol
-from morsedesk.dsp.frontend import Window, compute_features, compute_features_windowed, mix_envelope
+from morsedesk.dsp.frontend import (
+    Window,
+    compute_features,
+    compute_features_windowed,
+    mix_envelope,
+    window_cfg,
+)
 from morsedesk.dsp.tone import ToneEstimate, estimate_tone, fallback_tone_hz
 from morsedesk.encode.synth import add_noise, elements_to_audio, tone_power
 from morsedesk.encode.text import text_to_tokens
@@ -249,6 +255,8 @@ class Decoder:
         if self.lm_enabled and (self.auto or engine in ("onnx", "deepcw")):
             for pid in self.candidates:
                 self._lms[pid] = self._store.get(pid)   # thiếu file -> FileNotFoundError nêu đường dẫn
+        # tau AGC lấy từ metadata model (mặc định 1,0 cho baseline/deepcw hoặc model cũ không khai báo)
+        self.feature_cfg = window_cfg(float(getattr(self._model, "agc_tau_s", 1.0)))
 
     @staticmethod
     def lm_available(lm_dir: Path | None = None) -> bool:
@@ -272,7 +280,7 @@ class Decoder:
         tone_hz = est.f0_hz if est.has_signal else None
         windows: list[Window] | None = None
         if self._windowed():
-            windows = compute_features_windowed(x, tone_hz)
+            windows = compute_features_windowed(x, tone_hz, cfg=self.feature_cfg)
             if tone_hz is None:                     # toàn clip không dò ra tone -> cửa sổ có tín hiệu đầu tiên
                 signal = next((w for w in windows if w.has_signal), None)
                 tone_hz = signal.f0_hz if signal is not None else None
@@ -287,7 +295,8 @@ class Decoder:
             tone_hz = fallback_tone_hz(x)
             guessed_tone = tone_hz is not None
             if guessed_tone and windows is not None:
-                windows = compute_features_windowed(x, tone_hz)   # dựng lại đặc trưng theo tone đoán
+                # dựng lại đặc trưng theo tone đoán; giữ nguyên cfg (đặc biệt agc_tau_s) như lần tính đầu
+                windows = compute_features_windowed(x, tone_hz, cfg=self.feature_cfg)
         if tone_hz is None and self.engine != "deepcw":
             return self._empty(["không có tín hiệu Morse trong đoạn âm thanh"])
         warnings = self._tone_warnings(est)
@@ -335,7 +344,7 @@ class Decoder:
 
         if getattr(self._model, "feature_mode", "clip") == "window":
             if windows is None:
-                return run_chunked_audio(self._model, x, f0_hint=f0_hz)
+                return run_chunked_audio(self._model, x, f0_hint=f0_hz, cfg=self.feature_cfg)
             n_frames = len(x) // HOP
             return run_chunked_windows(self._model, windows, n_frames), n_frames
         feats = compute_features(x, f0_hz)

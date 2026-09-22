@@ -43,15 +43,33 @@ def clean(snr_db: float = 30.0, tone_hz: float = 700.0, name: str = "clean") -> 
     return ChannelParams(tone_hz, 0.0, snr_db, 0.0, 10.0, 0.0, 0.0, "none", 0.0, True, 1.0, False, 0.0, None, name)
 
 
-def sample_channel_params(rng: np.random.Generator) -> ChannelParams:
-    qsb = rng.random() < 0.4
+@dataclass(frozen=True)
+class ChannelSampling:
+    """Tham số lấy mẫu kênh khi sinh dữ liệu huấn luyện. Mặc định = phân bố tuần 1–4."""
+
+    qsb_prob: float = 0.4
+    qsb_depth_db: tuple[float, float] = (5.0, 30.0)
+    qsb_period_s: tuple[float, float] = (2.0, 20.0)
+
+
+DEFAULT_SAMPLING = ChannelSampling()
+# Ô qsb của T1 là depth đúng 20 dB, chu kỳ đúng 4 s (tools/make_t1.py). Phân bố mặc định hiếm khi
+# rơi vào vùng đó (chu kỳ rải đều 2–20 s), nên E6 kéo phân bố về đúng độ khó của T1 và tăng tỉ lệ
+# lấy mẫu QSB từ 40 % lên 60 %.
+HARD_QSB_SAMPLING = ChannelSampling(qsb_prob=0.6, qsb_depth_db=(10.0, 24.0), qsb_period_s=(2.0, 8.0))
+
+
+def sample_channel_params(rng: np.random.Generator,
+                          sampling: ChannelSampling | None = None) -> ChannelParams:
+    s = sampling or DEFAULT_SAMPLING
+    qsb = rng.random() < s.qsb_prob
     qrm = rng.random() < 0.25
     return ChannelParams(
         tone_hz=float(rng.uniform(400.0, 1200.0)),
         tone_drift_hz_per_s=float(rng.uniform(-2.0, 2.0)),
         snr_db=float(rng.uniform(-6.0, 25.0)),
-        qsb_depth_db=float(rng.uniform(5.0, 30.0)) if qsb else 0.0,
-        qsb_period_s=float(rng.uniform(2.0, 20.0)),
+        qsb_depth_db=float(rng.uniform(*s.qsb_depth_db)) if qsb else 0.0,
+        qsb_period_s=float(rng.uniform(*s.qsb_period_s)),
         qrm_offset_hz=float(rng.choice([-1.0, 1.0]) * rng.uniform(150.0, 600.0)) if qrm else 0.0,
         qrm_level_db=float(rng.uniform(3.0, 20.0)) if qrm else 0.0,
         qrm_kind=("morse" if rng.random() < 0.7 else "carrier") if qrm else "none",

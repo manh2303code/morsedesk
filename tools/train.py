@@ -19,8 +19,15 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, IterableDataset, get_worker_info
 
 from morsedesk.constants import HOP
+from morsedesk.data.channel import HARD_QSB_SAMPLING, ChannelSampling
 from morsedesk.data.synth import Example, SynthConfig, SynthGenerator
-from morsedesk.dsp.frontend import compute_features, compute_features_windowed, stitch_windows
+from morsedesk.dsp.frontend import (
+    FrontendConfig,
+    compute_features,
+    compute_features_windowed,
+    stitch_windows,
+    window_cfg,
+)
 from morsedesk.dsp.tone import estimate_tone
 from morsedesk.metrics import edit_distance
 from morsedesk.model.ctc import greedy_decode
@@ -33,30 +40,37 @@ DEFAULT_FEATURE_MODE = "window"
 VAL_SEED_BASE = 2_000_000_000  # seed validation tách hẳn khỏi dải seed train (seed*1e6 + steps*batch)
 
 
-def example_features(ex: Example, mode: str = DEFAULT_FEATURE_MODE) -> np.ndarray:
-    """Đặc trưng như lúc chạy thật. 'window': tone và chuẩn hóa theo cửa sổ, ghép theo khung, tone thật
-    làm gợi ý khi cửa sổ không dò được; 'clip': tone toàn cục (rơi về tone thật nếu dò thất bại)."""
+def sampling_for(qsb_hard: bool) -> ChannelSampling | None:
+    """None = phân bố mặc định tuần 1–4 (giữ nguyên hành vi cũ khi không truyền cờ)."""
+    return HARD_QSB_SAMPLING if qsb_hard else None
+
+
+def example_features(ex: Example, mode: str = DEFAULT_FEATURE_MODE, agc_tau_s: float = 1.0) -> np.ndarray:
+    """Đặc trưng như lúc chạy thật. 'window': tone và chuẩn hóa theo cửa sổ, ghép theo khung, tone
+    thật làm gợi ý khi cửa sổ không dò được; 'clip': tone toàn cục."""
     if mode == "window":
         n_frames = len(ex.audio) // HOP
-        return stitch_windows(compute_features_windowed(ex.audio, f0_hint=ex.f0_hz), n_frames)
+        return stitch_windows(
+            compute_features_windowed(ex.audio, f0_hint=ex.f0_hz, cfg=window_cfg(agc_tau_s)), n_frames)
     if mode != "clip":
         raise ValueError(f"feature_mode lạ: {mode}")
     est = estimate_tone(ex.audio)
     f0 = est.f0_hz if est.has_signal and est.f0_hz is not None else ex.f0_hz
-    return compute_features(ex.audio, f0)
+    return compute_features(ex.audio, f0, cfg=FrontendConfig(agc_tau_s=agc_tau_s))
 
 
 class SynthDataset(IterableDataset):
     def __init__(self, gen: SynthGenerator, seed_start: int, n_items: int,
-                 feature_mode: str = DEFAULT_FEATURE_MODE) -> None:
-        self.gen, self.seed_start, self.n_items, self.feature_mode = gen, seed_start, n_items, feature_mode
+                 feature_mode: str = DEFAULT_FEATURE_MODE, agc_tau_s: float = 1.0) -> None:
+        self.gen, self.seed_start, self.n_items = gen, seed_start, n_items
+        self.feature_mode, self.agc_tau_s = feature_mode, agc_tau_s
 
     def __iter__(self):
         info = get_worker_info()
         wid, nw = (info.id, info.num_workers) if info else (0, 1)
         for k in range(wid, self.n_items, nw):
             ex = self.gen.generate(self.seed_start + k)
-            yield (torch.from_numpy(example_features(ex, self.feature_mode)),
+            yield (torch.from_numpy(example_features(ex, self.feature_mode, self.agc_tau_s)),
                    torch.tensor(ex.labels, dtype=torch.long), ex.tokens)
 
 
@@ -164,6 +178,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--val-every", type=int, default=500)
     ap.add_argument("--workers", type=int, default=0, help="DataLoader workers (0 an toàn trên Windows)")
     ap.add_argument("--no-mp3", action="store_true")
+    ap.add_argument("--qsb-hard", action="store_true",
+                    help="lấy mẫu QSB đúng độ khó ô qsb của T1 (E6): 60 %% clip, sâu 10–24 dB, chu kỳ 2–8 s")
+    ap.add_argument("--agc-tau", type=float, default=1.0,
+                    help="hằng số thời gian AGC (giây) dùng cả khi huấn luyện lẫn suy luận (E7)")
     ap.add_argument("--resume", type=Path, default=None,
                     help="checkpoint để tiếp tục; --lr/--lr-schedule/--warmup/--steps không lưu "
                          "trong checkpoint nên phải truyền lại đúng như lần chạy trước")
@@ -173,7 +191,8 @@ def main(argv: list[str] | None = None) -> int:
 
     torch.manual_seed(a.seed)
     torch.set_num_threads(max(1, torch.get_num_threads()))
-    config = dict(CONFIG_DEFAULT, hidden=a.hidden, feature_mode=a.feature_mode)
+    config = dict(CONFIG_DEFAULT, hidden=a.hidden, feature_mode=a.feature_mode,
+                  qsb_hard=bool(a.qsb_hard), agc_tau_s=float(a.agc_tau))
     model = MorseNet(config["feat_dim"], config["n_classes"], config["hidden"])
     opt = torch.optim.AdamW(model.parameters(), lr=a.lr)
     run_dir = Path("runs") / a.name
@@ -200,14 +219,15 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"--steps ({a.steps}) phải lớn hơn bước đã có trong checkpoint ({start_step})")
     print(f"tham số: {count_params(model):,} (hidden {a.hidden}, feature_mode {a.feature_mode})")
 
-    gen = SynthGenerator(SynthConfig(mp3_enabled=not a.no_mp3))
+    gen = SynthGenerator(SynthConfig(mp3_enabled=not a.no_mp3, channel_sampling=sampling_for(a.qsb_hard)))
     val_items = []
     for i in range(a.val_clips):
         ex = gen.generate(VAL_SEED_BASE + i)
-        val_items.append((torch.from_numpy(example_features(ex, a.feature_mode)), ex.tokens))
+        val_items.append((torch.from_numpy(example_features(ex, a.feature_mode, a.agc_tau)), ex.tokens))
 
     ds = SynthDataset(gen, seed_start=a.seed * 1_000_000 + start_step * a.batch,
-                      n_items=(a.steps - start_step) * a.batch, feature_mode=a.feature_mode)
+                      n_items=(a.steps - start_step) * a.batch, feature_mode=a.feature_mode,
+                      agc_tau_s=a.agc_tau)
     loader = DataLoader(ds, batch_size=a.batch, collate_fn=collate, num_workers=a.workers)
     ctc = nn.CTCLoss(blank=VOCAB.blank_id, zero_infinity=True)
     run_dir.mkdir(parents=True, exist_ok=True)
