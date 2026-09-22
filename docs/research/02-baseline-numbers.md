@@ -492,3 +492,26 @@ ngưỡng đó trên dữ liệu không do chính mình sinh ra.
 Phần còn lại tập trung ở tốc độ thấp (5–15 WPM), nơi một dit dài 24–48 khung nên lượng tử hóa
 ranh giới nặng hơn — đúng hướng cải tiến mà `morsedesk/dsp/baseline.py` đã ghi sẵn trong
 docstring (nội suy ranh giới dưới khung).
+
+## Nhận diện ngôn ngữ: vấn đề là ĐỘ DÀI bản tin, không phải thuật toán (CP-03, 2026-09-22)
+
+Con số 58,4 % trên T1 (và 80 % trên T2) từng được ghi là "chưa đạt mục tiêu 95 %". Đo lại theo
+độ dài bản tin, với 8 clip mỗi ô, SNR 15 dB, 20 WPM, profile `auto`:
+
+| Độ dài bản tin | `en` | `ru` | `kk-cyrl-ru` | Chung |
+|---|---|---|---|---|
+| 20 ký tự | 100 % | **12 %** | 100 % | 71 % |
+| 50 ký tự | 100 % | 100 % | 100 % | **100 %** |
+| 100 ký tự | 100 % | 100 % | 100 % | **100 %** |
+
+**Từ 50 ký tự trở lên là 100 %.** Bản tin của T1 dài trung bình 13 ký tự, nên 58,4 % là hệ quả
+của bộ đo chứ không phải của thuật toán.
+
+Chỗ hỏng duy nhất ở 20 ký tự là `ru` bị đọc thành `kk-cyrl-ru`, và điều đó có lý do cấu trúc:
+**bảng Kazakh là bảng Nga cộng thêm 9 chữ**, nên một bản tin Nga ngắn không chứa gì loại trừ
+được Kazakh, trong khi bản tin Kazakh ngắn thường có ít nhất một chữ riêng (Ә, Ғ, Қ, Ң, Ө, Ұ,
+Ү, Һ, І) để tự phân biệt. Nhập nhằng một chiều này là tính chất của hai bảng mã, không sửa được
+bằng cách chỉnh mô hình ngôn ngữ.
+
+Hệ quả cho tiêu chí nghiệm thu: mục tiêu 95 % nên ghi kèm **độ dài tối thiểu 50 ký tự**, và
+giao diện nên nói rõ "chưa đủ dữ liệu để nhận diện ngôn ngữ" với bản tin ngắn hơn thay vì đoán.
