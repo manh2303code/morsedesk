@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLabel,
+    QPlainTextEdit,
     QPushButton,
     QSplitter,
     QVBoxLayout,
@@ -78,11 +79,18 @@ class DecodePage(QWidget):
         self.banner = Banner(self)
         self.spectrogram = SpectrogramView(self)
         self.word_view = WordView(self)
+        # Chip từng từ tiện để soi độ tin cậy, nhưng người vận hành còn cần đọc cả bản tin liền
+        # mạch và bôi chọn một đoạn để sao chép — và vùng dưới chip vốn bỏ trống với bản tin ngắn.
+        self.text_view = QPlainTextEdit(self)
+        self.text_view.setReadOnly(True)
+        self.text_view.setPlaceholderText("")
         split = QSplitter(Qt.Orientation.Vertical, self)
         split.addWidget(self.spectrogram)
         split.addWidget(self.word_view)
-        split.setStretchFactor(0, 2)
-        split.setStretchFactor(1, 3)
+        split.addWidget(self.text_view)
+        split.setStretchFactor(0, 4)
+        split.setStretchFactor(1, 2)
+        split.setStretchFactor(2, 3)
         self.stats = StatsBar(self)
         self.fallback_label = QLabel(self)
         self.fallback_label.setWordWrap(True)
@@ -191,6 +199,7 @@ class DecodePage(QWidget):
             return
         self.result = result
         self.word_view.set_words(result.words)
+        self.text_view.setPlainText(result.text)
         self.spectrogram.set_spectrogram(spec)
         self.spectrogram.set_tone(result.tone_hz)
         self.spectrogram.set_word_marks([w.start_s for w in result.words])
@@ -276,6 +285,7 @@ class DecodePage(QWidget):
             return
         self.result = None
         self.word_view.clear()
+        self.text_view.clear()
         self.spectrogram.clear()
         self.stats.set_result(None, None)
         self.fallback_label.hide()
