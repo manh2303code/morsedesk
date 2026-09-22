@@ -104,3 +104,27 @@ def test_ramp_does_not_eat_into_element_length(wpm):
     dit, dah = float(np.median(dits)), float(np.median(dahs))
     assert abs(dit - nominal) < 0.03 * nominal, (dit, nominal)
     assert abs(dah / dit - 3.0) < 0.05, dah / dit
+
+
+@pytest.mark.gate
+@pytest.mark.parametrize("ext", [".wav", ".flac", ".ogg", ".mp3", ".aiff", ".oga"])
+def test_message_survives_every_container(tmp_path, ext):
+    """Bản tin ghi ra file rồi đọc lại phải giải đúng — kể cả qua nén mất dữ liệu.
+
+    Đây là điều kiện để "gửi đi được": người nhận mở file bằng bất kỳ định dạng nào trong danh
+    sách cũng phải đọc ra đúng bản tin. OGG nén xuống 10 KB và MP3 xuống 25 KB so với WAV 162 KB
+    mà vẫn CER 0 %.
+    """
+    from pathlib import Path
+
+    from morsedesk.api import Decoder
+    from morsedesk.audio.io import load_audio, save_audio
+    from morsedesk.metrics import cer
+
+    if not Path("models/acoustic.onnx").is_file():
+        pytest.skip("cần models/acoustic.onnx")
+    text = "CQ CQ DE R1ABC K"
+    path = tmp_path / f"bantin{ext}"
+    save_audio(path, Encoder("en").to_audio(text, wpm=20), SAMPLE_RATE)
+    y, sr = load_audio(path)
+    assert cer(text, Decoder("en", engine="onnx").decode_array(y, sr).text) == 0.0
