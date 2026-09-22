@@ -419,3 +419,55 @@ thể tìm ra.
 làm khóa từ điển, nên mỗi lần mở rộng phải sao chép và băm lại toàn bộ chuỗi. Với clip T1 (13 ký
 tự) không thấy gì; với bản tin 3 746 ký tự thì không chạy nổi. Đây là việc phải sửa trước khi
 nâng trần thời lượng của giao diện (CP-14).
+
+## Chọn bộ giải mã theo bằng chứng đo được từ chính clip (2026-09-22)
+
+Hai bộ đo cho hai thứ hạng ngược nhau, nên câu hỏi "engine nào tốt hơn" không có câu trả lời
+chung:
+
+| Bộ đo | SNR | Mô hình `onnx` | Bộ DSP | DeepCW |
+|---|---|---|---|---|
+| T1 tổng hợp, 500 clip | −6…22 dB | **20,21 %** | 35,12 % | — |
+| T2 bản ghi thật ARRL, 10 bản (180 s đầu) | 49…143 dB | 24,2 % | **4,0 %** | 8,0 % |
+
+Con số 24,2 % của mô hình đã là **sau** khi dither; trước đó là 82,8 %.
+
+### Quy tắc
+
+Ba điều kiện phải cùng đúng thì mới lấy kết quả của bộ DSP (`morsedesk/dsp/selection.py`):
+
+1. **SNR vượt 30 dB.** Đây là thứ tách hai đám đông: T1 cao nhất 22 dB, T2 thấp nhất 49 dB. Nó
+   cũng là lý do mọi clip của T1 vẫn đi đường mô hình như cũ.
+2. **Chi phí timing của bộ DSP dưới 0,06.** Vì điều kiện SNR đã tách hai bộ đo, ngưỡng này
+   không còn nhiệm vụ phân loại nữa; nó là lưới an toàn cho một ca chưa có trong bộ đo nào —
+   bản tin rất sạch nhưng **gõ tay lệch nhịp**, khi đó bộ DSP sẽ đọc sai còn mô hình thì không.
+   Chi phí đo được trên 10 bản ARRL nằm trong 0,0008–0,0523.
+3. **Kết quả không chứa mẫu mơ hồ.** Bảng Kazakh có 9 mẫu giải ra hai chữ (`.-` là А hoặc Ә),
+   bảng Nga có một (`-..-` là Ь hoặc Ъ). Chọn đúng giữa chúng là việc của mô hình ngôn ngữ, còn
+   bộ DSP chỉ lấy lựa chọn đầu tiên — nên dù tín hiệu sạch tới đâu cũng phải giữ đường mô hình.
+
+`DecodeResult.decoded_by` cho biết đường nào thực sự sinh ra văn bản ("model" hoặc "dsp"); còn
+`engine` vẫn là engine người dùng chọn, và kết quả của mô hình xuống dòng dự phòng.
+
+### Kết quả trên T2 sau khi áp quy tắc
+
+| Bản ghi | Trước dither | Sau dither | Sau khi chọn engine |
+|---|---|---|---|
+| 20 WPM | 89,8 % | 29,9 % | **1,8 %** |
+| 25 WPM | 91,4 % | 24,9 % | **1,6 %** |
+| 30 WPM | 90,1 % | 21,4 % | **0,6 %** |
+| 35 WPM | 78,9 % | 7,8 % | **1,1 %** |
+| 40 WPM | 42,6 % | 3,0 % | **2,0 %** |
+| 5 WPM | 87,5 % | 54,1 % | **14,1 %** |
+| 10 WPM | 85,5 % | 21,2 % | **6,1 %** |
+| 13 WPM | 88,5 % | 20,7 % | **5,9 %** |
+| 15 WPM | 84,4 % | 30,4 % | **5,4 %** |
+| 18 WPM | 89,6 % | 28,5 % | **2,0 %** |
+| **Trung bình** | **82,8 %** | **24,2 %** | **4,0 %** |
+
+Bốn bản ghi đã dưới ngưỡng gate 2 % và hai bản nữa đúng bằng 2,0 %. Đây là lần đầu dự án chạm
+ngưỡng đó trên dữ liệu không do chính mình sinh ra.
+
+Phần còn lại tập trung ở tốc độ thấp (5–15 WPM), nơi một dit dài 24–48 khung nên lượng tử hóa
+ranh giới nặng hơn — đúng hướng cải tiến mà `morsedesk/dsp/baseline.py` đã ghi sẵn trong
+docstring (nội suy ranh giới dưới khung).
