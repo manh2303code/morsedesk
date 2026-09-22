@@ -11,6 +11,7 @@ import numpy as np
 from morsedesk.audio.io import load_audio, resample
 from morsedesk.constants import FRAME_RATE, HOP, SAMPLE_RATE
 from morsedesk.dsp.baseline import BaselineDecoder, Symbol
+from morsedesk.dsp.dither import dither_to_ceiling
 from morsedesk.dsp.frontend import (
     Window,
     compute_features,
@@ -285,9 +286,16 @@ class Decoder:
             x = resample(np.asarray(x, dtype=np.float32), sample_rate, SAMPLE_RATE)
         est = estimate_tone(x)
         tone_hz = est.f0_hz if est.has_signal else None
+        # Mô hình âm thanh chỉ từng thấy SNR -6..25 dB. Bản ghi thật của ARRL W1AW đo 61,7 dB và
+        # mô hình trả về rác trên chính loại bản ghi đó, trong khi thêm nhiễu cho bẩn đi thì nó
+        # đọc được ngay (CER 89,8 % -> 28,9 % trên clip đầu của T2). Chỉ đường mô hình dùng bản
+        # đã trộn nhiễu; bộ giải mã DSP dự phòng và mọi số báo cáo vẫn theo tín hiệu gốc, và
+        # không clip nào của T1 vượt trần nên bộ đo cũ không đổi.
+        x_model = (dither_to_ceiling(x, est.snr_db if est.has_signal else None)
+                   if self.engine == "onnx" else x)
         windows: list[Window] | None = None
         if self._windowed():
-            windows = compute_features_windowed(x, tone_hz, cfg=self.feature_cfg)
+            windows = compute_features_windowed(x_model, tone_hz, cfg=self.feature_cfg)
             if tone_hz is None:                     # toàn clip không dò ra tone -> cửa sổ có tín hiệu đầu tiên
                 signal = next((w for w in windows if w.has_signal), None)
                 tone_hz = signal.f0_hz if signal is not None else None
@@ -299,11 +307,11 @@ class Decoder:
             # Model âm thanh được huấn luyện trên đúng loại nhiễu này; bỏ cuộc là chắc chắn sai
             # (CER 1,0), còn đoán tone theo đỉnh phổ đo được 74,8 % trên đúng nhóm clip đó.
             # 29/500 clip vùng gate của T1 rơi vào đây, tương đương 1,46 điểm CER.
-            tone_hz = fallback_tone_hz(x)
+            tone_hz = fallback_tone_hz(x_model)
             guessed_tone = tone_hz is not None
             if guessed_tone and windows is not None:
                 # dựng lại đặc trưng theo tone đoán; giữ nguyên cfg (đặc biệt agc_tau_s) như lần tính đầu
-                windows = compute_features_windowed(x, tone_hz, cfg=self.feature_cfg)
+                windows = compute_features_windowed(x_model, tone_hz, cfg=self.feature_cfg)
         if tone_hz is None and self.engine != "deepcw":
             return self._empty([warn(WarningCode.NO_SIGNAL)])
         warnings = self._tone_warnings(est)
@@ -319,8 +327,8 @@ class Decoder:
                 return self._decode_baseline(x, tone_hz, snr_db, warnings)
             return self._decode_deepcw(x, tone_hz, snr_db, warnings)
         # chế độ 'clip' gọi đúng hai đối số: test thay `_log_probs` bằng hàm hai tham số
-        logp, n_in = (self._log_probs(x, tone_hz, progress=progress) if windows is None
-                      else self._log_probs(x, tone_hz, windows, progress=progress))
+        logp, n_in = (self._log_probs(x_model, tone_hz, progress=progress) if windows is None
+                      else self._log_probs(x_model, tone_hz, windows, progress=progress))
         return self._decode_onnx(x, logp, n_in, tone_hz, snr_db, warnings)
 
     @staticmethod

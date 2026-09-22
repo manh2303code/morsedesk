@@ -50,13 +50,33 @@ class ChannelSampling:
     qsb_prob: float = 0.4
     qsb_depth_db: tuple[float, float] = (5.0, 30.0)
     qsb_period_s: tuple[float, float] = (2.0, 20.0)
+    # Vùng khó: nơi CER được quyết định, giữ nguyên phân bố tuần 1-4.
+    snr_db: tuple[float, float] = (-6.0, 25.0)
+    # Đuôi sạch: bản ghi thật của ARRL W1AW đo được 61,7 dB, tức nằm NGOÀI dải cũ. Model huấn
+    # luyện không có đuôi này trả về rác trên chính loại bản ghi người dùng sẽ đưa vào, trong khi
+    # bộ giải mã DSP đọc đúng; thêm nhiễu cho bẩn đi thì model đọc được ngay, nên đúng là lệch
+    # phân bố chứ không phải thiếu năng lực.
+    clean_tail_db: tuple[float, float] = (25.0, 65.0)
+    clean_tail_prob: float = 0.2
 
 
 DEFAULT_SAMPLING = ChannelSampling()
+CLEAN_TAIL_PROB = DEFAULT_SAMPLING.clean_tail_prob
 # Ô qsb của T1 là depth đúng 20 dB, chu kỳ đúng 4 s (tools/make_t1.py). Phân bố mặc định hiếm khi
 # rơi vào vùng đó (chu kỳ rải đều 2–20 s), nên E6 kéo phân bố về đúng độ khó của T1 và tăng tỉ lệ
 # lấy mẫu QSB từ 40 % lên 60 %.
 HARD_QSB_SAMPLING = ChannelSampling(qsb_prob=0.6, qsb_depth_db=(10.0, 24.0), qsb_period_s=(2.0, 8.0))
+
+
+def _sample_snr(rng: np.random.Generator, s: ChannelSampling) -> float:
+    """SNR huấn luyện: phần lớn ở vùng khó, một phần nhỏ ở vùng sạch như bản ghi thật.
+
+    Lấy mẫu hai đoạn rời chứ không nới rộng một `uniform`: nới rộng sẽ làm loãng chính vùng
+    quyết định CER, còn ở đây tỉ lệ đuôi sạch là tham số riêng.
+    """
+    if s.clean_tail_prob > 0.0 and rng.random() < s.clean_tail_prob:
+        return float(rng.uniform(*s.clean_tail_db))
+    return float(rng.uniform(*s.snr_db))
 
 
 def sample_channel_params(rng: np.random.Generator,
@@ -67,7 +87,7 @@ def sample_channel_params(rng: np.random.Generator,
     return ChannelParams(
         tone_hz=float(rng.uniform(400.0, 1200.0)),
         tone_drift_hz_per_s=float(rng.uniform(-2.0, 2.0)),
-        snr_db=float(rng.uniform(-6.0, 25.0)),
+        snr_db=_sample_snr(rng, s),
         qsb_depth_db=float(rng.uniform(*s.qsb_depth_db)) if qsb else 0.0,
         qsb_period_s=float(rng.uniform(*s.qsb_period_s)),
         qrm_offset_hz=float(rng.choice([-1.0, 1.0]) * rng.uniform(150.0, 600.0)) if qrm else 0.0,

@@ -108,7 +108,9 @@ def test_sample_channel_ranges():
     rng = np.random.default_rng(0)
     for _ in range(200):
         c = sample_channel_params(rng)
-        assert 400 <= c.tone_hz <= 1200 and -6 <= c.snr_db <= 25
+        # SNR lấy mẫu hai đoạn rời: vùng khó -6..25 dB và đuôi sạch 25..65 dB (bản ghi
+        # thật của ARRL đo 61,7 dB, xem tests/unit/test_snr_range.py).
+        assert 400 <= c.tone_hz <= 1200 and -6 <= c.snr_db <= 65
         assert c.qrm_kind in ("none", "morse", "carrier")
         assert c.mp3_kbps in (None, 48, 64, 96, 128)
 
