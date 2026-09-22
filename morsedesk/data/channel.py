@@ -52,12 +52,14 @@ class ChannelSampling:
     qsb_period_s: tuple[float, float] = (2.0, 20.0)
     # Vùng khó: nơi CER được quyết định, giữ nguyên phân bố tuần 1-4.
     snr_db: tuple[float, float] = (-6.0, 25.0)
-    # Đuôi sạch: bản ghi thật của ARRL W1AW đo được 61,7 dB, tức nằm NGOÀI dải cũ. Model huấn
-    # luyện không có đuôi này trả về rác trên chính loại bản ghi người dùng sẽ đưa vào, trong khi
-    # bộ giải mã DSP đọc đúng; thêm nhiễu cho bẩn đi thì model đọc được ngay, nên đúng là lệch
-    # phân bố chứ không phải thiếu năng lực.
+    # Đuôi sạch (SNR 25-65 dB như bản ghi thật của ARRL). MẶC ĐỊNH TẮT sau thí nghiệm E11:
+    # bật 20 % làm CER trên T1 xấu đi 6,6 điểm (26,80 % so với 20,21 % của E3, cùng seed 13,
+    # cùng 30 000 bước, chỉ khác dữ liệu), vì một phần năm dung lượng huấn luyện dồn vào vùng mà
+    # T1 không hề đo. Đổi lại KHÔNG được gì trên T2: trên bản ghi thật, `dsp/selection.py` lấy
+    # kết quả bộ DSP nên cả hai model cho số liệu giống hệt nhau tới từng chữ số.
+    # Giữ tham số để thử lại với tỉ lệ nhỏ hơn; xem docs/research/03-model-experiments.md.
     clean_tail_db: tuple[float, float] = (25.0, 65.0)
-    clean_tail_prob: float = 0.2
+    clean_tail_prob: float = 0.0
 
 
 DEFAULT_SAMPLING = ChannelSampling()

@@ -261,3 +261,43 @@ Chỉ CER trên T1 (và nay cả T2) mới là thước đo để quyết địn
 
 Điểm dương duy nhất: E9 tốt hơn ở kênh `qsb` (49,78 so với 51,68), đúng ô khó nhất. Nếu sau này
 cần một model riêng cho vùng fading sâu thì đây là manh mối, nhưng không đủ để đổi model chính.
+
+## E11: đuôi SNR sạch trong dữ liệu huấn luyện — kết quả ÂM (2026-09-22)
+
+Giả thuyết đến từ phát hiện lớn nhất trong ngày: mô hình chỉ từng thấy SNR −6…25 dB nên trả về
+rác trên bản ghi thật của ARRL (49–143 dB). Bản vá ở khâu suy luận (`dsp/dither.py`) đã xử lý
+được, nhưng "sửa tận gốc" phải là dạy mô hình cả vùng sạch. E11 vì vậy giống E3 **đúng từng
+tham số** — hidden 128, seed 13, 30 000 bước, cosine, warmup 500 — chỉ khác một biến: 20 % clip
+huấn luyện lấy SNR trong 25–65 dB.
+
+| | E3 | E11 |
+|---|---|---|
+| TER validation | 22,29 % | **20,18 %** |
+| **CER trên T1, 500 clip** | **20,21 %** | 26,80 % |
+| clean | 12,73 % | 18,79 % |
+| mp3 | 11,15 % | 20,70 % |
+| qrm | 12,69 % | 21,65 % |
+| qrn | 12,80 % | 19,99 % |
+| qsb | 51,68 % | 52,88 % |
+
+Và trên 10 bản ghi thật của ARRL (180 giây đầu mỗi bản), **cả mười ô giống hệt nhau tới từng
+chữ số**: 1,8 / 1,6 / 0,6 / 1,1 / 2,0 / 14,1 / 6,1 / 5,9 / 5,4 / 2,0 %.
+
+**Bị loại**, và lý do đáng ghi:
+
+1. **Mất ở vùng đo.** Một phần năm dung lượng huấn luyện dồn vào dải SNR mà T1 không hề chứa
+   (T1 cao nhất 20 dB), nên mô hình kém đi đúng ở nơi bộ đo nhìn tới. Lấy mẫu hai đoạn rời thay
+   vì nới rộng một `uniform` không cứu được điều đó — vấn đề là tỉ lệ, không phải hình dạng.
+2. **Không được gì ở vùng nhắm tới.** Trên tín hiệu sạch, `dsp/selection.py` lấy kết quả của bộ
+   giải mã DSP chứ không dùng mô hình, nên mô hình có học vùng sạch hay không cũng không đổi
+   được một ký tự nào. Bản vá ở khâu suy luận đã chiếm chỗ của bản sửa ở khâu dữ liệu.
+
+`ChannelSampling.clean_tail_prob` giữ lại nhưng mặc định **0.0**. Ai muốn thử lại nên dùng tỉ lệ
+nhỏ hơn nhiều (2–5 %) và chỉ khi bộ đo có ô SNR cao để thấy phần được.
+
+### Lần thứ hai TER validation nói ngược với CER
+
+Giống E9, E11 thắng ở mọi mốc validation rồi thua rõ trên T1. Lần này lý do khác và còn dễ mắc
+hơn: tập validation của E11 **cũng có 20 % clip sạch**, tức chính vùng dễ mà nó vừa được dạy.
+TER thấp không phải vì mô hình khá hơn mà vì đề thi dễ hơn. Quy tắc rút ra vẫn thế, và nay có
+hai bằng chứng: **chỉ CER trên T1 và T2 mới dùng để quyết định**.

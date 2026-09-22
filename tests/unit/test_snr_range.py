@@ -20,18 +20,23 @@ def sample_snrs(n: int = 4000, sampling: ChannelSampling | None = None) -> np.nd
     return np.array([sample_channel_params(rng, sampling).snr_db for _ in range(n)])
 
 
-def test_distribution_reaches_real_recording_levels():
-    snrs = sample_snrs()
-    assert snrs.max() >= 55.0, "phải chạm tới mức của bản ghi thật (ARRL đo 61,7 dB)"
-    assert (snrs > 25.0).mean() > 0.1, "đuôi sạch không được hiếm tới mức model bỏ qua"
+def test_clean_tail_is_off_by_default():
+    """Mặc định TẮT sau thí nghiệm E11.
 
-
-def test_hard_region_is_still_the_bulk():
-    """Đuôi sạch không được làm loãng vùng khó, vì đó mới là chỗ quyết định CER."""
+    Bật 20 % làm CER trên T1 xấu đi 6,6 điểm (26,80 % so với 20,21 %, cùng seed, cùng số bước,
+    chỉ khác dữ liệu) vì một phần năm dung lượng huấn luyện dồn vào vùng T1 không đo; đổi lại
+    không được gì trên T2, nơi bộ giải mã DSP mới là đường được chọn. Vấn đề tín hiệu quá sạch
+    đã xử lý ở khâu suy luận bằng `morsedesk/dsp/dither.py`.
+    """
+    assert CLEAN_TAIL_PROB == 0.0
     snrs = sample_snrs()
-    assert (snrs <= 25.0).mean() >= 1.0 - CLEAN_TAIL_PROB - 0.05
+    assert snrs.max() <= 25.0
     assert snrs.min() <= -5.0
-    assert -6.0 <= np.median(snrs[snrs <= 25.0]) <= 25.0
+
+
+def test_hard_region_keeps_its_shape():
+    snrs = sample_snrs()
+    assert -6.0 <= np.median(snrs) <= 25.0
 
 
 def test_clean_tail_probability_is_configurable():
