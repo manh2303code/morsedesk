@@ -338,3 +338,84 @@ kém model rõ rệt, đúng vai trò dự phòng, nhưng đã ở mức đọc 
 Khoảng cách còn lại tập trung ở `qsb` (51,68 % so với 12,7 % của bốn kênh kia) — đã đo là gần
 giới hạn vật lý ở mục trên — và ở năng lực mô hình trên kênh sạch, đang được thí nghiệm E9
 (`hidden` 128 → 256) kiểm chứng.
+
+## Bộ T2 bản ghi thật lộ ra lỗi mà 500 clip T1 không thể lộ (2026-09-22)
+
+Ngày 22/09 tải được 10 bản ghi thật của **ARRL W1AW code practice** (5–40 WPM, 124 phút, kèm
+đáp án) vào `testdata/private/t2/`. Phép đo đầu tiên trên đó đảo ngược một giả định nền của dự
+án.
+
+### Triệu chứng
+
+Trên 120 giây đầu của bản ghi 20 WPM, đáp án là
+`= NOW 20 WPM = TEXT IS FROM MAY 2024 QST PAGE 36 = TO OPERATE. I CAN OFTEN WORK DX STATIONS…`
+
+| Engine | Kết quả | Tốc độ báo về |
+|---|---|---|
+| `onnx` (model của mình) | `KOW W0WJ9_4 QVWOOY.A,9KQ)XQOGO...OQO 3 K......AW` | 7,1 WPM |
+| `baseline` (bộ DSP) | `= NOW 20 WPM = TEXT IS FROM MAY 2024 QST PAGE 36 = TO OPERATE. I CAN OFTEN…` | 20,0 WPM |
+| `deepcw` | `BT NOW 20 WPM BT TEXT IS FROM MAY 2024 QST PAGE 36 BT TO OPERATE…` | 20,1 WPM |
+
+Mô hình nơ-ron của mình — thứ đạt 20,21 % trên T1 — trả về **rác**, trong khi bộ giải mã DSP
+dự phòng đọc gần như hoàn hảo. Cắt xuống 8 giây (đúng độ dài clip T1) vẫn hỏng, nên không phải
+vấn đề độ dài.
+
+### Nguyên nhân
+
+`estimate_tone` đo SNR của các bản ghi ARRL: **49–143 dB**, trung vị khoảng 62. Còn
+`morsedesk/data/channel.py` lấy mẫu SNR khi sinh dữ liệu huấn luyện trong `uniform(-6, 25)`.
+Mô hình **chưa bao giờ thấy tín hiệu sạch hơn 25 dB**.
+
+Bằng chứng trực tiếp: **thêm** nhiễu vào bản ghi thật cho bẩn đi thì mô hình đọc được ngay.
+
+| Xử lý | Kết quả trên cùng đoạn |
+|---|---|
+| Gốc (61,7 dB) | `OQQQ 03 LA` |
+| Thêm nhiễu về 20 dB | `I, EVEN WHEN OTHERS AT HARE TIE ALSOMFRALW GA` |
+| Thêm nhiễu về 10 dB | `I, EVEN WHEN OTHERS AND HARNE TIE ALSOFREQUENT GA` |
+| Thêm nhiễu về 3 dB | `I, EVEN WHEN OTHERS CANNOT HAR T.I ALSOFRAELI GA` |
+
+Làm tín hiệu **xấu đi** khiến kết quả **tốt lên** — dấu hiệu kinh điển của lệch phân bố, không
+phải thiếu năng lực.
+
+### Sửa
+
+Hai mức, đã áp dụng cả hai:
+
+1. **Ngay, không cần huấn luyện lại** — `morsedesk/dsp/dither.py`: khi SNR ước lượng vượt 25 dB
+   thì trộn nhiễu trắng (seed cố định để tái lập) kéo về 20 dB, và chỉ cho đường mô hình; bộ
+   giải mã DSP dự phòng cùng mọi số báo cáo vẫn theo tín hiệu gốc.
+2. **Tận gốc, cho lượt huấn luyện sau** — `ChannelSampling` thêm đuôi sạch 25–65 dB với xác suất
+   20 %, lấy mẫu hai đoạn rời chứ không nới rộng một `uniform`, để không làm loãng vùng khó.
+
+Kết quả trên 10 bản ghi ARRL (120 giây đầu mỗi bản): CER trung bình **82,8 % → 24,7 %**.
+
+| Bản ghi | SNR đo được | Trước | Sau |
+|---|---|---|---|
+| 20 WPM | 61,7 dB | 89,8 % | 28,9 % |
+| 25 WPM | 60,1 dB | 91,4 % | 25,0 % |
+| 30 WPM | 57,2 dB | 90,1 % | 17,0 % |
+| 35 WPM | 55,5 dB | 78,9 % | 6,6 % |
+| 40 WPM | 49,3 dB | 42,6 % | 3,2 % |
+| 5 WPM | 143,0 dB | 87,5 % | 53,6 % |
+| 10 WPM | 77,1 dB | 85,5 % | 29,1 % |
+| 13 WPM | 66,3 dB | 88,5 % | 26,4 % |
+| 15 WPM | 64,7 dB | 84,4 % | 34,1 % |
+| 18 WPM | 61,8 dB | 89,6 % | 23,4 % |
+
+T1 không đổi: **0/500 clip** vượt trần 25 dB nên dither không kích hoạt ở đó.
+
+### Bài học
+
+Bộ đo tự sinh chỉ đo được những gì bộ sinh biết mô phỏng. Ở đây khuyết tật không nằm trong bất
+kỳ ô nào của ma trận T1 mà nằm ở **mép ngoài của nó**: mọi ô đều có nhiễu, nên "không nhiễu"
+chưa bao giờ được kiểm. Mười bản ghi thật tìm ra trong vài phút thứ mà 500 clip tổng hợp không
+thể tìm ra.
+
+### Hệ quả còn mở: beam search có chi phí bậc hai theo độ dài
+
+Đo trên cùng một bản ghi: 30 s → 3,6 s; 60 s → 3,7 s; 120 s → 5,9 s; **240 s → 18,7 s**. Gấp đôi
+độ dài làm thời gian gấp hơn ba. Nguyên nhân: mỗi tiền tố trong beam giữ nguyên cả tuple ký tự
+làm khóa từ điển, nên mỗi lần mở rộng phải sao chép và băm lại toàn bộ chuỗi. Với clip T1 (13 ký
+tự) không thấy gì; với bản tin 3 746 ký tự thì không chạy nổi. Đây là việc phải sửa trước khi
+nâng trần thời lượng của giao diện (CP-14).

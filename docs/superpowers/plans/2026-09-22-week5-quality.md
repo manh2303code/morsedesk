@@ -1485,7 +1485,7 @@ Expected: hai trailer hiện đủ. (Dòng subject có thể viết tiếng Vi�
   - CLI: `morsedesk bench --t2-gate`
   - Dữ liệu: `testdata/private/t2/manifest.jsonl` với cột `path`, `text`, `raw_text`, `profile`, `wpm`, `source`, `license`, `synthetic`
 
-- [ ] **Step 1: Viết test thất bại**
+- [x] **Step 1: Viết test thất bại**
 
 Thêm vào cuối `tests/unit/test_tools_t2.py` (và thêm `from pathlib import Path` ở đầu file):
 
@@ -1577,7 +1577,7 @@ def test_bench_run_reports_by_source_on_t2_shaped_manifest(tmp_path, capsys):
     assert isinstance(ok, bool)
 ```
 
-- [ ] **Step 2: Chạy test để thấy nó đỏ**
+- [x] **Step 2: Chạy test để thấy nó đỏ**
 
 ```bash
 cd /c/Users/Admin/morsedesk && uv run pytest tests/unit/test_tools_t2.py -q
@@ -1585,7 +1585,7 @@ cd /c/Users/Admin/morsedesk && uv run pytest tests/unit/test_tools_t2.py -q
 
 Expected: lỗi thu thập `ModuleNotFoundError: No module named 'tools.fetch_t2'`, `1 error`.
 
-- [ ] **Step 3: Sửa `tools/make_t2_manifest.py`**
+- [x] **Step 3: Sửa `tools/make_t2_manifest.py`**
 
 ```python
 def build_manifest(audio_dir: Path, source: str, profile_id: str,
@@ -1617,7 +1617,7 @@ và hai dòng trong `main`:
     rows = build_manifest(a.audio_dir, a.source, a.profile, a.license)
 ```
 
-- [ ] **Step 4: Viết `tools/fetch_t2.py`**
+- [x] **Step 4: Viết `tools/fetch_t2.py`**
 
 ```python
 """Gom bản ghi Morse thật thành bộ T2 trong `testdata/private/t2/` (gitignored).
@@ -1879,7 +1879,7 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 5: Sửa `morsedesk/bench.py`**
+- [x] **Step 5: Sửa `morsedesk/bench.py`**
 
 Thêm ngay sau `def language_accuracy(...)`:
 
@@ -1929,7 +1929,7 @@ và thay câu `return` cuối:
     return summary, ok if do_gate else True
 ```
 
-- [ ] **Step 6: Sửa `morsedesk/cli.py`**
+- [x] **Step 6: Sửa `morsedesk/cli.py`**
 
 ```python
     b.add_argument("--t2-gate", action="store_true",
@@ -1941,7 +1941,7 @@ và thay câu `return` cuối:
                     lm_dir=a.lm_dir, t2_gate=a.t2_gate)
 ```
 
-- [ ] **Step 7: Chạy test để thấy nó xanh**
+- [x] **Step 7: Chạy test để thấy nó xanh**
 
 ```bash
 cd /c/Users/Admin/morsedesk && uv run pytest tests/unit/test_tools_t2.py -q
