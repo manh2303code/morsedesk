@@ -374,12 +374,24 @@ class Decoder:
         gạch**, nên mỗi chữ được đổi ngược về mẫu qua `profile.letter_to_pattern` để dùng lại
         `_group_words` và `estimate_wpm_from_emissions` y như engine onnx.
         """
-        out = self._model.decode_greedy(x, SAMPLE_RATE)
+        frame_rate = float(self._model.frame_rate)
+        if self.lm_enabled and DEEPCW_LM:
+            from morsedesk.model.deepcw_beam import CharBeamParams, char_beam_search
+
+            logp = self._model.log_probs(x, SAMPLE_RATE)
+            hyp = char_beam_search(logp, self._model.chars, self._model.blank,
+                                   self._lms[DEEPCW_PROFILE],
+                                   params=CharBeamParams(beam=int(self.beam_params.beam)))
+            raw = hyp.emissions
+            n_frames = int(logp.shape[0])
+        else:
+            out = self._model.decode_greedy(x, SAMPLE_RATE)
+            raw, n_frames = out.emissions, out.n_frames
         items = [(SPACE if ch == " " else self.profile.letter_to_pattern.get(ch, UNK), ch, f, p)
-                 for ch, f, p in out.emissions]
-        words = _group_words(items, out.frame_rate, out.n_frames)
+                 for ch, f, p in raw]
+        words = _group_words(items, frame_rate, n_frames)
         emissions = _strip_spaces([(tok, f, p) for tok, _, f, p in items])
-        return words, emissions, out.frame_rate
+        return words, emissions, frame_rate
 
     def _decode_deepcw(self, x: np.ndarray, tone_hz: float | None, snr_db: float | None,
                        warnings: list[str]) -> DecodeResult:

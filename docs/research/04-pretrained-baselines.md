@@ -400,6 +400,36 @@ Theo thứ tự lợi ích/chi phí:
    vào gate). Ghi rõ CER của T1 bị khuếch đại bởi clip ngắn (2.6); cân nhắc thêm một lớp clip
    15–20 s cho tầng A để số so được với benchmark ngoài.
 
+## 5. DeepCW làm engine của MorseDesk (tuần 5)
+
+Từ tuần 5 DeepCW không còn chỉ là thước đo: lõi tiền xử lý nằm ở `morsedesk/model/deepcw.py` và
+`Decoder(profile="en", engine="deepcw")` dùng nó cho profile `en` (bảng chữ của nó chỉ có Latin).
+
+Tuần 5 nối thêm **beam ký tự CTC + LM ký tự `en` của dự án** lên hậu nghiệm DeepCW
+(`morsedesk/model/deepcw_beam.py`). Bảng chữ của DeepCW là Latin nên LM áp thẳng, không phải đi
+qua tầng mẫu chấm gạch như `morsedesk/lm/beam.py`.
+
+| Cấu hình | n | CER T1 (chỉ profile `en`) | WER | s/clip | Realtime |
+|---|---|---|---|---|---|
+| greedy (mốc 2026-09-21) | 167 | 22,80 % | 47,70 % | 0,057 | x135,8 |
+| beam ký tự + LM `en` (alpha 0,3, beta 0,5, beam 64) | 167 | **19,39 %** | **38,61 %** | 0,222 | x35,2 |
+
+Theo kênh, chênh lệch dồn vào nơi tín hiệu còn đọc được:
+
+| Kênh | greedy | beam + LM | Chênh |
+|---|---|---|---|
+| clean | 5,95 % | **2,76 %** | −3,19 |
+| mp3 | 7,57 % | 6,09 % | −1,48 |
+| qrn | 11,35 % | 9,65 % | −1,70 |
+| qrm | 42,95 % | 35,42 % | −7,53 |
+| qsb | 47,06 % | 43,85 % | −3,21 |
+
+Quyết định: **giữ** beam+LM cho engine `deepcw` (`api.DEEPCW_LM = True`). Lấy 3,41 điểm CER và
+9,09 điểm WER với giá gấp bốn thời gian, nhưng vẫn nhanh hơn thời gian thực 35 lần nên không ảnh
+hưởng trải nghiệm. Đáng chú ý nhất là kênh `clean` xuống **2,76 %**, tức ngưỡng gate 2 % lần đầu
+nằm trong tầm với ở một ô của ma trận. Lệnh tái lập ở
+`docs/superpowers/plans/2026-09-22-week5-quality.md` Task 3.
+
 ## Giấy phép và phạm vi sử dụng
 
 - **DeepCW / deepcw-engine — AGPL-3.0-only.** Dùng ở đây **chỉ để đo**. Không sao chép model,
