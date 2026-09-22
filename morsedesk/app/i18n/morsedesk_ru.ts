@@ -14,153 +14,157 @@
         <translation>Аудиофайлы ({exts})</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="205" />
-        <location filename="../decode_page.py" line="370" />
+        <location filename="../decode_page.py" line="219" />
+        <source>Model result: {text}</source>
+        <translation>Результат модели: {text}</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="220" />
         <source>DSP fallback result: {text}</source>
         <translation>Резервный результат DSP: {text}</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="221" />
+        <location filename="../decode_page.py" line="231" />
         <source>No Morse signal found in this audio.</source>
         <translation>В этом аудио не найден сигнал Морзе.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="223" />
+        <location filename="../decode_page.py" line="233" />
         <source>Tone not detected clearly; guessing from the spectral peak, so the result may be wrong.</source>
         <translation>Тон определён нечётко; берётся пик спектра, поэтому результат может быть неверным.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="226" />
+        <location filename="../decode_page.py" line="236" />
         <source>A second tone was found at {second_hz:.0f} Hz; tracking {tracked_hz:.0f} Hz.</source>
         <translation>Обнаружен второй тон на {second_hz:.0f} Гц; отслеживается {tracked_hz:.0f} Гц.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="228" />
+        <location filename="../decode_page.py" line="238" />
         <source>Low confidence.</source>
         <translation>Низкая уверенность.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="230" />
+        <location filename="../decode_page.py" line="240" />
         <source>Low confidence; the DSP decoder result is shown too.</source>
         <translation>Низкая уверенность; показан также результат DSP-декодера.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="248" />
+        <location filename="../decode_page.py" line="258" />
         <source>File not found: {path}</source>
         <translation>Файл не найден: {path}</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="250" />
+        <location filename="../decode_page.py" line="260" />
         <source>Cannot read {path}. Supported formats: {exts}</source>
         <translation>Не удалось прочитать {path}. Поддерживаемые форматы: {exts}</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="254" />
+        <location filename="../decode_page.py" line="264" />
         <source>{path} is {minutes} min long; this version supports up to {limit} min.</source>
         <translation>Длительность {path} — {minutes} мин; эта версия поддерживает до {limit} мин.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="256" />
+        <location filename="../decode_page.py" line="266" />
         <source>Setup problem: a model or language model file is missing or unusable.</source>
         <translation>Проблема установки: файл модели или языковой модели отсутствует либо непригоден.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="257" />
+        <location filename="../decode_page.py" line="267" />
         <source>Internal error while decoding. See the log file for details.</source>
         <translation>Внутренняя ошибка при декодировании. Подробности в файле журнала.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="300" />
+        <location filename="../decode_page.py" line="310" />
         <source>Decoding cancelled.</source>
         <translation>Декодирование отменено.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="317" />
+        <location filename="../decode_page.py" line="327" />
         <source>Text files (*.txt)</source>
         <translation>Текстовые файлы (*.txt)</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="317" />
+        <location filename="../decode_page.py" line="327" />
         <source>JSON files (*.json)</source>
         <translation>Файлы JSON (*.json)</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="318" />
+        <location filename="../decode_page.py" line="328" />
         <source>Export</source>
         <translation>Экспорт</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="332" />
+        <location filename="../decode_page.py" line="342" />
         <source>Cannot write {path}: {detail}</source>
         <translation>Не удалось записать {path}: {detail}</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="348" />
+        <location filename="../decode_page.py" line="358" />
         <source>Open file…</source>
         <translation>Открыть файл…</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="349" />
+        <location filename="../decode_page.py" line="359" />
         <source>Message language:</source>
         <translation>Язык сообщения:</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="351" />
+        <location filename="../decode_page.py" line="361" />
         <source>Auto</source>
         <translation>Авто</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="352" />
+        <location filename="../decode_page.py" line="362" />
         <source>English</source>
         <translation>Английский</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="353" />
+        <location filename="../decode_page.py" line="363" />
         <source>Russian</source>
         <translation>Русский</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="354" />
+        <location filename="../decode_page.py" line="364" />
         <source>Kazakh</source>
         <translation>Казахский</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="358" />
+        <location filename="../decode_page.py" line="368" />
         <source>Use language model</source>
         <translation>Использовать языковую модель</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="359" />
+        <location filename="../decode_page.py" line="369" />
         <source>Auto always uses the language model.</source>
         <translation>Режим «Авто» всегда использует языковую модель.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="361" />
+        <location filename="../decode_page.py" line="371" />
         <source>Decode</source>
         <translation>Декодирование</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="362" />
+        <location filename="../decode_page.py" line="372" />
         <source>Cancel</source>
         <translation>Отмена</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="363" />
+        <location filename="../decode_page.py" line="373" />
         <source>Copy</source>
         <translation>Копировать</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="364" />
+        <location filename="../decode_page.py" line="374" />
         <source>Export TXT…</source>
         <translation>Экспорт TXT…</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="365" />
+        <location filename="../decode_page.py" line="375" />
         <source>Export JSON…</source>
         <translation>Экспорт JSON…</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="367" />
+        <location filename="../decode_page.py" line="377" />
         <source>No file selected. Drop an audio file here.</source>
         <translation>Файл не выбран. Перетащите аудиофайл сюда.</translation>
     </message>

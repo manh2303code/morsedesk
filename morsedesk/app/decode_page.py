@@ -202,12 +202,22 @@ class DecodePage(QWidget):
             self.banner.show_warning("; ".join(result.warnings))
         if result.fallback_text is not None:
             self.fallback_label.setText(
-                self.tr("DSP fallback result: {text}").format(text=result.fallback_text)
+                self._fallback_caption(getattr(result, "decoded_by", "model"), result.fallback_text)
             )
             self.fallback_label.show()
         else:
             self.fallback_label.hide()
         self._set_has_result(True)
+
+    def _fallback_caption(self, decoded_by: str, text: str) -> str:
+        """Nhãn cho dòng dự phòng, nói đúng nguồn của nó.
+
+        Khi văn bản chính đến từ bộ DSP (tín hiệu sạch hơn dải huấn luyện) thì dòng dự phòng
+        chính là kết quả của mô hình, chứ không còn luôn là kết quả DSP như trước.
+        """
+        if decoded_by == "dsp":
+            return self.tr("Model result: {text}").format(text=text)
+        return self.tr("DSP fallback result: {text}").format(text=text)
 
     def _warning_sources(self) -> dict[str, str]:
         """Chuỗi hiển thị cho từng mã cảnh báo của lõi, đã dịch sang ngôn ngữ giao diện.
@@ -367,7 +377,8 @@ class DecodePage(QWidget):
             self.path_label.setText(self.tr("No file selected. Drop an audio file here."))
         if self.result is not None and self.result.fallback_text is not None:
             self.fallback_label.setText(
-                self.tr("DSP fallback result: {text}").format(text=self.result.fallback_text)
+                self._fallback_caption(getattr(self.result, "decoded_by", "model"),
+                                       self.result.fallback_text)
             )
 
     def changeEvent(self, event) -> None:

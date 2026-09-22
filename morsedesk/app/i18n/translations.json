@@ -74,7 +74,8 @@
     "MP3 export: available through the external ffmpeg command.": "Экспорт MP3: доступен через внешнюю команду ffmpeg.",
     "MP3 export: NOT available. libsndfile here has no LAME encoder and ffmpeg is not on PATH; install ffmpeg or export another format.": "Экспорт MP3: НЕДОСТУПЕН. В libsndfile здесь нет кодера LAME, а ffmpeg отсутствует в PATH; установите ffmpeg или выберите другой формат.",
     "Other formats written directly: {exts}": "Другие форматы записываются напрямую: {exts}",
-    "Log file: {path}": "Файл журнала: {path}"
+    "Log file: {path}": "Файл журнала: {path}",
+    "Model result: {text}": "Результат модели: {text}"
   },
   "kk": {
     "MorseDesk": "MorseDesk",
@@ -151,6 +152,7 @@
     "MP3 export: available through the external ffmpeg command.": "MP3 экспорты: сыртқы ffmpeg командасы арқылы қолжетімді.",
     "MP3 export: NOT available. libsndfile here has no LAME encoder and ffmpeg is not on PATH; install ffmpeg or export another format.": "MP3 экспорты: ҚОЛЖЕТІМСІЗ. Мұндағы libsndfile-де LAME кодері жоқ, ffmpeg те PATH-та жоқ; ffmpeg орнатыңыз немесе басқа пішімді таңдаңыз.",
     "Other formats written directly: {exts}": "Тікелей жазылатын басқа пішімдер: {exts}",
-    "Log file: {path}": "Журнал файлы: {path}"
+    "Log file: {path}": "Журнал файлы: {path}",
+    "Model result: {text}": "Модель нәтижесі: {text}"
   }
 }
