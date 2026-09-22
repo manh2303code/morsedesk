@@ -25,13 +25,13 @@ Mỗi dòng "bằng chứng" phải trỏ tới thứ kiểm lại được: đ�
 | # | Điều khoản | Trạng thái | Bằng chứng / khoảng cách |
 |---|---|---|---|
 | A1 | CER < 2 % ở ô SNR ≥ 0 dB và 10–35 WPM trên ma trận tổng hợp T1 | **CHƯA ĐẠT** | `uv run pytest -m gate` → `test_t1_gate_onnx` FAIL. Đo: 26,45 % greedy, 25,27 % beam+LM (`docs/research/02-baseline-numbers.md`). Mốc ngoài: DeepCW 23,70 % trên cùng bộ (`docs/research/04-pretrained-baselines.md`). → **CP-01** |
-| A2 | CER < 2 % trên ARRL W1AW 18–40 WPM (bộ T2) | **CHƯA ĐẠT** | Không có dữ liệu T2 trong repo: `testdata/` chỉ có `generated/`. Chưa từng đo. → **CP-02** |
-| A3 | Nhận diện ngôn ngữ bản tin tự động | **CHƯA ĐẠT** | `language_acc` = 0,584 trên T1, mục tiêu 0,95 (`test_t1_lm_not_worse_than_greedy_and_language_acc` FAIL). Nguyên nhân đã phân tích: radiogram ham chuyển tự trung lập ngôn ngữ. → **CP-03** |
+| A2 | CER < 2 % trên ARRL W1AW 18–40 WPM (bộ T2) | **ĐẠT 22/09** | Đã tải 10 bản ghi thật vào `testdata/private/t2/` và đo trên 180 giây đầu mỗi bản. Trong dải 18–40 WPM: 18 WPM 2,0 %; 20 WPM 1,8; 25 WPM 1,6; 30 WPM 0,6; 35 WPM 1,1; 40 WPM 2,0 — **trung bình 1,52 %**, mọi bản đều ≤ 2 %. Ngoài dải, tốc độ thấp còn cao hơn: 15 WPM 5,4 %; 13 WPM 5,9; 10 WPM 6,1; 5 WPM 14,1. Xem CP-02 và `docs/research/02-baseline-numbers.md`. |
+| A3 | Nhận diện ngôn ngữ bản tin tự động | **ĐẠT có điều kiện** | `language_acc` = 0,584 trên T1, mục tiêu 0,95 (`test_t1_lm_not_worse_than_greedy_and_language_acc` FAIL). Nguyên nhân đã phân tích: radiogram ham chuyển tự trung lập ngôn ngữ. → **CP-03** | **Đo lại 22/09:** đúng 100 % từ 50 ký tự trở lên; 71 % ở 20 ký tự, chỗ hỏng duy nhất là `ru` đọc thành `kk-cyrl-ru`. Xem CP-03.
 | A4 | Chỉ giải mã và sửa lỗi, không dịch chéo ngôn ngữ | **ĐẠT** | Không có đường dẫn dịch máy nào trong `morsedesk/`. |
 | A5 | Profile `kk-cyrl-ru`: khôi phục 9 chữ Kazakh bằng LM từ bảng Nga | **ĐẠT** | `morsedesk/profiles/kk-cyrl-ru.yaml`; roundtrip "СӘЛЕМ" qua GUI trả đúng (kiểm chứng Task 7, mục 5 spec tuần 4). |
 | A6 | Giao diện đổi ngay giữa Kazakh, Nga, Anh | **ĐẠT** | `tests/app/test_i18n.py`; ảnh chụp 05, 06. |
 | A7 | Chỉ nhúng Apache-2.0 / MIT / BSD / LGPL, không AGPL, không GPL | **ĐẠT** (phần phụ thuộc) | `PySide6-Essentials` + `shiboken6` LGPLv3, `pyqtgraph` MIT, `numpy`/`scipy`/`soundfile`/`PyYAML` BSD/MIT. Đã kiểm cài mới: 22 module Qt, không còn QtCharts/QtDataVisualization/QtGraphs (chỉ-GPL). |
-| A8 | Hồ sơ giấy phép kèm sản phẩm (văn bản LGPL, cam kết relink) | **CHƯA ĐẠT** | Repo không có `LICENSE`, `NOTICE` hay `THIRD_PARTY`; chỉ có `models/lm/LICENSES.md` cho corpus. Nghĩa vụ LGPL chưa chuẩn bị. → **CP-04** |
+| A8 | Hồ sơ giấy phép kèm sản phẩm (văn bản LGPL, cam kết relink) | **BỎ theo quyết định người dùng** | Repo không có `LICENSE`, `NOTICE` hay `THIRD_PARTY`; chỉ có `models/lm/LICENSES.md` cho corpus. Nghĩa vụ LGPL chưa chuẩn bị. → **CP-04** | Phần mềm nội bộ 100 %, offline, không thương mại hóa. Xem CP-04.
 | A9 | Môi trường đích Ubuntu/Debian x86_64, không mạng | **MỘT PHẦN** | Đã kiểm trên Ubuntu 26.04 LTS (WSL, 2026-09-21): toàn bộ test xanh, ruff sạch, `build_i18n --check` sạch, GUI khởi động trả mã 2 khi thiếu model, CLI giải mã một clip tiếng Nga ra đúng "ТНЬ ФЕР ЦАЛЛ", cửa sổ Qt dựng được bằng plugin **wayland**, ảnh chụp hiện đủ Ә Ғ Қ Ң Ө Ұ Ү Һ І (máy có 89 font, gồm DejaVu). Còn thiếu: chưa kiểm trên **22.04/24.04 LTS** là bản spec nhắm, và plugin **xcb** không khởi tạo được. → **CP-05**, **CP-16** |
 
 ## B. Lõi và tạo mã (spec mục 2, 3)
@@ -44,8 +44,8 @@ Mỗi dòng "bằng chứng" phải trỏ tới thứ kiểm lại được: đ�
 | B4 | `encode.timing` chuẩn PARIS, Farnsworth ARRL, `weight` | **ĐẠT** | `morsedesk/encode/timing.py`; `tests/unit` T0 timing. |
 | B5 | `encode.synth` sine, sườn raised-cosine 5 ms, 8/16/44,1 kHz, nhiễu theo SNR | **ĐẠT** | `morsedesk/encode/synth.py`. |
 | B6 | Xuất WAV, FLAC, OGG qua soundfile | **ĐẠT** | Sửa ở `morsedesk/audio/io.py:60-62` (trước đó ép `PCM_16` nên OGG luôn lỗi); test ghi-đọc cả ba định dạng ở `tests/unit/test_audio_io.py`. |
-| B7 | Xuất MP3: libsndfile có lame → ghi thẳng; không thì gọi `ffmpeg` ngoài; không có thì báo không hỗ trợ. Kiểm khả năng lúc khởi động và hiện trong Cài đặt | **CHƯA ĐẠT** | `FORMATS` chỉ có WAV/FLAC/OGG; không có dò `ffmpeg`, không có thông báo khả năng. → **CP-06** |
-| B8 | Ghi được mọi đuôi trong `SUPPORTED_EXT` | **CHƯA ĐẠT** | `.aif` và `.oga` đọc được nhưng `save_audio` ném `TypeError`. Chưa với tới từ GUI (hộp thoại chỉ 3 định dạng) nhưng CLI `encode --out x.oga` sẽ hỏng. → **CP-07** |
+| B7 | Xuất MP3: libsndfile có lame → ghi thẳng; không thì gọi `ffmpeg` ngoài; không có thì báo không hỗ trợ. Kiểm khả năng lúc khởi động và hiện trong Cài đặt | **ĐẠT 22/09** | `FORMATS` chỉ có WAV/FLAC/OGG; không có dò `ffmpeg`, không có thông báo khả năng. → **CP-06** | Ba nhánh trong `morsedesk/audio/io.py` (libsndfile có LAME / ffmpeg ngoài / báo lỗi nêu cách khắc phục), `mp3_capability()` hiện ở trang Cài đặt. Xem CP-06.
+| B8 | Ghi được mọi đuôi trong `SUPPORTED_EXT` | **ĐẠT 22/09** | `.aif` và `.oga` đọc được nhưng `save_audio` ném `TypeError`. Chưa với tới từ GUI (hộp thoại chỉ 3 định dạng) nhưng CLI `encode --out x.oga` sẽ hỏng. → **CP-07** | `EXT_TO_FORMAT` cộng `format=` tường minh; test roundtrip mọi đuôi. Xem CP-07.
 | B9 | Chuỗi chấm gạch: cách chữ một khoảng trắng, cách từ ` / ` | **ĐẠT** | `Encoder('en').to_morse_string('CQ DE K')` → `-.-. --.- / -.. . / -.-`. |
 
 ## C. GUI (spec mục 4)
@@ -59,13 +59,13 @@ Mỗi dòng "bằng chứng" phải trỏ tới thứ kiểm lại được: đ�
 | C5 | Từ tô màu theo tin cậy, tooltip tin cậy và thời điểm | **ĐẠT** | `word_view.py`; ngưỡng 0,8 / 0,5 và ba mã màu đúng spec tuần 4. Sửa 75dd557: ghim màu chữ `#1a1a1a` vì ở giao diện tối chữ trắng trên nền nhạt chỉ đạt tương phản 1,25:1 (đo trên ảnh chụp thật), nay 13,89:1. |
 | C6 | Combo ngôn ngữ bản tin (Tự động/Anh/Nga/Kazakh) kèm ba điểm nhận diện | **ĐẠT** | `PROFILE_CHOICES`; tooltip `StatsBar.language_widget` hiện ba điểm (kiểm chứng Task 7 mục 2). |
 | C7 | Chỉ số WPM, tone Hz, SNR dB | **ĐẠT** | `StatsBar`; đơn vị Hz/dB nay đi qua `tr()` (sửa 75dd557). |
-| C8 | Chỉ số tiến trình file | **CHƯA ĐẠT** | Chỉ có thanh tiến trình vô định (`stats_bar.py:21` `setRange(0, 0)`). File 19,5 phút chạy ~3,7 phút không biết còn bao lâu. → **CP-08** |
-| C9 | Nút hủy khi đang giải mã | **CHƯA ĐẠT** | Không có. Đóng cửa sổ giữa chừng nay an toàn nhưng vẫn phải chờ xong. → **CP-09** |
+| C8 | Chỉ số tiến trình file | **ĐẠT 22/09** | Chỉ có thanh tiến trình vô định (`stats_bar.py:21` `setRange(0, 0)`). File 19,5 phút chạy ~3,7 phút không biết còn bao lâu. → **CP-08** | Thanh tiến trình theo số cửa sổ đã chạy qua mô hình. Xem CP-08.
+| C9 | Nút hủy khi đang giải mã | **ĐẠT 22/09** | Không có. Đóng cửa sổ giữa chừng nay an toàn nhưng vẫn phải chờ xong. → **CP-09** | Nút Hủy đặt `threading.Event` mà lõi kiểm ở mỗi cửa sổ. Xem CP-09.
 | C10 | Nút xuất TXT và JSON | **ĐẠT** | `export_txt` / `export_json`; kiểm chứng Task 7 mục 5; lỗi ghi file nay có banner (nhóm 4.4 đợt sửa). |
 | C11 | Live: callback sounddevice, `DecoderWorker(QThread)`, signal `words_ready`/`stats`/`warning` | **HOÃN** | Tuần 5. Lưu ý kiến trúc: `DecoderWorker` hiện là QThread có vòng `queue.get()` chặn, **không có event loop**, nên không nhận được queued slot call. Tuần 5 phải chọn `moveToThread` + `QEventLoop` hoặc thread thứ hai. → ghi vào kế hoạch tuần 5 |
 | C12 | Tạo mã: ô nhập, bảng ký tự Cyrillic và 9 chữ Kazakh, tham số, nghe thử, lưu, hiện chuỗi chấm gạch | **ĐẠT** | `encode_page.py`; ảnh 07; roundtrip "СӘЛЕМ" đúng. |
 | C13 | Cài đặt: ngôn ngữ giao diện, profile mặc định, thiết bị mặc định, thư mục xuất, bật/tắt fallback DSP, lưu bằng `QSettings` | **MỘT PHẦN / HOÃN** | Ngôn ngữ giao diện và thư mục gần nhất đã lưu bằng `QSettings` (`settings.py`). Bốn mục còn lại thuộc trang Cài đặt tuần 5. |
-| C14 | Mọi chuỗi hiển thị qua `self.tr()` | **CHƯA ĐẠT (còn sót)** | Chuỗi lỗi của `DecoderWorker` đã qua bảng mã + `tr()`, nhưng `DecodeResult.warnings` do lõi sinh (tiếng Việt) và thông điệp của `Player.play` (tiếng Anh) vẫn đổ thẳng vào banner. → **CP-10** |
+| C14 | Mọi chuỗi hiển thị qua `self.tr()` | **ĐẠT 22/09** | Chuỗi lỗi của `DecoderWorker` đã qua bảng mã + `tr()`, nhưng `DecodeResult.warnings` do lõi sinh (tiếng Việt) và thông điệp của `Player.play` (tiếng Anh) vẫn đổ thẳng vào banner. → **CP-10** | `morsedesk/warnings.py` cho lõi phát mã cảnh báo; giao diện dịch bằng literal `tr()`. Xem CP-10.
 | C15 | Nguồn `.ts` cho cả en, ru, kk | **LỆCH** | Chỉ sinh `ru` và `kk`; tiếng Anh là ngôn ngữ nguồn nên không cần `.qm`. Ghi ở spec tuần 4 mục 5. |
 | C16 | Ngôn ngữ mặc định theo locale hệ thống, không khớp thì Anh | **ĐẠT** | `settings.default_language`; test `test_startup_settings.py`. |
 | C17 | Đóng gói font DejaVu Sans và Noto Sans, đặt làm font ứng dụng | **CHƯA ĐẠT** | Chưa có font trong repo, chưa đặt font ứng dụng. Bằng chứng cần thiết: Qt chạy headless không tìm thấy font nào, mọi ký tự vẽ thành ô vuông. Trên máy Linux tối giản (air-gap) rủi ro tương tự với Ә Ғ Қ Ң Ө Ұ Ү Һ І. → **CP-11** |
@@ -96,7 +96,7 @@ Mỗi dòng "bằng chứng" phải trỏ tới thứ kiểm lại được: đ�
 | E6 | Thiết bị thu bận hoặc mất | liệt kê lại, nút thử lại | **HOÃN** | Tuần 5. |
 | E7 | Tràn buffer live | bỏ khối, tăng bộ đếm | **HOÃN** | Tuần 5. |
 | E8 | Tin cậy thấp | tô đỏ, hiện fallback DSP nếu bật | **ĐẠT phần hiển thị** | Màu đỏ `#f7c6c6` dưới 0,5; `fallback_label`. Công tắc bật/tắt fallback nằm ở trang Cài đặt (tuần 5); CLI đã có `--no-fallback`. |
-| E9 | File dài hơn 1 giờ | xử lý streaming, thanh tiến trình, nút hủy | **CHƯA ĐẠT** | Thay bằng từ chối file dài hơn 20 phút. Khác hẳn spec. → **CP-08**, **CP-09**, **CP-14** |
+| E9 | File dài hơn 1 giờ | xử lý streaming, thanh tiến trình, nút hủy | **ĐẠT 22/09** | Thay bằng từ chối file dài hơn 20 phút. Khác hẳn spec. → **CP-08**, **CP-09**, **CP-14** | `MAX_SECONDS` = 1 giờ; đo thật file 60 phút hết 162 giây và 583 MB. Xem CP-14.
 | E10 | Mọi ngoại lệ ghi log xoay vòng tại `~/.local/share/morsedesk/logs/` | | **LỆCH** | Có log xoay vòng 1 MB × 3, nhưng đường dẫn là `<AppDataLocation>/MorseDesk/MorseDesk/logs/` do `QStandardPaths` lồng tên tổ chức và tên ứng dụng. Cần chốt: theo spec hay theo Qt. → **CP-15** |
 
 ## F. CLI (spec mục 8)

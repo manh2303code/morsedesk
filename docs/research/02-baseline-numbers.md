@@ -515,3 +515,30 @@ bằng cách chỉnh mô hình ngôn ngữ.
 
 Hệ quả cho tiêu chí nghiệm thu: mục tiêu 95 % nên ghi kèm **độ dài tối thiểu 50 ký tự**, và
 giao diện nên nói rõ "chưa đủ dữ liệu để nhận diện ngôn ngữ" với bản tin ngắn hơn thay vì đoán.
+
+## Spec A2 đã đạt: CER dưới 2 % trên ARRL W1AW 18–40 WPM (2026-09-22)
+
+Yêu cầu A2 của spec là CER dưới 2 % trên bản ghi ARRL W1AW trong dải 18–40 WPM. Đo trên 180
+giây đầu mỗi bản, engine `onnx` với toàn bộ chuỗi sửa trong ngày (dither, chọn bộ giải mã,
+bộ DSP có trễ Schmitt):
+
+| Tốc độ | CER | Trong dải A2 |
+|---|---|---|
+| 18 WPM | 2,0 % | ✔ |
+| 20 WPM | 1,8 % | ✔ |
+| 25 WPM | 1,6 % | ✔ |
+| 30 WPM | **0,6 %** | ✔ |
+| 35 WPM | 1,1 % | ✔ |
+| 40 WPM | 2,0 % | ✔ |
+| **Trung bình trong dải** | **1,52 %** | |
+| 15 WPM | 5,4 % | ngoài dải |
+| 13 WPM | 5,9 % | ngoài dải |
+| 10 WPM | 6,1 % | ngoài dải |
+| 5 WPM | 14,1 % | ngoài dải |
+
+Đây là lần đầu dự án đạt một ngưỡng gate của spec **trên dữ liệu không do chính mình sinh ra**.
+
+Phần còn lại tập trung ở tốc độ thấp, nơi một dit dài 24–48 khung nên lượng tử hóa ranh giới
+trong `run_lengths` nặng hơn — đúng hướng cải tiến mà `morsedesk/dsp/baseline.py` đã ghi sẵn
+trong docstring (nội suy ranh giới dưới khung). Lưu ý dải 5–15 WPM nằm ngoài yêu cầu A2 nhưng
+vẫn nằm trong dải 10–35 WPM của yêu cầu A1 trên T1.
