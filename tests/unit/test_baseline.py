@@ -123,12 +123,27 @@ def test_short_all_dit_message_across_speeds(wpm):
         assert abs(res.wpm - wpm) < 0.15 * wpm + 1.0, (wpm, res.wpm)
 
 
-@pytest.mark.parametrize("wpm", [12, 20, 35])
+@pytest.mark.parametrize("wpm", [12, 20])
 def test_short_all_dash_message_mid_speeds(wpm):
     # "TTT" ở 60 WPM trùng hoàn toàn với "S" ở 20 WPM (không có manh mối), nên chỉ kiểm ở dải giữa
     out, res, _ = _decode("TTT", wpm=wpm)
     assert out == "TTT", (wpm, out)
     assert abs(res.wpm - wpm) < 0.15 * wpm + 1.0
+
+
+@pytest.mark.xfail(reason="mơ hồ tuyệt đối: 'TTT' ở 36 WPM và 'S' ở 12 WPM khớp timing hệt nhau",
+                   strict=False)
+def test_all_dash_35wpm_is_ambiguous_with_s():
+    """Ba dấu dài cách đều: đọc là ba chữ T ở 36 WPM hay ba chấm của chữ S ở 12 WPM đều khớp.
+
+    Đo trực tiếp: hai giả thuyết cho `timing_cost` bằng nhau tới bốn chữ số (0,0010), nên chỉ còn
+    prior tốc độ phá thế hòa, và prior quanh 20 WPM lại ưu ái giả thuyết 12 WPM. Trước khi bộ DSP
+    dùng trễ Schmitt, ca này đúng nhờ nhiễu lượng tử hóa ở một ngưỡng cụ thể chứ không nhờ nguyên
+    lý nào; giữ nó làm mốc chặn sẽ là chuẩn giả. Muốn giải đúng thì cần manh mối ngoài timing (mô
+    hình ngôn ngữ), tức engine `onnx`, không phải bộ dự phòng này.
+    """
+    out, _, _ = _decode("TTT", wpm=35)
+    assert out == "TTT", out
 
 
 @pytest.mark.xfail(reason="giới hạn đã biết: dit 4-6 khung ở tốc độ cao, mất manh mối 9 vs 7", strict=False)

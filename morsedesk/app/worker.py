@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import queue
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,10 +16,15 @@ from morsedesk.audio.io import UnsupportedAudio, audio_info, load_audio
 from morsedesk.constants import HOP, SAMPLE_RATE
 from morsedesk.dsp.stft import stft_power
 from morsedesk.lm.store import LMStore
+from morsedesk.progress import DecodeCancelled, DecodeProgress
 
 log = logging.getLogger(__name__)
 
-MAX_SECONDS = 20 * 60
+# Spec mục 7 yêu cầu file tới 1 giờ. Trần 20 phút trước đây là hệ quả của ba thứ nay đã sửa:
+# không có tiến trình (CP-08), không hủy được (CP-09), và một lượt giải mã file 60 phút chạm
+# 5,4 GB vì ước lượng tone cùng envelope dựng mảng dài bằng cả clip. Đo lại sau khi sửa: 583 MB
+# và 162 giây cho 60 phút âm thanh, tức nhanh hơn thời gian thực 22 lần.
+MAX_SECONDS = 60 * 60
 MAX_COLUMNS = 4000
 MAX_FREQ_HZ = 2000.0
 DB_FLOOR = -60.0
@@ -85,6 +91,8 @@ class DecoderWorker(QThread):
     result_ready = Signal(object, object, str)   # DecodeResult, Spectrogram, path
     failed = Signal(str, str, str)               # code (FAILURE_CODES), detail gốc, path
     busy = Signal(bool)
+    progress = Signal(int, int)                  # số cửa sổ đã xong, tổng số cửa sổ (CP-08)
+    cancelled = Signal(str)                      # path của yêu cầu bị hủy (CP-09)
 
     def __init__(
         self, engine: str, model_path: Path | None, lm_dir: Path | None, parent=None
@@ -95,6 +103,8 @@ class DecoderWorker(QThread):
         self.lm_dir = Path(lm_dir) if lm_dir else None
         self._queue: queue.Queue = queue.Queue(maxsize=1)
         self._decoders: dict[tuple[str, bool], Decoder] = {}
+        # `threading.Event` chứ không phải cờ bool: UI thread đặt, worker thread đọc.
+        self._cancel = threading.Event()
         self._acoustic = None
         self._store: LMStore | None = None
 
@@ -106,6 +116,13 @@ class DecoderWorker(QThread):
             except queue.Empty:
                 break
         self._queue.put(req)
+
+    def cancel(self) -> None:
+        """Xin hủy lần giải mã đang chạy (CP-09). Gọi từ UI thread, trả về ngay.
+
+        Không đụng tới hàng đợi: yêu cầu đang chờ (nếu có) vẫn được xử lý sau đó.
+        """
+        self._cancel.set()
 
     def stop_async(self) -> None:
         """Xin worker dừng nhưng KHÔNG chờ: gọi được từ `closeEvent` mà không treo giao diện.
@@ -153,7 +170,11 @@ class DecoderWorker(QThread):
             raise DecodeFailure("not_found", str(e)) from e
         except UnsupportedAudio as e:
             raise DecodeFailure("unsupported", str(e)) from e
-        result: DecodeResult = decoder.decode_array(x, sr)
+        progress = DecodeProgress(
+            on_step=lambda done, total: self.progress.emit(done, total),
+            should_cancel=self._cancel.is_set,
+        )
+        result: DecodeResult = decoder.decode_array(x, sr, progress=progress)
         spec = Spectrogram.from_audio(x, SAMPLE_RATE)
         self.result_ready.emit(result, spec, str(path))
 
@@ -163,8 +184,12 @@ class DecoderWorker(QThread):
             if req is None:
                 return
             self.busy.emit(True)
+            self._cancel.clear()              # mỗi yêu cầu bắt đầu với cờ hủy sạch
             try:
                 self._handle(req)
+            except DecodeCancelled:
+                log.info("decode cancelled: %s", req.path)
+                self.cancelled.emit(str(Path(req.path)))
             except DecodeFailure as e:
                 log.warning("decode failed (%s): %s", e.code, e.detail)
                 self.failed.emit(e.code, e.detail, str(Path(req.path)))

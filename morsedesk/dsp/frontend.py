@@ -24,29 +24,64 @@ class FrontendConfig:
     agc_init_s: float = 1.0     # đoạn đầu dùng khởi tạo mức nền AGC
 
 
-WINDOW_CFG = FrontendConfig(agc_init_s=0.5)
+def window_cfg(agc_tau_s: float = 1.0) -> FrontendConfig:
+    """Cấu hình đặc trưng cho chế độ cửa sổ; `agc_tau_s` đến từ metadata của model đang dùng."""
+    return FrontendConfig(agc_tau_s=agc_tau_s, agc_init_s=0.5)
+
+
+WINDOW_CFG = window_cfg()
+
+
+# Chia khối cho `mix_envelope`. Bản tính một lượt dựng liên tiếp `t`, bộ trộn phức, tín hiệu
+# phức, hai nhánh I/Q và envelope — tất cả float64 và dài bằng cả clip — nên clip 20 phút chiếm
+# 768 MB và file 60 phút đẩy cả lượt giải mã lên 5,4 GB (CP-14). Khối 60 giây giữ bộ nhớ ở mức
+# hằng số; phần chồng lấn để `sosfiltfilt` không để lại vết ở chỗ nối.
+ENVELOPE_CHUNK_SECONDS = 60.0
+ENVELOPE_OVERLAP_SECONDS = 1.0
+
+
+def _envelope_samples(x: np.ndarray, f0_hz: float, sample_rate: int, sos, start: int) -> np.ndarray:
+    """|I+jQ| sau khi trộn xuống băng gốc và lọc thấp, cho một đoạn bắt đầu ở mẫu `start`.
+
+    Pha của bộ trộn lấy theo chỉ số TUYỆT ĐỐI, nếu không hai khối liền nhau sẽ lệch pha và
+    envelope gãy ở chỗ nối.
+    """
+    t = (np.arange(len(x), dtype=np.float64) + start) / sample_rate
+    y = x.astype(np.float64) * np.exp(-2j * np.pi * f0_hz * t)
+    yi = sosfiltfilt(sos, y.real)
+    yq = sosfiltfilt(sos, y.imag)
+    return np.sqrt(yi * yi + yq * yq)
 
 
 def mix_envelope(
-    x: np.ndarray, f0_hz: float, sample_rate: int = SAMPLE_RATE, lowpass_hz: float = 200.0
+    x: np.ndarray, f0_hz: float, sample_rate: int = SAMPLE_RATE, lowpass_hz: float = 200.0,
+    chunk_seconds: float = ENVELOPE_CHUNK_SECONDS,
 ) -> np.ndarray:
     """Trộn xuống băng gốc phức tại f0, lọc thấp, |I+jQ|, trung bình mỗi HOP mẫu.
 
     Khung t được căn giữa tại mẫu t*HOP, giống stft_power: pad env với HOP//2 mẫu 0
     ở đầu (và HOP mẫu 0 ở cuối để đủ cho khung cuối) rồi lấy trung bình từng khung
     HOP mẫu, sao cho khung t phủ [t*HOP - HOP//2, t*HOP + HOP//2).
+
+    `chunk_seconds=0.0` tắt chia khối; chỉ dùng để test đối chiếu với bản một lượt.
     """
     n = len(x)
     n_frames = n // HOP
     if n_frames == 0:
         return np.zeros(0)
-    t = np.arange(n) / sample_rate
-    lo = np.exp(-2j * np.pi * f0_hz * t)
-    y = x.astype(np.float64) * lo
     sos = butter(4, lowpass_hz, btype="low", fs=sample_rate, output="sos")
-    yi = sosfiltfilt(sos, y.real)
-    yq = sosfiltfilt(sos, y.imag)
-    env = np.sqrt(yi * yi + yq * yq)
+    chunk = int(chunk_seconds * sample_rate)
+    if chunk <= 0 or n <= chunk:
+        env = _envelope_samples(x, f0_hz, sample_rate, sos, 0)
+    else:
+        pad = int(ENVELOPE_OVERLAP_SECONDS * sample_rate)
+        env = np.empty(n, dtype=np.float64)
+        for start in range(0, n, chunk):
+            stop = min(start + chunk, n)
+            lo = max(0, start - pad)
+            hi = min(n, stop + pad)
+            piece = _envelope_samples(x[lo:hi], f0_hz, sample_rate, sos, lo)
+            env[start:stop] = piece[start - lo: start - lo + (stop - start)]
     env_p = np.pad(env, (HOP // 2, HOP))
     return env_p[: n_frames * HOP].reshape(n_frames, HOP).mean(axis=1)
 

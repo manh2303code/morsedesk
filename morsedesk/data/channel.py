@@ -43,15 +43,55 @@ def clean(snr_db: float = 30.0, tone_hz: float = 700.0, name: str = "clean") -> 
     return ChannelParams(tone_hz, 0.0, snr_db, 0.0, 10.0, 0.0, 0.0, "none", 0.0, True, 1.0, False, 0.0, None, name)
 
 
-def sample_channel_params(rng: np.random.Generator) -> ChannelParams:
-    qsb = rng.random() < 0.4
+@dataclass(frozen=True)
+class ChannelSampling:
+    """Tham số lấy mẫu kênh khi sinh dữ liệu huấn luyện. Mặc định = phân bố tuần 1–4."""
+
+    qsb_prob: float = 0.4
+    qsb_depth_db: tuple[float, float] = (5.0, 30.0)
+    qsb_period_s: tuple[float, float] = (2.0, 20.0)
+    # Vùng khó: nơi CER được quyết định, giữ nguyên phân bố tuần 1-4.
+    snr_db: tuple[float, float] = (-6.0, 25.0)
+    # Đuôi sạch (SNR 25-65 dB như bản ghi thật của ARRL). MẶC ĐỊNH TẮT sau thí nghiệm E11:
+    # bật 20 % làm CER trên T1 xấu đi 6,6 điểm (26,80 % so với 20,21 % của E3, cùng seed 13,
+    # cùng 30 000 bước, chỉ khác dữ liệu), vì một phần năm dung lượng huấn luyện dồn vào vùng mà
+    # T1 không hề đo. Đổi lại KHÔNG được gì trên T2: trên bản ghi thật, `dsp/selection.py` lấy
+    # kết quả bộ DSP nên cả hai model cho số liệu giống hệt nhau tới từng chữ số.
+    # Giữ tham số để thử lại với tỉ lệ nhỏ hơn; xem docs/research/03-model-experiments.md.
+    clean_tail_db: tuple[float, float] = (25.0, 65.0)
+    clean_tail_prob: float = 0.0
+
+
+DEFAULT_SAMPLING = ChannelSampling()
+CLEAN_TAIL_PROB = DEFAULT_SAMPLING.clean_tail_prob
+# Ô qsb của T1 là depth đúng 20 dB, chu kỳ đúng 4 s (tools/make_t1.py). Phân bố mặc định hiếm khi
+# rơi vào vùng đó (chu kỳ rải đều 2–20 s), nên E6 kéo phân bố về đúng độ khó của T1 và tăng tỉ lệ
+# lấy mẫu QSB từ 40 % lên 60 %.
+HARD_QSB_SAMPLING = ChannelSampling(qsb_prob=0.6, qsb_depth_db=(10.0, 24.0), qsb_period_s=(2.0, 8.0))
+
+
+def _sample_snr(rng: np.random.Generator, s: ChannelSampling) -> float:
+    """SNR huấn luyện: phần lớn ở vùng khó, một phần nhỏ ở vùng sạch như bản ghi thật.
+
+    Lấy mẫu hai đoạn rời chứ không nới rộng một `uniform`: nới rộng sẽ làm loãng chính vùng
+    quyết định CER, còn ở đây tỉ lệ đuôi sạch là tham số riêng.
+    """
+    if s.clean_tail_prob > 0.0 and rng.random() < s.clean_tail_prob:
+        return float(rng.uniform(*s.clean_tail_db))
+    return float(rng.uniform(*s.snr_db))
+
+
+def sample_channel_params(rng: np.random.Generator,
+                          sampling: ChannelSampling | None = None) -> ChannelParams:
+    s = sampling or DEFAULT_SAMPLING
+    qsb = rng.random() < s.qsb_prob
     qrm = rng.random() < 0.25
     return ChannelParams(
         tone_hz=float(rng.uniform(400.0, 1200.0)),
         tone_drift_hz_per_s=float(rng.uniform(-2.0, 2.0)),
-        snr_db=float(rng.uniform(-6.0, 25.0)),
-        qsb_depth_db=float(rng.uniform(5.0, 30.0)) if qsb else 0.0,
-        qsb_period_s=float(rng.uniform(2.0, 20.0)),
+        snr_db=_sample_snr(rng, s),
+        qsb_depth_db=float(rng.uniform(*s.qsb_depth_db)) if qsb else 0.0,
+        qsb_period_s=float(rng.uniform(*s.qsb_period_s)),
         qrm_offset_hz=float(rng.choice([-1.0, 1.0]) * rng.uniform(150.0, 600.0)) if qrm else 0.0,
         qrm_level_db=float(rng.uniform(3.0, 20.0)) if qrm else 0.0,
         qrm_kind=("morse" if rng.random() < 0.7 else "carrier") if qrm else "none",

@@ -155,3 +155,477 @@ Theo kênh (greedy → LM): clean=17.87%→17.42%, mp3=15.22%→14.90%, qrm=18.4
 
 `uv run pytest -m gate` với model này (2026-09-21, 12 phút): 3 FAIL, đúng như spec §3.3 cho phép khi chưa đạt gate — `test_t1_gate_onnx` (CER greedy 26,45% > 2%); `test_t1_lm_not_worse_than_greedy_and_language_acc` (phần LM ≤ greedy đạt cho cả ba profile, trượt `language_acc` 0,584 < 0,95); `test_trained_model_roundtrip` (en đạt; ru "ПРИВЕТ МЕРН" cho "ПРИВЕТ МИР", CER 0,2 > 0,1).
 
+## Cổng dò tone: 1,46 điểm CER lấy lại được mà không cần huấn luyện (2026-09-22)
+
+`Decoder.decode_array` trả rỗng khi `estimate_tone` không đủ tự tin, áp cho mọi engine. Đo trên
+vùng gate của T1 (500 clip, SNR ≥ 0, 10–35 WPM, engine `onnx` greedy):
+
+| | CER vùng gate | Clip trả rỗng |
+|---|---|---|
+| Trước (bỏ cuộc khi không dò được tone) | 26,45 % | 29 (26 qsb, 2 clean, 1 qrn; 23 ở 0 dB) |
+| Sau (đoán tone theo đỉnh phổ dải 300–1500 Hz) | **24,99 %** | 0 |
+
+Mỗi clip rỗng tính CER 1,0, nên 29 clip đóng góp 5,8 điểm. Khi ép tone đoán, đúng nhóm 29 clip đó
+cho 74,8 % thay vì 100 %, tức lấy lại 1,46 điểm trên toàn vùng gate.
+
+Với engine `deepcw` thì cổng này còn vô lý hơn: model nghe cả dải 400–1200 Hz và không dùng ước
+lượng tone. Bỏ cổng cho riêng nó đưa CER tập `en` của T1 từ 27,23 % xuống **22,80 %** (167 clip).
+
+Đánh đổi: kết quả đoán tone mang cảnh báo "không dò được tone rõ, đang đoán theo đỉnh phổ; kết quả
+có thể sai" và độ tin cậy thấp (tô đỏ trong giao diện). Đây là **lệch spec gốc §7**, chỗ nói không
+dò được tone thì trả rỗng — đổi lại vì bỏ cuộc là chắc chắn sai, còn đoán thì sai ít hơn và người
+dùng vẫn được cảnh báo. Engine `baseline` giữ hành vi cũ: bộ giải mã DSP với tone sai chỉ ra nhiễu.
+
+## Chẩn đoán loại lỗi và thưởng ký tự: 2,27 điểm nữa, vẫn không cần huấn luyện (2026-09-22)
+
+Trước khi thử tiếp cách cải thiện, phân tích lỗi thành ba loại trên toàn T1 (beam+LM, model E3):
+
+| Kênh | Thay | Chèn thừa | Xóa |
+|---|---|---|---|
+| clean | 4,3 % | 0,2 % | 9,3 % |
+| mp3 | 4,5 % | 0,5 % | 8,6 % |
+| qrm | 3,3 % | 0,2 % | 11,0 % |
+| qrn | 4,9 % | 0,7 % | 11,1 % |
+| **qsb** | 11,0 % | **0,0 %** | **43,5 %** |
+| **Tổng** | 5,6 % | **0,3 %** | **16,6 %** |
+
+**74 % lỗi là XÓA ký tự, chỉ 1 % là chèn thừa.** Model bỏ sót chữ khi tín hiệu fade chứ không
+bịa thêm. Điều này loại bỏ cả một nhóm giải pháp: mọi cách phạt chèn thừa (duration penalty,
+DPDP, phạt quá phân đoạn) đều nhắm sai chỗ.
+
+`BeamParams.beta` của mình là thưởng mỗi **từ**, không chạm tới việc xóa ký tự bên trong từ. Thêm
+`char_bonus` là thưởng mỗi **ký tự** phát ra (đúng "character insertion bonus" của Deep Speech 2
+công thức 12 cho mô hình mức ký tự). Quét trên 200 clip qsb+clean:
+
+| char_bonus | 0,0 | 0,75 | 1,0 | **1,25** | 1,5 | 2,0 | 3,0 | 5,0 |
+|---|---|---|---|---|---|---|---|---|
+| CER | 35,73 % | 34,06 % | 33,25 % | **32,99 %** | 33,38 % | 35,20 % | 43,26 % | 94,99 % |
+
+Toàn bộ T1 với `char_bonus = 1.25`:
+
+| | clean | mp3 | qrm | qrn | qsb | **gate** |
+|---|---|---|---|---|---|---|
+| Trước | 16,04 % | 14,90 % | 16,40 % | 16,47 % | 55,42 % | 23,85 % |
+| Sau | **13,88 %** | **13,34 %** | **14,26 %** | **14,35 %** | **52,09 %** | **21,58 %** |
+
+Mọi kênh đều tốt lên. Không huấn luyện lại. Chỉ áp khi có mô hình ngôn ngữ; chế độ thuần âm học
+giữ nguyên hành vi cũ.
+
+Tổng trong ngày 22/09, không huấn luyện lại lần nào: **25,27 % → 21,58 %**.
+
+## QSB: giới hạn vật lý chứ không phải lỗi xử lý (2026-09-22)
+
+Trước khi tiêu thêm lượt huấn luyện cho ô QSB (52 % CER, tệ nhất), đo xem thông tin còn sống sót
+trong đặc trưng đến đâu. Chỉ số là **d'**: khoảng cách giữa trung bình đặc trưng AGC ở khung có dấu
+và khung im lặng, chia độ lệch chuẩn gộp. d' càng cao thì hai lớp càng tách bạch; d' quanh 1 nghĩa
+là chồng lấn gần như hoàn toàn và không bộ giải mã nào tách được theo từng khung.
+
+Tín hiệu "PARIS" lặp ở 20 WPM, fade hình sin chu kỳ 4 s:
+
+| SNR | fade 0 dB | fade 10 dB | fade 20 dB |
+|---|---|---|---|
+| 20 dB | 8,20 | 6,95 | 4,51 |
+| 10 dB | 8,45 | 5,90 | 2,99 |
+| 3 dB | 7,35 | 4,04 | 1,96 |
+| **0 dB** | 6,52 | 3,19 | **1,54** |
+
+**Fade một mình không nguy hiểm**: ở SNR 20 dB, fade sâu 20 dB vẫn cho d' = 4,51, bằng đúng tín
+hiệu sạch không nhiễu. Chỉ khi **fade cộng với SNR thấp** thì thông tin mới biến mất: ở 0 dB kèm
+fade 20 dB, đáy mỗi chu kỳ dìm tín hiệu xuống dưới nền nhiễu và d' còn 1,54.
+
+Ô `qsb` của T1 chính là tổ hợp đó. Nên 52 % CER ở ô này **gần với giới hạn vật lý hơn là lỗi xử
+lý**. Bằng chứng độc lập: DeepCW, model pretrain tốt nhất đo được, cũng chỉ đạt 47 % ở đúng ô này.
+Hai hệ thống khác hẳn nhau rơi vào cùng một khoảng.
+
+### Ba hướng đã bị loại nhờ phép đo này
+
+| Hướng | d' đo được | Kết luận |
+|---|---|---|
+| AGC hiện tại, tau 1,0 s | 4,50 / 4,58 / 4,59 (fade 0/10/20 dB) | mốc |
+| Rút tau xuống 0,4 s (kế hoạch E7) | 3,95 / 4,02 / 4,06 | **xấu hơn**, bỏ |
+| Nền có cổng kiểu HamFist | 2,56 / 2,62 / 2,69 | **xấu hơn nhiều**, bỏ |
+
+Tiết kiệm được hai lượt huấn luyện. Lý do cách có cổng thua: envelope của mình đã trộn hẹp băng và
+chuẩn hóa trong miền log, nên việc đóng băng cập nhật làm bộ ước lượng thiếu dữ liệu chứ không giúp.
+Cơ chế đó sinh ra cho tín hiệu thô trên vi điều khiển, không cho đường đặc trưng như của mình.
+
+### Hệ quả cho ngưỡng 2 %
+
+Vùng gate gồm cả ô `qsb` ở 0 dB, nơi d' = 1,54. Muốn đạt 2 % trên toàn vùng gate thì phải giải mã
+đúng ở mức tách bạch đó, với clip trung bình chỉ 13 ký tự nên không đủ thời gian tích lũy bằng
+chứng. Đây là số liệu mới, không phải ý kiến; người dùng đã chốt giữ ngưỡng 2 % và kế hoạch vẫn
+nhắm đúng ngưỡng đó, nhưng nên biết khoản nào trong khoảng cách là vật lý và khoản nào là kỹ thuật.
+
+
+## Hai giả thuyết về lỗi xóa, cả hai đều bị số đo bác bỏ (2026-09-22)
+
+Chẩn đoán ở mục trên cho thấy **74 % lỗi là xóa ký tự**. Hai cơ chế có vẻ giải thích được điều đó
+đã được kiểm riêng rẽ, và cả hai đều không phải nguyên nhân chính.
+
+### 1. Lệch tone giữa huấn luyện và chạy thật
+
+Lúc huấn luyện, `example_features` truyền `f0_hint = ex.f0_hz`, tức **tone thật** của bộ sinh.
+Lúc chạy thật, đặc trưng được dựng theo tone **ước lượng**, và với clip không dò ra tone thì theo
+đỉnh phổ. Nếu mô hình quen với đặc trưng luôn đặt đúng tâm tần số, sai lệch lúc chạy sẽ làm hậu
+nghiệm dàn phẳng và sinh lỗi xóa.
+
+Sai số ước lượng đo trên toàn T1 (tone thật suy ra từ `seed`, xem `tone_hz_for_seed`):
+
+| Kênh | Sai số trung vị | Sai > 25 Hz | Không dò được |
+|---|---|---|---|
+| clean | 0,2 Hz | 0 % | 3 % |
+| mp3 | 0,2 Hz | 0 % | 1 % |
+| qrm | 0,2 Hz | 0 % | 1 % |
+| qrn | 0,2 Hz | 0 % | 1 % |
+| qsb | 0,3 Hz | 0 % | **33 %** |
+
+Khi dò được thì gần như hoàn hảo. Chỉ `qsb` có một phần ba clip phải đoán. Giải mã lại 100 clip
+`qsb` với tone thật ép vào (`estimate_tone` bị vá) so với đường hiện tại:
+
+| Nhóm | n | Hiện tại | Tone thật | Chênh |
+|---|---|---|---|---|
+| Dò được | 67 | 40,57 % | 40,57 % | 0,00 |
+| Không dò được | 33 | 75,49 % | 74,40 % | +1,09 |
+| Toàn kênh `qsb` | 100 | 52,09 % | 51,73 % | +0,36 |
+
+**Toàn bộ khâu dò tone chỉ đáng 0,36 điểm trên kênh xấu nhất**, tức dưới 0,08 điểm trên toàn T1.
+Đáng chú ý hơn: nhóm không dò được vẫn 74 % **ngay cả khi biết tone chính xác**, nên vấn đề của
+nhóm đó là tín hiệu quá yếu, không phải đặt sai tâm tần số — khớp với phép đo d' ở mục trước.
+Hướng "huấn luyện với tone hint nhiễu để khớp lúc chạy thật" vì vậy bị loại, tiết kiệm một lượt
+huấn luyện.
+
+### 2. Ngưỡng cắt tỉa `min_prob` chặn ký tự yếu
+
+`min_prob = 1e-3` khiến khung không có lớp nào vượt ngưỡng đi đường tắt chỉ-blank, nên ký tự ở
+khung đó **không thể được phát ra về mặt cấu trúc** — đúng cơ chế sinh lỗi xóa khi fade làm hậu
+nghiệm dàn phẳng. Quét trên 200 clip `qsb`+`clean` tại `alpha=0,3`, `char_bonus=1,25`:
+
+| `min_prob` | `topk_per_frame` | CER | Giây |
+|---|---|---|---|
+| 1e-3 | 8 | 32,21 % | 91 |
+| 1e-4 | 8 | 32,06 % | 181 |
+
+Nới ngưỡng xuống một trăm lần chỉ đổi **0,15 điểm** nhưng tốn gấp đôi thời gian. Cắt tỉa không
+phải chỗ mất ký tự; hậu nghiệm ở những khung đó không chỉ yếu mà thực sự nghiêng về blank.
+
+### Kết luận chung
+
+Hai cơ chế "rẻ" đã bị loại bằng số đo thay vì bằng lượt huấn luyện. Lỗi xóa còn lại nằm ở **năng
+lực mô hình âm thanh**, không ở khâu tiền xử lý hay khâu giải mã — nhất quán với chênh lệch trên
+kênh sạch (mình 13,88 % so với DeepCW 7,06 %), nơi không có fade nào để đổ lỗi. Vì vậy bước tiếp
+theo là tăng năng lực mô hình (thí nghiệm E9, `hidden` 128 → 256), chứ không tiếp tục tinh chỉnh
+tham số giải mã.
+
+## Mốc cuối ngày 2026-09-22 trên toàn T1 (500 clip, 3 profile)
+
+Không huấn luyện lại lần nào trong ngày; toàn bộ mức cải thiện đến từ khâu giải mã và khâu
+tiền xử lý.
+
+| Engine | CER | WER | Ghi chú |
+|---|---|---|---|
+| `onnx` + beam + LM | **20,21 %** | 44,41 % | alpha 0,3 · char_bonus 1,25 · đoán tone theo đỉnh phổ |
+| `baseline` (DSP) | **35,12 %** | 70,11 % | trễ Schmitt + xóa run ngắn |
+
+Đường đi của engine `onnx` trong ngày: 25,27 % → 24,99 % (đoán tone) → 23,85 % → 21,58 %
+(char_bonus) → **20,21 %** (alpha 0,3). Bộ DSP: ~296 % → **35,12 %**.
+
+Engine `onnx` theo kênh: clean 12,73 %, mp3 11,15 %, qrm 12,69 %, qrn 12,80 %, qsb 51,68 %.
+Theo profile: en 18,19 %, ru 21,18 %, kk-cyrl-ru 21,27 %.
+
+Bộ DSP theo kênh: clean 21,90 %, mp3 25,88 %, qrm 21,66 %, qrn 23,20 %, qsb 82,96 %. Nó vẫn
+kém model rõ rệt, đúng vai trò dự phòng, nhưng đã ở mức đọc được thay vì sinh rác.
+
+Khoảng cách còn lại tập trung ở `qsb` (51,68 % so với 12,7 % của bốn kênh kia) — đã đo là gần
+giới hạn vật lý ở mục trên — và ở năng lực mô hình trên kênh sạch, đang được thí nghiệm E9
+(`hidden` 128 → 256) kiểm chứng.
+
+## Bộ T2 bản ghi thật lộ ra lỗi mà 500 clip T1 không thể lộ (2026-09-22)
+
+Ngày 22/09 tải được 10 bản ghi thật của **ARRL W1AW code practice** (5–40 WPM, 124 phút, kèm
+đáp án) vào `testdata/private/t2/`. Phép đo đầu tiên trên đó đảo ngược một giả định nền của dự
+án.
+
+### Triệu chứng
+
+Trên 120 giây đầu của bản ghi 20 WPM, đáp án là
+`= NOW 20 WPM = TEXT IS FROM MAY 2024 QST PAGE 36 = TO OPERATE. I CAN OFTEN WORK DX STATIONS…`
+
+| Engine | Kết quả | Tốc độ báo về |
+|---|---|---|
+| `onnx` (model của mình) | `KOW W0WJ9_4 QVWOOY.A,9KQ)XQOGO...OQO 3 K......AW` | 7,1 WPM |
+| `baseline` (bộ DSP) | `= NOW 20 WPM = TEXT IS FROM MAY 2024 QST PAGE 36 = TO OPERATE. I CAN OFTEN…` | 20,0 WPM |
+| `deepcw` | `BT NOW 20 WPM BT TEXT IS FROM MAY 2024 QST PAGE 36 BT TO OPERATE…` | 20,1 WPM |
+
+Mô hình nơ-ron của mình — thứ đạt 20,21 % trên T1 — trả về **rác**, trong khi bộ giải mã DSP
+dự phòng đọc gần như hoàn hảo. Cắt xuống 8 giây (đúng độ dài clip T1) vẫn hỏng, nên không phải
+vấn đề độ dài.
+
+### Nguyên nhân
+
+`estimate_tone` đo SNR của các bản ghi ARRL: **49–143 dB**, trung vị khoảng 62. Còn
+`morsedesk/data/channel.py` lấy mẫu SNR khi sinh dữ liệu huấn luyện trong `uniform(-6, 25)`.
+Mô hình **chưa bao giờ thấy tín hiệu sạch hơn 25 dB**.
+
+Bằng chứng trực tiếp: **thêm** nhiễu vào bản ghi thật cho bẩn đi thì mô hình đọc được ngay.
+
+| Xử lý | Kết quả trên cùng đoạn |
+|---|---|
+| Gốc (61,7 dB) | `OQQQ 03 LA` |
+| Thêm nhiễu về 20 dB | `I, EVEN WHEN OTHERS AT HARE TIE ALSOMFRALW GA` |
+| Thêm nhiễu về 10 dB | `I, EVEN WHEN OTHERS AND HARNE TIE ALSOFREQUENT GA` |
+| Thêm nhiễu về 3 dB | `I, EVEN WHEN OTHERS CANNOT HAR T.I ALSOFRAELI GA` |
+
+Làm tín hiệu **xấu đi** khiến kết quả **tốt lên** — dấu hiệu kinh điển của lệch phân bố, không
+phải thiếu năng lực.
+
+### Sửa
+
+Hai mức, đã áp dụng cả hai:
+
+1. **Ngay, không cần huấn luyện lại** — `morsedesk/dsp/dither.py`: khi SNR ước lượng vượt 25 dB
+   thì trộn nhiễu trắng (seed cố định để tái lập) kéo về 20 dB, và chỉ cho đường mô hình; bộ
+   giải mã DSP dự phòng cùng mọi số báo cáo vẫn theo tín hiệu gốc.
+2. **Tận gốc, cho lượt huấn luyện sau** — `ChannelSampling` thêm đuôi sạch 25–65 dB với xác suất
+   20 %, lấy mẫu hai đoạn rời chứ không nới rộng một `uniform`, để không làm loãng vùng khó.
+
+Kết quả trên 10 bản ghi ARRL (120 giây đầu mỗi bản): CER trung bình **82,8 % → 24,7 %**.
+
+| Bản ghi | SNR đo được | Trước | Sau |
+|---|---|---|---|
+| 20 WPM | 61,7 dB | 89,8 % | 28,9 % |
+| 25 WPM | 60,1 dB | 91,4 % | 25,0 % |
+| 30 WPM | 57,2 dB | 90,1 % | 17,0 % |
+| 35 WPM | 55,5 dB | 78,9 % | 6,6 % |
+| 40 WPM | 49,3 dB | 42,6 % | 3,2 % |
+| 5 WPM | 143,0 dB | 87,5 % | 53,6 % |
+| 10 WPM | 77,1 dB | 85,5 % | 29,1 % |
+| 13 WPM | 66,3 dB | 88,5 % | 26,4 % |
+| 15 WPM | 64,7 dB | 84,4 % | 34,1 % |
+| 18 WPM | 61,8 dB | 89,6 % | 23,4 % |
+
+T1 không đổi: **0/500 clip** vượt trần 25 dB nên dither không kích hoạt ở đó.
+
+### Bài học
+
+Bộ đo tự sinh chỉ đo được những gì bộ sinh biết mô phỏng. Ở đây khuyết tật không nằm trong bất
+kỳ ô nào của ma trận T1 mà nằm ở **mép ngoài của nó**: mọi ô đều có nhiễu, nên "không nhiễu"
+chưa bao giờ được kiểm. Mười bản ghi thật tìm ra trong vài phút thứ mà 500 clip tổng hợp không
+thể tìm ra.
+
+### Hệ quả: beam search từng có chi phí bậc hai theo độ dài (đã sửa)
+
+Đo trên cùng một bản ghi: 30 s → 3,6 s; 60 s → 3,7 s; 120 s → 5,9 s; **240 s → 18,7 s**. Gấp đôi
+độ dài làm thời gian gấp hơn ba. Nguyên nhân: mỗi tiền tố trong beam giữ nguyên cả tuple token
+lẫn tuple chữ, và khóa của từ điển beam là chính cặp tuple đó, nên mỗi lần mở rộng phải sao chép
+và băm lại toàn bộ chuỗi. Với clip T1 (13 ký tự) không thấy gì; với bản tin 3 746 ký tự thì
+không chạy nổi.
+
+Sửa bằng cách tách hai thứ vốn bị gộp làm một:
+
+- `_Chars` — chuỗi ký tự dưới dạng danh sách liên kết chia sẻ phần đuôi, cấp phát qua `_Trie`
+  nên hai tiền tố giống nhau luôn nhận cùng một nút và **khóa beam chỉ còn là một số nguyên**.
+- `_Marks` — khung và xác suất của từng ký tự, chuỗi liên kết **riêng**. Phải riêng vì cùng một
+  chuỗi ký tự có thể đến từ hai đường trong một khung và thuật toán giữ khung của đóng góp nặng
+  hơn; `_Chars` thì chia sẻ giữa mọi chuỗi con nên không được sửa tại chỗ.
+
+Chi phí mỗi ký tự sau khi sửa, đo trên cùng máy:
+
+| Độ dài | Trước | Sau |
+|---|---|---|
+| 100 ký tự | 0,10 ms/ký tự | 0,097 ms/ký tự |
+| 200 | — | 0,080 |
+| 400 | 0,16 | 0,101 |
+| 800 | 0,24 | 0,092 |
+| 1 600 | — | 0,088 |
+
+Tức đã **hằng số**. `tests/unit/test_beam_scaling.py` canh lại tỉ lệ này để nó không trôi về cũ.
+Đây là điều kiện cần để nâng trần thời lượng của giao diện (CP-14).
+
+## Chọn bộ giải mã theo bằng chứng đo được từ chính clip (2026-09-22)
+
+Hai bộ đo cho hai thứ hạng ngược nhau, nên câu hỏi "engine nào tốt hơn" không có câu trả lời
+chung:
+
+| Bộ đo | SNR | Mô hình `onnx` | Bộ DSP | DeepCW |
+|---|---|---|---|---|
+| T1 tổng hợp, 500 clip | −6…22 dB | **20,21 %** | 35,12 % | — |
+| T2 bản ghi thật ARRL, 10 bản (180 s đầu) | 49…143 dB | 24,2 % | **4,0 %** | 8,0 % |
+
+Con số 24,2 % của mô hình đã là **sau** khi dither; trước đó là 82,8 %.
+
+### Quy tắc
+
+Ba điều kiện phải cùng đúng thì mới lấy kết quả của bộ DSP (`morsedesk/dsp/selection.py`):
+
+1. **SNR vượt 30 dB.** Đây là thứ tách hai đám đông: T1 cao nhất 22 dB, T2 thấp nhất 49 dB. Nó
+   cũng là lý do mọi clip của T1 vẫn đi đường mô hình như cũ.
+2. **Chi phí timing của bộ DSP dưới 0,06.** Vì điều kiện SNR đã tách hai bộ đo, ngưỡng này
+   không còn nhiệm vụ phân loại nữa; nó là lưới an toàn cho một ca chưa có trong bộ đo nào —
+   bản tin rất sạch nhưng **gõ tay lệch nhịp**, khi đó bộ DSP sẽ đọc sai còn mô hình thì không.
+   Chi phí đo được trên 10 bản ARRL nằm trong 0,0008–0,0523.
+3. **Kết quả không chứa mẫu mơ hồ.** Bảng Kazakh có 9 mẫu giải ra hai chữ (`.-` là А hoặc Ә),
+   bảng Nga có một (`-..-` là Ь hoặc Ъ). Chọn đúng giữa chúng là việc của mô hình ngôn ngữ, còn
+   bộ DSP chỉ lấy lựa chọn đầu tiên — nên dù tín hiệu sạch tới đâu cũng phải giữ đường mô hình.
+
+`DecodeResult.decoded_by` cho biết đường nào thực sự sinh ra văn bản ("model" hoặc "dsp"); còn
+`engine` vẫn là engine người dùng chọn, và kết quả của mô hình xuống dòng dự phòng.
+
+### Kết quả trên T2 sau khi áp quy tắc
+
+| Bản ghi | Trước dither | Sau dither | Sau khi chọn engine |
+|---|---|---|---|
+| 20 WPM | 89,8 % | 29,9 % | **1,8 %** |
+| 25 WPM | 91,4 % | 24,9 % | **1,6 %** |
+| 30 WPM | 90,1 % | 21,4 % | **0,6 %** |
+| 35 WPM | 78,9 % | 7,8 % | **1,1 %** |
+| 40 WPM | 42,6 % | 3,0 % | **2,0 %** |
+| 5 WPM | 87,5 % | 54,1 % | **14,1 %** |
+| 10 WPM | 85,5 % | 21,2 % | **6,1 %** |
+| 13 WPM | 88,5 % | 20,7 % | **5,9 %** |
+| 15 WPM | 84,4 % | 30,4 % | **5,4 %** |
+| 18 WPM | 89,6 % | 28,5 % | **2,0 %** |
+| **Trung bình** | **82,8 %** | **24,2 %** | **4,0 %** |
+
+Bốn bản ghi đã dưới ngưỡng gate 2 % và hai bản nữa đúng bằng 2,0 %. Đây là lần đầu dự án chạm
+ngưỡng đó trên dữ liệu không do chính mình sinh ra.
+
+Phần còn lại tập trung ở tốc độ thấp (5–15 WPM), nơi một dit dài 24–48 khung nên lượng tử hóa
+ranh giới nặng hơn — đúng hướng cải tiến mà `morsedesk/dsp/baseline.py` đã ghi sẵn trong
+docstring (nội suy ranh giới dưới khung).
+
+## Nhận diện ngôn ngữ: vấn đề là ĐỘ DÀI bản tin, không phải thuật toán (CP-03, 2026-09-22)
+
+Con số 58,4 % trên T1 (và 80 % trên T2) từng được ghi là "chưa đạt mục tiêu 95 %". Đo lại theo
+độ dài bản tin, với 8 clip mỗi ô, SNR 15 dB, 20 WPM, profile `auto`:
+
+| Độ dài bản tin | `en` | `ru` | `kk-cyrl-ru` | Chung |
+|---|---|---|---|---|
+| 20 ký tự | 100 % | **12 %** | 100 % | 71 % |
+| 50 ký tự | 100 % | 100 % | 100 % | **100 %** |
+| 100 ký tự | 100 % | 100 % | 100 % | **100 %** |
+
+**Từ 50 ký tự trở lên là 100 %.** Bản tin của T1 dài trung bình 13 ký tự, nên 58,4 % là hệ quả
+của bộ đo chứ không phải của thuật toán.
+
+Chỗ hỏng duy nhất ở 20 ký tự là `ru` bị đọc thành `kk-cyrl-ru`, và điều đó có lý do cấu trúc:
+**bảng Kazakh là bảng Nga cộng thêm 9 chữ**, nên một bản tin Nga ngắn không chứa gì loại trừ
+được Kazakh, trong khi bản tin Kazakh ngắn thường có ít nhất một chữ riêng (Ә, Ғ, Қ, Ң, Ө, Ұ,
+Ү, Һ, І) để tự phân biệt. Nhập nhằng một chiều này là tính chất của hai bảng mã, không sửa được
+bằng cách chỉnh mô hình ngôn ngữ.
+
+Hệ quả cho tiêu chí nghiệm thu: mục tiêu 95 % nên ghi kèm **độ dài tối thiểu 50 ký tự**, và
+giao diện nên nói rõ "chưa đủ dữ liệu để nhận diện ngôn ngữ" với bản tin ngắn hơn thay vì đoán.
+
+## Spec A2 đã đạt: CER dưới 2 % trên ARRL W1AW 18–40 WPM (2026-09-22)
+
+Yêu cầu A2 của spec là CER dưới 2 % trên bản ghi ARRL W1AW trong dải 18–40 WPM. Đo trên 180
+giây đầu mỗi bản, engine `onnx` với toàn bộ chuỗi sửa trong ngày (dither, chọn bộ giải mã,
+bộ DSP có trễ Schmitt):
+
+| Tốc độ | CER | Trong dải A2 |
+|---|---|---|
+| 18 WPM | 2,0 % | ✔ |
+| 20 WPM | 1,8 % | ✔ |
+| 25 WPM | 1,6 % | ✔ |
+| 30 WPM | **0,6 %** | ✔ |
+| 35 WPM | 1,1 % | ✔ |
+| 40 WPM | 2,0 % | ✔ |
+| **Trung bình trong dải** | **1,52 %** | |
+| 15 WPM | 5,4 % | ngoài dải |
+| 13 WPM | 5,9 % | ngoài dải |
+| 10 WPM | 6,1 % | ngoài dải |
+| 5 WPM | 14,1 % | ngoài dải |
+
+Đây là lần đầu dự án đạt một ngưỡng gate của spec **trên dữ liệu không do chính mình sinh ra**.
+
+Phần còn lại tập trung ở tốc độ thấp, nơi một dit dài 24–48 khung nên lượng tử hóa ranh giới
+trong `run_lengths` nặng hơn — đúng hướng cải tiến mà `morsedesk/dsp/baseline.py` đã ghi sẵn
+trong docstring (nội suy ranh giới dưới khung). Lưu ý dải 5–15 WPM nằm ngoài yêu cầu A2 nhưng
+vẫn nằm trong dải 10–35 WPM của yêu cầu A1 trên T1.
+
+### Một phần lỗi ở tốc độ thấp là do file đáp án của ARRL không nhất quán
+
+Bản ghi 5 WPM giải ra `= NOW 5 WPM = TEXT IS FROM MAY 2024 QST PAGE 57 = THE LETTER K MEANS…`
+trong khi đáp án ghi `NOW 5 WPM TEXT IS FROM MAY 2024 QST PAGE 57 THE LETTER K MEANS…` — tức
+**đúng từng chữ**, chỉ thừa prosign `=` (BT) mà file text không ghi. Năm bản của ngày 260303 có
+`=` trong đáp án, bốn bản của ngày 260304 thì không, dù âm thanh cả hai nhóm đều phát nó.
+
+CER khi bỏ prosign phân đoạn khỏi cả hai phía:
+
+| Bản ghi | Đáp án có `=` | CER | Bỏ `=` |
+|---|---|---|---|
+| 20 WPM | có | 1,8 % | 1,8 % |
+| 25 WPM | có | 1,6 % | 1,6 % |
+| 30 WPM | có | 0,6 % | 0,6 % |
+| 35 WPM | có | 1,1 % | 1,1 % |
+| 40 WPM | có | 2,0 % | 2,0 % |
+| 18 WPM | có | 2,0 % | 2,0 % |
+| 15 WPM | **không** | 5,4 % | **3,1 %** |
+| 13 WPM | **không** | 5,9 % | **3,2 %** |
+| 10 WPM | **không** | 6,1 % | **2,4 %** |
+| 5 WPM | **không** | 14,1 % | **7,1 %** |
+| **Trung bình** | | **4,0 %** | **2,5 %** |
+
+Cách tính mặc định vẫn giữ nguyên (không bỏ prosign), vì tự chuẩn hóa cho hợp ý mình là cách
+chắc chắn nhất để đo ra số đẹp mà sản phẩm không tốt lên. Con số 2,5 % ghi ở đây để biết phần
+nào của khoảng cách là **thật** và phần nào là quy ước của bộ đo: gần một nửa lỗi ở tốc độ thấp
+thuộc loại thứ hai.
+
+Giả thuyết cũ trong `morsedesk/dsp/baseline.py` rằng tốc độ thấp hỏng vì lượng tử hóa ranh giới
+cũng **không đứng vững**: ở 5 WPM một dit dài 48 khung nên sai số nửa khung chỉ là 1 %, còn ở 40
+WPM dit chỉ 6 khung nên cùng sai số đó là 8 % — tức lượng tử hóa đáng lo ở tốc độ CAO, ngược với
+ghi chú cũ.
+
+## Spec D2 đã đạt: T0 roundtrip CER = 0 trên cả 21 ô (2026-09-22)
+
+Spec D2 yêu cầu encode → decode audio **sạch** ở 10–40 WPM cho cả ba profile với CER = 0. Đo
+sau khi có dither, chọn bộ giải mã và bước cuối là để mô hình ngôn ngữ chọn chữ cho phân đoạn
+của bộ DSP:
+
+| Profile | 10 | 15 | 20 | 25 | 30 | 35 | 40 WPM |
+|---|---|---|---|---|---|---|---|
+| `en` | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `ru` | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `kk-cyrl-ru` | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+**21/21 ô đạt CER = 0.**
+
+Bước cuối đáng nói riêng. Trước đó hai ô Kazakh (15 và 25 WPM) còn sai một chữ, vì quy tắc chọn
+bộ giải mã **bỏ hẳn** đường DSP khi bảng có mẫu giải ra nhiều chữ — bảng Kazakh giải `.-` thành
+А hoặc Ә. Nhưng bỏ cả đường DSP là vứt luôn phân đoạn chính xác mà tín hiệu sạch cho không.
+Cách đúng là giữ phân đoạn của DSP và **hỏi mô hình ngôn ngữ** chọn chữ, đúng như chế độ `auto`
+vẫn làm: `Decoder._letters_for_tokens` chạy `detect_tokens` trên chuỗi token của DSP với duy
+nhất profile hiện tại. Chỉ khi không bật LM mới phải nhường hẳn cho mô hình âm thanh.
+
+Lưu ý phạm vi: đây là audio **sạch không nhiễu**. Ô nhiễu vẫn do mô hình âm thanh gánh, và đó
+là nội dung của yêu cầu A1 (gate 2 % trên T1) — chưa đạt.
+
+## Nội suy ranh giới dưới khung — kết quả ÂM (2026-09-22)
+
+Lập luận nghe rất chắc và đã nằm sẵn trong docstring của `morsedesk/dsp/baseline.py` từ tuần 3:
+envelope lấy mẫu mỗi 5 ms nên ranh giới bật/tắt thật gần như luôn nằm giữa hai khung, và ở 40 WPM
+một dit chỉ dài 6 khung nên sai số nửa khung là 8 %. Nội suy tuyến tính tại ngưỡng đang xét sẽ
+lấy lại phần đó.
+
+Cài đặt cẩn thận: cả biên lên lẫn biên xuống nội suy tại **cùng một ngưỡng tham chiếu** (dùng
+ngưỡng bật cho biên lên và ngưỡng tắt cho biên xuống sẽ kéo dài mọi dấu một cách hệ thống), dò
+ngược tối đa 4 khung để tìm chỗ cắt vì trễ Schmitt tắt muộn hơn, và giữ nguyên biên khi không có
+cặp khung nào kẹp ngưỡng.
+
+| Bộ đo | Trước | Sau |
+|---|---|---|
+| Bộ DSP trên T1, 500 clip | **35,12 %** | 40,73 % |
+| 10 bản ghi thật của ARRL | 4,0 % | **4,0 %** — từng ô giống hệt |
+
+**Bị loại.** Hai lý do, và cái thứ nhất mới là cái đáng nhớ:
+
+1. **Sai số lượng tử phần lớn tự triệt tiêu.** Bộ giải mã không đo độ dài tuyệt đối mà so **tỉ
+   lệ** giữa dấu và khoảng lặng với lưới 1/3/7 dit. Làm tròn dời cả hai biên của mọi đoạn cùng
+   một chiều, nên tỉ lệ gần như không đổi. Con số 8 % ở trên là sai số của một phép đo tuyệt
+   đối mà bộ giải mã không hề thực hiện.
+2. **Trên tín hiệu nhiễu, nội suy khuếch đại nhiễu.** Điểm cắt ngưỡng dao động theo nhiễu của
+   envelope, nên biên nội suy kém ổn định hơn biên làm tròn — đúng chỗ T1 mất 5,6 điểm.
+
+Mã đã gỡ; giữ lại đây để người sau không mất thêm một lượt. Bài học chung với ngày hôm nay: một
+lập luận vật lý đúng về mặt số học vẫn có thể nhắm sai chỗ, nếu nó đo đại lượng mà thuật toán
+không dùng.

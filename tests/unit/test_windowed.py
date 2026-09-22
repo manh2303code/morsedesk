@@ -181,6 +181,11 @@ def test_window_mode_decodes_when_global_tone_estimate_fails(tmp_models):
     assert r.tone_hz is not None and abs(r.tone_hz - 700.0) < 20.0
     assert not any("không có tín hiệu" in w for w in r.warnings)
     assert r.snr_db is None                                   # không có ước lượng toàn clip để báo SNR
+    # Chế độ 'clip' không có cửa sổ để dò lại, nên rơi vào đường đoán tone theo đỉnh phổ: vẫn
+    # chạy model (bỏ cuộc là chắc chắn CER 1,0) nhưng phải nói rõ là đang đoán.
     clip = Decoder("en", engine="onnx", model_path=tmp_models["clip"], lm=False).decode_array(x)
-    assert clip.text == "" and clip.tone_hz is None           # chế độ 'clip' giữ nguyên hành vi cũ
-    assert any("không có tín hiệu" in w for w in clip.warnings)
+    assert clip.tone_hz is not None
+    assert any("đang đoán theo đỉnh phổ" in w for w in clip.warnings)
+    assert not any("không có tín hiệu" in w for w in clip.warnings)
+    # Chế độ 'window' dò được tone thật từ một cửa sổ nên KHÔNG mang cảnh báo đoán.
+    assert not any("đang đoán theo đỉnh phổ" in w for w in r.warnings)

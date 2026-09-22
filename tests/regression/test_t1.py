@@ -127,3 +127,25 @@ def test_evaluate_isolates_decode_errors(tmp_path):
 def test_aggregate_sorts_numeric_keys():
     rows = [{"snr": s, "cer": 0.1, "wer": 0.2} for s in (10.0, 3.0, 0.0, 20.0)]
     assert list(bench.aggregate(rows, "snr").keys()) == ["0.0", "3.0", "10.0", "20.0"]
+
+
+@pytest.mark.gate
+@pytest.mark.skipif(not Path("models/deepcw/model.onnx").exists(),
+                    reason="chưa có models/deepcw/model.onnx (tools/fetch_deepcw.py)")
+def test_deepcw_engine_on_t1_en_subset():
+    """Engine deepcw phải đạt lại mốc đo qua `Decoder` thật: CER <= 24 % trên 167 clip profile
+    en của T1 v2 (lm=False; giá trị đo được 22,80 %, khớp mốc 22,86 % của
+    docs/research/04-pretrained-baselines.md đo bằng tools/bench_pretrained.py).
+
+    Trước khi sửa, đi qua `Decoder` cho 27,23 % vì cổng `estimate_tone()` trả "" cho 15/167 clip
+    (SNR 0-3 dB, phần lớn kênh qsb) trước khi `DeepCwModel` kịp chạy. DeepCW nghe cả dải
+    400-1200 Hz và không dùng ước lượng tone, nên cổng đó nay không áp cho engine này
+    (`Decoder.decode_array`). Chi tiết: .superpowers/sdd/qa-task-2-report.md.
+    """
+    manifest = Path("testdata/generated/t1/manifest.jsonl")
+    if not manifest.exists():
+        pytest.skip("chạy: uv run python tools/make_t1.py")
+    rows = [r for r in bench.load_rows(manifest) if r.get("profile") == "en"]
+    results = bench.evaluate(rows, engine="deepcw", lm=False)
+    mean = sum(r["cer"] for r in results) / len(results)
+    assert mean <= 0.24, f"CER deepcw trên {len(results)} clip en = {mean:.4f}, mốc đo được 0.2280"

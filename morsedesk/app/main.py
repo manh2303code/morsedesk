@@ -8,10 +8,12 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication, QLocale, QStandardPaths
+from PySide6.QtCore import QCoreApplication, QLocale
 from PySide6.QtWidgets import QApplication, QMessageBox
 
+from morsedesk.app.fonts import apply_application_font
 from morsedesk.app.main_window import MainWindow
+from morsedesk.app.paths import log_directory
 from morsedesk.app.settings import AppSettings, default_language
 from morsedesk.app.startup import check_models, missing_models_message
 from morsedesk.app.worker import DecoderWorker, Player
@@ -45,9 +47,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def setup_logging() -> None:
-    """Ghi log xoay vòng (1 MB x 3) vào thư mục dữ liệu ứng dụng; rơi về basicConfig nếu không tạo được."""
-    base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
-    log_dir = Path(base) / "logs"
+    """Ghi log xoay vòng (1 MB x 3) vào thư mục log; rơi về basicConfig nếu không tạo được."""
+    log_dir = log_directory()
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
         handler = RotatingFileHandler(
@@ -75,6 +76,11 @@ def create_app(args: argparse.Namespace) -> tuple[QApplication, MainWindow]:
     """Dựng QApplication (tái dùng nếu đã có) + MainWindow đã đặt ngôn ngữ giao diện; chưa show()."""
     app = QApplication.instance() or QApplication(sys.argv[:1])
     set_app_identity()              # idempotent: create_app có thể được gọi thẳng (script, test)
+    # Font trong gói: máy air-gap tối giản có thể không có font nào phủ Ә Ғ Қ Ң Ө Ұ Ү Һ І, khi
+    # đó Qt vẽ thành ô vuông. Không nạp được thì cứ chạy tiếp với font hệ thống (CP-11).
+    family = apply_application_font()
+    if family:
+        log.info("font ứng dụng: %s", family)
     settings = load_settings()
     worker = DecoderWorker(engine=args.engine, model_path=args.model, lm_dir=args.lm_dir)
     worker.start()

@@ -37,7 +37,7 @@ PROFILES = ("en", "ru", "kk-cyrl-ru")
 PAD_S = 0.3         # `Encoder.to_audio` đệm im lặng PAD_S giây ở mỗi đầu (mặc định của lõi)
 # Đuôi được coi là "đuôi audio biết trước" khi đổi định dạng lưu; đuôi lạ thì nối thêm.
 AUDIO_SUFFIXES = frozenset(SUPPORTED_EXT) | {ext for _, ext in FORMATS}
-MAX_MINUTES = int(MAX_SECONDS // 60)    # dùng chung ngưỡng 20 phút với phía giải mã
+MAX_MINUTES = int(MAX_SECONDS // 60)    # dùng chung ngưỡng với phía giải mã (spec mục 7: 1 giờ)
 
 
 def unsupported_chars(text: str, profile: Profile) -> list[str]:

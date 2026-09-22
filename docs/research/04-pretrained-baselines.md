@@ -400,6 +400,68 @@ Theo thứ tự lợi ích/chi phí:
    vào gate). Ghi rõ CER của T1 bị khuếch đại bởi clip ngắn (2.6); cân nhắc thêm một lớp clip
    15–20 s cho tầng A để số so được với benchmark ngoài.
 
+## 5. DeepCW làm engine của MorseDesk (tuần 5)
+
+Từ tuần 5 DeepCW không còn chỉ là thước đo: lõi tiền xử lý nằm ở `morsedesk/model/deepcw.py` và
+`Decoder(profile="en", engine="deepcw")` dùng nó cho profile `en` (bảng chữ của nó chỉ có Latin).
+
+Tuần 5 nối thêm **beam ký tự CTC + LM ký tự `en` của dự án** lên hậu nghiệm DeepCW
+(`morsedesk/model/deepcw_beam.py`). Bảng chữ của DeepCW là Latin nên LM áp thẳng, không phải đi
+qua tầng mẫu chấm gạch như `morsedesk/lm/beam.py`.
+
+| Cấu hình | n | CER T1 (chỉ profile `en`) | WER | s/clip | Realtime |
+|---|---|---|---|---|---|
+| greedy (mốc 2026-09-21) | 167 | 22,80 % | 47,70 % | 0,057 | x135,8 |
+| beam ký tự + LM `en` (alpha 0,3, beta 0,5, beam 64) | 167 | **19,39 %** | **38,61 %** | 0,222 | x35,2 |
+
+Theo kênh, chênh lệch dồn vào nơi tín hiệu còn đọc được:
+
+| Kênh | greedy | beam + LM | Chênh |
+|---|---|---|---|
+| clean | 5,95 % | **2,76 %** | −3,19 |
+| mp3 | 7,57 % | 6,09 % | −1,48 |
+| qrn | 11,35 % | 9,65 % | −1,70 |
+| qrm | 42,95 % | 35,42 % | −7,53 |
+| qsb | 47,06 % | 43,85 % | −3,21 |
+
+Quyết định: **giữ** beam+LM cho engine `deepcw` (`api.DEEPCW_LM = True`). Lấy 3,41 điểm CER và
+9,09 điểm WER với giá gấp bốn thời gian, nhưng vẫn nhanh hơn thời gian thực 35 lần nên không ảnh
+hưởng trải nghiệm. Đáng chú ý nhất là kênh `clean` xuống **2,76 %**, tức ngưỡng gate 2 % lần đầu
+nằm trong tầm với ở một ô của ma trận. Lệnh tái lập ở
+`docs/superpowers/plans/2026-09-22-week5-quality.md` Task 3.
+
+## 6. pycw — bộ giải mã numpy có model kèm sẵn (CP-13, 2026-09-22)
+
+`pycw` 1.1.0 (Ian Xia, Apache 2.0, https://github.com/bigsk05/pycw) thường được biết đến như
+thư viện **tạo** Morse, nhưng bản 1.1 kèm luôn một bộ giải mã chỉ dùng numpy: trọng số
+`model.bin` xuất từ repo `cw-train`, đường suy luận không đụng tới PyTorch, và có bộ luật
+`rules.decode_runs` chạy sau model. Cùng trọng số đó dùng chung với một bản Go, và tác giả
+khẳng định hai bản khớp nhau tới từng bit.
+
+Đo trên đúng 167 clip `en` của T1, cùng cách tính CER:
+
+| Kênh | pycw | Bộ DSP của mình | Model `onnx` của mình | DeepCW + beam |
+|---|---|---|---|---|
+| clean | 35,56 % | 21,90 % | 12,73 % | 2,76 % |
+| mp3 | 38,94 % | 25,88 % | 11,15 % | 6,09 % |
+| qrm | 50,78 % | 21,66 % | 12,69 % | 35,42 % |
+| qrn | 37,46 % | 23,20 % | 12,80 % | 9,65 % |
+| qsb | **136,24 %** | 82,96 % | 51,68 % | 43,85 % |
+| **Tổng** | **59,52 %** | 33,04 % (`en`) | 18,19 % (`en`) | 19,39 % |
+
+(Cột "bộ DSP" và "model" lấy theo kênh trên toàn T1 ba profile, nên không so trực tiếp từng ô
+với hai cột kia được; con số tổng ở hàng cuối mới là cùng tập `en`.)
+
+Kết luận: **không lấy gì từ pycw**. Nó yếu hơn cả bộ giải mã dự phòng của mình sau khi bộ đó
+được thêm trễ Schmitt, và vượt 100 % ở kênh `qsb` — tức chèn thừa tràn lan, đúng kiểu hỏng của
+bộ giải mã phân đoạn cứng mà `docs/research/06-hamfist.md` đã mô tả. Giá trị của phép đo này là
+xác nhận mốc: sau một ngày làm việc, **bộ dự phòng của mình đã tốt hơn một bộ giải mã có model
+nơ-ron kèm sẵn**.
+
+Còn lại của CP-13: `multimon-ng` có trong kho Ubuntu nhưng cài cần quyền sudo tương tác, không
+tự cài được từ phiên làm việc — chạy `sudo apt-get install -y multimon-ng` trong WSL rồi đo lại.
+`ggmorse` phải build từ nguồn bằng cmake.
+
 ## Giấy phép và phạm vi sử dụng
 
 - **DeepCW / deepcw-engine — AGPL-3.0-only.** Dùng ở đây **chỉ để đo**. Không sao chép model,

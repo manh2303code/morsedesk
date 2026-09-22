@@ -40,9 +40,56 @@ def _noise_bin_power(power: np.ndarray, k: int, band: np.ndarray) -> float:
     return float(np.median(power[idx, :])) + 1e-20
 
 
+def fallback_tone_hz(x: np.ndarray, sample_rate: int = SAMPLE_RATE) -> float | None:
+    """Đỉnh phổ trong dải tone, dùng khi `estimate_tone` không đủ tự tin để báo có tín hiệu.
+
+    `estimate_tone` đòi đỉnh nhô lên `MIN_PEAK_DB` so với nền; ở 0 dB SNR kèm fading QSB thì
+    ngưỡng đó không đạt và cả clip bị trả rỗng (CER 1,0). Đoán theo đỉnh phổ kém chắc chắn hơn
+    nhiều, nhưng đo trên T1 cho 74,8 % thay vì 100 % trên đúng nhóm clip đó, nên vẫn hơn bỏ cuộc.
+    Trả `None` khi clip quá ngắn để dựng phổ.
+    """
+    if len(x) < N_FFT * 2:
+        return None
+    power, freqs = stft_power(x, sample_rate=sample_rate)
+    band = (freqs >= TONE_MIN_HZ) & (freqs <= TONE_MAX_HZ)
+    if not band.any():
+        return None
+    p90 = np.percentile(power, 90, axis=1)
+    idx = np.flatnonzero(band)
+    return float(freqs[idx[int(np.argmax(p90[band]))]])
+
+
+# Ước lượng tone không cần cả clip: một tone CW ổn định lộ ra sau vài chục giây. Đo ngày 22/09,
+# clip 20 phút (38 MB dữ liệu) làm hàm này chiếm 1 805 MB vì STFT chạy trên toàn bộ, và cả lượt
+# giải mã file 60 phút chạm 5,4 GB — quá nhiều cho máy air-gap, và là thứ chặn CP-14.
+MAX_ANALYSIS_SECONDS = 60.0
+N_ANALYSIS_SLICES = 6        # rải đều để không bị lừa bởi một đoạn im lặng hay một đoạn nhiễu
+
+
+def analysis_slice(x: np.ndarray, sample_rate: int = SAMPLE_RATE,
+                   max_seconds: float = MAX_ANALYSIS_SECONDS,
+                   n_slices: int = N_ANALYSIS_SLICES) -> np.ndarray:
+    """Phần clip đủ để ước lượng tone: nguyên clip nếu ngắn, hoặc vài đoạn rải đều nếu dài.
+
+    Ghép các đoạn rời tạo ra chỗ nối không liên tục, nhưng STFT lấy phân vị 90 theo thời gian
+    nên vài khung ở chỗ nối không đổi được đỉnh phổ.
+    """
+    limit = int(max_seconds * sample_rate)
+    if len(x) <= limit:
+        return x
+    n_slices = max(1, int(n_slices))
+    if n_slices == 1:                       # một đoạn: lấy giữa clip, nơi ít khi là im lặng đầu/cuối
+        start = (len(x) - limit) // 2
+        return x[start: start + limit]
+    per = limit // n_slices
+    step = (len(x) - per) // (n_slices - 1)
+    return np.concatenate([x[i * step: i * step + per] for i in range(n_slices)])
+
+
 def estimate_tone(x: np.ndarray, sample_rate: int = SAMPLE_RATE) -> ToneEstimate:
     if len(x) < N_FFT * 2:
         return ToneEstimate(None, 0.0, False, None)
+    x = analysis_slice(x, sample_rate)
     power, freqs = stft_power(x, sample_rate=sample_rate)
     band = (freqs >= TONE_MIN_HZ) & (freqs <= TONE_MAX_HZ)
     p90 = np.percentile(power, 90, axis=1) + 1e-20

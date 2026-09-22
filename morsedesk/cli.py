@@ -11,6 +11,7 @@ from morsedesk.api import Decoder, Encoder
 from morsedesk.audio.io import UnsupportedAudio, save_audio
 from morsedesk.encode.text import UnsupportedCharacter
 from morsedesk.lm.profile import list_profiles
+from morsedesk.progress import DecodeProgress
 from morsedesk.textio import force_utf8_streams
 
 
@@ -34,8 +35,9 @@ def build_parser() -> argparse.ArgumentParser:
     dec = sub.add_parser("decode", help="file âm thanh -> văn bản")
     dec.add_argument("file", type=Path)
     dec.add_argument("--profile", default="auto", choices=list_profiles() + ["auto"])
-    dec.add_argument("--engine", default="baseline", choices=["baseline", "onnx"])
+    dec.add_argument("--engine", default="baseline", choices=["baseline", "onnx", "deepcw"])
     dec.add_argument("--model", type=Path, default=None, help="mặc định: models/acoustic.onnx trong repo")
+    dec.add_argument("--progress", action="store_true", help="in tiến trình ra stderr (file dài)")
     dec.add_argument("--no-fallback", action="store_true",
                      help="tắt fallback DSP khi độ tin cậy engine onnx thấp (spec §8)")
     dec.add_argument("--no-lm", action="store_true", help="giải mã greedy, không dùng mô hình ngôn ngữ")
@@ -47,7 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     b = sub.add_parser("bench", help="đo CER/WER trên manifest JSONL")
     b.add_argument("--manifest", type=Path, required=True)
-    b.add_argument("--engine", default="baseline", choices=["baseline", "onnx"])
+    b.add_argument("--engine", default="baseline", choices=["baseline", "onnx", "deepcw"])
     b.add_argument("--model", type=Path, default=None, help="mặc định: models/acoustic.onnx trong repo")
     b.add_argument("--out-dir", type=Path, default=Path("bench_results"))
     b.add_argument("--limit", type=int, default=None)
@@ -76,11 +78,26 @@ def cmd_encode(a: argparse.Namespace) -> int:
     return 0
 
 
+def _cli_progress() -> DecodeProgress:
+    """Tiến trình cho terminal: ghi đè một dòng trên stderr, xóa dòng khi xong.
+
+    Ra stderr chứ không ra stdout để `morsedesk decode file.wav > out.txt` vẫn chỉ chứa văn bản
+    giải mã — CLI này là thứ chạy trong script trên máy air-gap.
+    """
+    def on_step(done: int, total: int) -> None:
+        pct = 100.0 * done / total if total else 0.0
+        end = "\n" if done >= total else ""
+        print(f"\r  giải mã {done}/{total} cửa sổ ({pct:.0f}%)", end=end, file=sys.stderr, flush=True)
+
+    return DecodeProgress(on_step=on_step)
+
+
 def cmd_decode(a: argparse.Namespace) -> int:
     try:
-        dec = Decoder(a.profile, engine=a.engine, model_path=a.model if a.engine == "onnx" else None,
+        dec = Decoder(a.profile, engine=a.engine,
+                      model_path=a.model if a.engine in ("onnx", "deepcw") else None,
                       fallback=not a.no_fallback, lm=not a.no_lm, beam=a.beam, lm_dir=a.lm_dir)
-        r = dec.decode_file(a.file)
+        r = dec.decode_file(a.file, progress=_cli_progress() if a.progress else None)
     except (NotImplementedError, UnsupportedAudio, FileNotFoundError, ValueError) as e:
         print(f"lỗi: {e}", file=sys.stderr)
         return 2
@@ -103,7 +120,7 @@ def cmd_devices(a: argparse.Namespace) -> int:
 def cmd_bench(a: argparse.Namespace) -> int:
     from morsedesk.bench import run
 
-    model = a.model if a.engine == "onnx" else None
+    model = a.model if a.engine in ("onnx", "deepcw") else None
     try:
         _, ok = run(a.manifest, a.engine, model, a.out_dir, a.limit, a.gate, a.max_cer,
                     profile_override=a.profile_override, lm=not a.no_lm, beam=a.beam, lm_dir=a.lm_dir)

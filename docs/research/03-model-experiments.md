@@ -183,3 +183,121 @@ Nguyên nhân nghi ngờ, theo thứ tự ảnh hưởng:
 Bước tiếp (tuần 4+, không làm trong tuần này): validation dạng T1; tăng cường QSB/0 dB có trọng số; AGC tau ngắn hơn hoặc chuẩn hóa hai tầng; thử hidden 192 hoặc thêm một lớp Conv; chạy trong WSL (0,52 s/bước) để mỗi thí nghiệm 30k bước còn ~4,5 h; đánh giá language_acc trên tập câu tự nhiên thay T1.
 
 Kết quả `uv run pytest -m gate` với E3: xem `docs/research/02-baseline-numbers.md` mục "Model tuần 3".
+
+## E6 (2026-09-22): tăng cường QSB mạnh hơn — KẾT QUẢ ÂM
+
+Giả thuyết: ô QSB chiếm ~1/5 số clip nhưng ~1/2 tổng lỗi, nên huấn luyện với QSB đúng độ khó của
+T1 (sâu tới 20 dB, chu kỳ 2–8 s, tăng tỉ lệ lấy mẫu) sẽ thu hẹp khoảng cách.
+
+Cấu hình: đúng E3 cộng đúng một biến `--qsb-hard`, cùng seed 13, 30000 bước, hidden 128, window,
+cosine + warmup 500. Chạy trên GPU RTX 5090: **45 phút** thay vì 4,7 giờ trên CPU.
+
+| | val TER | CER greedy | CER beam+LM |
+|---|---|---|---|
+| E3 (mốc) | 22,29 % | 24,99 % | 23,85 % |
+| E6 (`--qsb-hard`) | 27,30 %* | **37,62 %** | **35,67 %** |
+
+\* tập validation của E6 cũng khó hơn nên số này không so trực tiếp được; chỉ T1 cố định mới so được.
+
+**Bị loại.** Xấu hơn 12,6 điểm. Model 200k tham số không đủ sức gánh cả điều kiện khó lẫn dễ; ép
+nó học QSB nặng làm hỏng mọi kênh còn lại. Kết quả này khớp với ghi chép âm của dự án `cwxss`
+(`models/README.md`): huấn luyện trên tay gõ thô hơn cũng làm kết quả xấu đi.
+
+**Bài học cho các thí nghiệm sau:** trước khi đổ thêm dữ liệu khó, hãy phân tích *loại* lỗi. Làm
+đúng việc đó ngay sau E6 cho thấy 74 % lỗi là **xóa** ký tự chứ không phải nhận sai, và bản vá
+đúng chỗ (thưởng ký tự trong beam, `docs/research/02-baseline-numbers.md`) lấy lại 2,27 điểm
+trong vài phút mà không cần huấn luyện gì.
+
+## Lexicon rộng hơn: kết quả âm (2026-09-22)
+
+HamFist thưởng mọi từ nằm trong từ điển 9787 từ, còn `en.yaml` của mình chỉ liệt kê 21 viết tắt
+nghiệp vụ, nên có vẻ như đang bỏ sót một nguồn thông tin rẻ. Quét trên 167 clip `en` của T1,
+thêm top-N từ của `corpus/en.txt` (chỉ giữ từ toàn chữ cái trong bảng của profile) vào
+`lexicon_bonus`:
+
+| Số từ thêm | Tổng từ trong lexicon | CER |
+|---|---|---|
+| 0 | 21 | 18,19 % |
+| 1 000 | 1 021 | 18,13 % |
+| 5 000 | 5 021 | 18,23 % |
+
+**Không lấy.** 1 000 từ chỉ được 0,06 điểm — dưới mức nhiễu đo — và 5 000 từ đã xấu đi. Lý do
+hợp lý: LM ký tự 4-gram huấn luyện trên chính corpus đó đã mang gần hết thông tin từ vựng, nên
+phần thưởng lexicon chỉ cộng thêm một hằng số cho những giả thuyết mà LM vốn đã xếp hạng cao;
+càng nhiều từ thì phần thưởng càng ít phân biệt, và bắt đầu nâng cả những từ sai nhưng quen.
+
+Danh sách 21 viết tắt hiện tại thì khác: chúng là những chuỗi mà LM ký tự **không** thấy nhiều
+trong văn bản thường (CQ, QTH, QRZ, 73), nên phần thưởng của chúng mang thông tin thật.
+
+## E9: model lớn hơn (hidden 128 → 256) — kết quả ÂM (2026-09-22)
+
+Giả thuyết: chênh lệch với DeepCW trên kênh sạch (13,88 % so với 7,06 % lúc đặt giả thuyết) là
+do năng lực mô hình, nên tăng `hidden` sẽ thu hẹp. Cấu hình y hệt E3 trừ `hidden` 128 → 256
+(198 337 → 560 577 tham số), 40 000 bước thay vì 30 000, seed 19, chạy trên GPU trong 1,98 giờ.
+
+| | E3 (hidden 128) | E9 (hidden 256) |
+|---|---|---|
+| TER validation | 22,29 % | **19,67 %** |
+| **CER trên T1, 500 clip** | **20,21 %** | 28,44 % |
+| clean | 12,73 % | 23,45 % |
+| mp3 | 11,15 % | 22,78 % |
+| qrm | 12,69 % | 22,94 % |
+| qrn | 12,80 % | 23,24 % |
+| qsb | 51,68 % | **49,78 %** |
+
+**Bị loại.** Xấu hơn 8,2 điểm trên T1 dù thắng ở mọi mốc validation trong suốt lượt huấn luyện
+(bước 6000: 26,48 so với 29,28; bước 14000: 23,39 so với 24,72).
+
+### Bài học về phương pháp, quan trọng hơn chính thí nghiệm
+
+TER validation và CER trên T1 **đi ngược nhau**. Lý do: tập validation được sinh ngẫu nhiên từ
+`channel.py` theo seed của lượt huấn luyện, nên E3 (seed 13) và E9 (seed 19) chấm trên hai tập
+khác nhau; còn T1 là một **ma trận cố định** với các giá trị rời rạc (SNR 0/3/6/10/20 dB, WPM
+12/18/25/35, 5 kênh, 3 profile). Model lớn hơn học sát phân bố liên tục của bộ sinh và tổng
+quát hóa kém hơn sang các điểm rời rạc đó.
+
+Hệ quả cho các thí nghiệm sau: **TER validation không so sánh được giữa hai lượt khác seed**.
+Chỉ CER trên T1 (và nay cả T2) mới là thước đo để quyết định.
+
+Điểm dương duy nhất: E9 tốt hơn ở kênh `qsb` (49,78 so với 51,68), đúng ô khó nhất. Nếu sau này
+cần một model riêng cho vùng fading sâu thì đây là manh mối, nhưng không đủ để đổi model chính.
+
+## E11: đuôi SNR sạch trong dữ liệu huấn luyện — kết quả ÂM (2026-09-22)
+
+Giả thuyết đến từ phát hiện lớn nhất trong ngày: mô hình chỉ từng thấy SNR −6…25 dB nên trả về
+rác trên bản ghi thật của ARRL (49–143 dB). Bản vá ở khâu suy luận (`dsp/dither.py`) đã xử lý
+được, nhưng "sửa tận gốc" phải là dạy mô hình cả vùng sạch. E11 vì vậy giống E3 **đúng từng
+tham số** — hidden 128, seed 13, 30 000 bước, cosine, warmup 500 — chỉ khác một biến: 20 % clip
+huấn luyện lấy SNR trong 25–65 dB.
+
+| | E3 | E11 |
+|---|---|---|
+| TER validation | 22,29 % | **20,18 %** |
+| **CER trên T1, 500 clip** | **20,21 %** | 26,80 % |
+| clean | 12,73 % | 18,79 % |
+| mp3 | 11,15 % | 20,70 % |
+| qrm | 12,69 % | 21,65 % |
+| qrn | 12,80 % | 19,99 % |
+| qsb | 51,68 % | 52,88 % |
+
+Và trên 10 bản ghi thật của ARRL (180 giây đầu mỗi bản), **cả mười ô giống hệt nhau tới từng
+chữ số**: 1,8 / 1,6 / 0,6 / 1,1 / 2,0 / 14,1 / 6,1 / 5,9 / 5,4 / 2,0 %.
+
+**Bị loại**, và lý do đáng ghi:
+
+1. **Mất ở vùng đo.** Một phần năm dung lượng huấn luyện dồn vào dải SNR mà T1 không hề chứa
+   (T1 cao nhất 20 dB), nên mô hình kém đi đúng ở nơi bộ đo nhìn tới. Lấy mẫu hai đoạn rời thay
+   vì nới rộng một `uniform` không cứu được điều đó — vấn đề là tỉ lệ, không phải hình dạng.
+2. **Không được gì ở vùng nhắm tới.** Trên tín hiệu sạch, `dsp/selection.py` lấy kết quả của bộ
+   giải mã DSP chứ không dùng mô hình, nên mô hình có học vùng sạch hay không cũng không đổi
+   được một ký tự nào. Bản vá ở khâu suy luận đã chiếm chỗ của bản sửa ở khâu dữ liệu.
+
+`ChannelSampling.clean_tail_prob` giữ lại nhưng mặc định **0.0**. Ai muốn thử lại nên dùng tỉ lệ
+nhỏ hơn nhiều (2–5 %) và chỉ khi bộ đo có ô SNR cao để thấy phần được.
+
+### Lần thứ hai TER validation nói ngược với CER
+
+Giống E9, E11 thắng ở mọi mốc validation rồi thua rõ trên T1. Lần này lý do khác và còn dễ mắc
+hơn: tập validation của E11 **cũng có 20 % clip sạch**, tức chính vùng dễ mà nó vừa được dạy.
+TER thấp không phải vì mô hình khá hơn mà vì đề thi dễ hơn. Quy tắc rút ra vẫn thế, và nay có
+hai bằng chứng: **chỉ CER trên T1 và T2 mới dùng để quyết định**.

@@ -27,6 +27,7 @@ from morsedesk.app.widgets.stats_bar import StatsBar
 from morsedesk.app.widgets.word_view import WordView
 from morsedesk.app.worker import MAX_SECONDS, DecodeRequest, DecoderWorker, Spectrogram
 from morsedesk.audio.io import SUPPORTED_EXT
+from morsedesk.warnings import WARNING_TEXTS, DecodeWarning, WarningCode
 
 PROFILE_CHOICES = ("auto", "en", "ru", "kk-cyrl-ru")
 MAX_MINUTES = int(MAX_SECONDS // 60)
@@ -59,6 +60,9 @@ class DecodePage(QWidget):
         self.lm_check.setChecked(True)
         self.decode_button = QPushButton(self)
         self.decode_button.setEnabled(False)
+        # Nút Hủy chỉ hiện trong lúc giải mã (CP-09); để cạnh nút Giải mã nên không làm nhảy bố cục.
+        self.cancel_button = QPushButton(self)
+        self.cancel_button.hide()
         top = QHBoxLayout()
         for w, stretch in (
             (self.open_button, 0),
@@ -67,6 +71,7 @@ class DecodePage(QWidget):
             (self.profile_combo, 0),
             (self.lm_check, 0),
             (self.decode_button, 0),
+            (self.cancel_button, 0),
         ):
             top.addWidget(w, stretch)
 
@@ -101,6 +106,7 @@ class DecodePage(QWidget):
 
         self.open_button.clicked.connect(self._choose_file)
         self.decode_button.clicked.connect(self._request)
+        self.cancel_button.clicked.connect(self.on_cancel_clicked)
         self.profile_combo.currentIndexChanged.connect(self._on_profile_changed)
         self.lm_check.toggled.connect(lambda _c: self._request())
         self.copy_button.clicked.connect(self._copy)
@@ -110,6 +116,8 @@ class DecodePage(QWidget):
         worker.result_ready.connect(self.on_result)
         worker.failed.connect(self.on_failed)
         worker.busy.connect(self.on_busy)
+        worker.progress.connect(self.on_progress)
+        worker.cancelled.connect(self.on_cancelled)
         self._sync_lm_check()
         self._set_has_result(False)
         self.retranslate()
@@ -188,16 +196,60 @@ class DecodePage(QWidget):
         self.spectrogram.set_word_marks([w.start_s for w in result.words])
         self.spectrogram.set_cursor(None)
         self.stats.set_result(result, time.perf_counter() - self._t0)
-        if result.warnings:
+        if result.warning_codes:
+            self.banner.show_warning("; ".join(self._warning_text(w) for w in result.warning_codes))
+        elif result.warnings:                       # kết quả cũ chưa có mã: hiện nguyên văn
             self.banner.show_warning("; ".join(result.warnings))
         if result.fallback_text is not None:
             self.fallback_label.setText(
-                self.tr("DSP fallback result: {text}").format(text=result.fallback_text)
+                self._fallback_caption(getattr(result, "decoded_by", "model"), result.fallback_text)
             )
             self.fallback_label.show()
         else:
             self.fallback_label.hide()
         self._set_has_result(True)
+
+    def _fallback_caption(self, decoded_by: str, text: str) -> str:
+        """Nhãn cho dòng dự phòng, nói đúng nguồn của nó.
+
+        Khi văn bản chính đến từ bộ DSP (tín hiệu sạch hơn dải huấn luyện) thì dòng dự phòng
+        chính là kết quả của mô hình, chứ không còn luôn là kết quả DSP như trước.
+        """
+        if decoded_by == "dsp":
+            return self.tr("Model result: {text}").format(text=text)
+        return self.tr("DSP fallback result: {text}").format(text=text)
+
+    def _warning_sources(self) -> dict[str, str]:
+        """Chuỗi hiển thị cho từng mã cảnh báo của lõi, đã dịch sang ngôn ngữ giao diện.
+
+        Viết bằng literal truyền thẳng cho `self.tr`, không tra `WARNING_TEXTS` qua biến, vì
+        `pyside6-lupdate` chỉ trích được literal: tra qua biến thì chuỗi không bao giờ vào file
+        `.ts` và Qt lặng lẽ trả lại nguyên văn tiếng Anh. `tests/unit/test_warning_codes.py`
+        canh cho bảng này phủ đúng `WarningCode` và khớp từng ký tự với `WARNING_TEXTS`.
+        """
+        return {
+            WarningCode.NO_SIGNAL.value: self.tr("No Morse signal found in this audio."),
+            WarningCode.GUESSED_TONE.value: self.tr(
+                "Tone not detected clearly; guessing from the spectral peak, so the result may be wrong."
+            ),
+            WarningCode.SECOND_TONE.value: self.tr(
+                "A second tone was found at {second_hz:.0f} Hz; tracking {tracked_hz:.0f} Hz."
+            ),
+            WarningCode.LOW_CONFIDENCE.value: self.tr("Low confidence."),
+            WarningCode.LOW_CONFIDENCE_WITH_DSP.value: self.tr(
+                "Low confidence; the DSP decoder result is shown too."
+            ),
+        }
+
+    def _warning_text(self, w: DecodeWarning) -> str:
+        """Một cảnh báo của lõi, đã dịch và đã thay tham số (CP-10)."""
+        text = self._warning_sources().get(w.code)
+        if text is None:                            # mã lạ (bản lõi mới hơn giao diện): hiện thô
+            return WARNING_TEXTS.get(w.code, w.code)
+        try:
+            return text.format(**w.params)
+        except (KeyError, IndexError, ValueError):  # bản dịch sai chỗ giữ chỗ
+            return WARNING_TEXTS[w.code].format(**w.params)
 
     def failure_message(self, code: str, detail: str) -> str:
         """Thông điệp hiển thị cho một mã lỗi của worker, dựng hoàn toàn bằng `self.tr()`."""
@@ -235,12 +287,27 @@ class DecodePage(QWidget):
         """Slot nhận `DecoderWorker.busy`: khóa các điều khiển và hiện tiến trình trong lúc giải mã."""
         self._busy = flag
         self.stats.set_busy(flag)
+        self.cancel_button.setVisible(flag)
+        self.cancel_button.setEnabled(flag)
         for w in (self.open_button, self.profile_combo):
             w.setEnabled(not flag)
         self._sync_lm_check()
         self.decode_button.setEnabled(not flag and self._path is not None)
         self._set_has_result(self.result is not None)
         self.setAcceptDrops(not flag)  # khóa cả kéo-thả trong lúc giải mã, cùng tinh thần với các nút trên
+
+    def on_progress(self, done: int, total: int) -> None:
+        """Slot nhận `DecoderWorker.progress`: đổi thanh vô định thành phần trăm (CP-08)."""
+        self.stats.set_progress(done, total)
+
+    def on_cancel_clicked(self) -> None:
+        """Xin worker dừng; nút tự mờ đi để không bấm hai lần, `busy(False)` sẽ ẩn hẳn."""
+        self.cancel_button.setEnabled(False)
+        self.worker.cancel()
+
+    def on_cancelled(self, path: str) -> None:
+        """Slot nhận `DecoderWorker.cancelled`: báo ngắn gọn, giữ nguyên kết quả cũ trên màn hình."""
+        self.banner.show_warning(self.tr("Decoding cancelled."))
 
     def _set_has_result(self, flag: bool) -> None:
         """Nhóm nút cần kết quả; luôn tắt lúc bận để không sao chép/xuất kết quả của file trước."""
@@ -302,6 +369,7 @@ class DecodePage(QWidget):
         self.lm_check.setToolTip(self.tr("Auto always uses the language model."))
         self._sync_lm_check()
         self.decode_button.setText(self.tr("Decode"))
+        self.cancel_button.setText(self.tr("Cancel"))
         self.copy_button.setText(self.tr("Copy"))
         self.export_txt_button.setText(self.tr("Export TXT…"))
         self.export_json_button.setText(self.tr("Export JSON…"))
@@ -309,7 +377,8 @@ class DecodePage(QWidget):
             self.path_label.setText(self.tr("No file selected. Drop an audio file here."))
         if self.result is not None and self.result.fallback_text is not None:
             self.fallback_label.setText(
-                self.tr("DSP fallback result: {text}").format(text=self.result.fallback_text)
+                self._fallback_caption(getattr(self.result, "decoded_by", "model"),
+                                       self.result.fallback_text)
             )
 
     def changeEvent(self, event) -> None:

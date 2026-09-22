@@ -11,6 +11,7 @@ import numpy as np
 from morsedesk.constants import SAMPLE_RATE
 from morsedesk.data.channel import (
     ChannelParams,
+    ChannelSampling,
     apply_channel,
     ffmpeg_available,
     sample_channel_params,
@@ -63,6 +64,7 @@ class SynthConfig:
     pad_max_s: float = 0.8
     corpus: dict[str, Path] | None = None
     mp3_enabled: bool = True
+    channel_sampling: ChannelSampling | None = None
 
 
 class SynthGenerator:
@@ -148,7 +150,7 @@ class SynthGenerator:
         pid = profile_id or self.cfg.profile_ids[int(rng.integers(len(self.cfg.profile_ids)))]
         profile = self.profiles[pid]
         keyer = keyer or sample_keyer_params(rng)
-        channel = channel or sample_channel_params(rng)
+        channel = channel or sample_channel_params(rng, self.cfg.channel_sampling)
         if channel.mp3_kbps and not self._mp3:
             channel = replace(channel, mp3_kbps=None)
 

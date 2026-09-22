@@ -1,1 +1,6 @@
+# Script chạy trong container Linux và trong WSL: bắt buộc LF.
+# Bash báo `set: pipefail: invalid option name` và `$'\r': command not found` nếu gặp CRLF,
+# và thông điệp đó không hề gợi ra nguyên nhân.
 *.sh text eol=lf
+AppRun text eol=lf
+Dockerfile* text eol=lf

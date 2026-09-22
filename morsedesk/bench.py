@@ -113,9 +113,28 @@ def gate(results: list[dict], max_cer: float = 0.02, snr_min: float = 0.0,
     return mean <= max_cer, mean, len(sub)
 
 
+# Ngưỡng theo rà soát D4: ARRL < 2 %, QSO tay < 10 %. Manifest T2 không có cột `snr` nên
+# `gate()` (lọc theo SNR/WPM) không dùng được cho T2; gate theo nguồn thay thế.
+T2_MAX_CER = {"arrl": 0.02, "commons": 0.10, "sraa": 0.10, "qso": 0.10,
+              "ebook2cw": 0.02, "ebook2cw_kk": 0.02}
+DEFAULT_T2_MAX_CER = 0.10
+
+
+def source_gate(results: list[dict], max_cer: dict[str, float] | None = None) -> dict[str, dict]:
+    table = dict(T2_MAX_CER)
+    table.update(max_cer or {})
+    out: dict[str, dict] = {}
+    for src, agg in aggregate(results, "source").items():
+        limit = table.get(src, DEFAULT_T2_MAX_CER)
+        out[src] = {"n": agg["n"], "cer": agg["cer"], "wer": agg["wer"],
+                    "max_cer": limit, "ok": agg["cer"] <= limit}
+    return out
+
+
 def run(manifest: Path, engine: str, model_path: Path | None, out_dir: Path,
         limit: int | None, do_gate: bool, max_cer: float, profile_override: str | None = None,
-        lm: bool = True, beam: int = 64, lm_dir: Path | None = None) -> tuple[dict, bool]:
+        lm: bool = True, beam: int = 64, lm_dir: Path | None = None,
+        t2_gate: bool = False) -> tuple[dict, bool]:
     results = evaluate(load_rows(manifest), engine, model_path, limit, profile_override, lm, beam, lm_dir)
     ok, gate_cer, gate_n = gate(results, max_cer)
     summary = {
@@ -126,7 +145,10 @@ def run(manifest: Path, engine: str, model_path: Path | None, out_dir: Path,
         "gate": {"ok": ok, "cer": gate_cer, "n": gate_n, "max_cer": max_cer},
         "by_snr": aggregate(results, "snr"), "by_wpm": aggregate(results, "wpm"),
         "by_keying": aggregate(results, "keying"), "by_channel": aggregate(results, "channel_actual"),
-        "by_profile": aggregate(results, "profile"), "rows": results,
+        "by_profile": aggregate(results, "profile"),
+        "by_source": aggregate(results, "source"),
+        "source_gate": source_gate(results) if t2_gate else None,
+        "rows": results,
         "profile_override": profile_override, "lm": lm, "beam": beam,
         "language_acc": language_accuracy(results),
     }
@@ -143,4 +165,9 @@ def run(manifest: Path, engine: str, model_path: Path | None, out_dir: Path,
     if do_gate:
         print(f"gate (SNR>=0, 10-35 WPM, n={gate_n}): CER={100 * gate_cer:.2f}% "
               f"{'ĐẠT' if ok else 'TRƯỢT'} (ngưỡng {100 * max_cer:.2f}%)")
+    if t2_gate:
+        for src, g in summary["source_gate"].items():
+            print(f"T2 {src}: n={g['n']} CER={100 * g['cer']:.2f}% ngưỡng {100 * g['max_cer']:.2f}% "
+                  f"{'ĐẠT' if g['ok'] else 'TRƯỢT'}")
+        return summary, all(g["ok"] for g in summary["source_gate"].values())
     return summary, ok if do_gate else True

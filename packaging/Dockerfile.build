@@ -1,0 +1,32 @@
+# Ảnh dựng AppImage. Ubuntu 22.04 vì spec mục 9 hứa chạy trên 22.04 và 24.04: liên kết với
+# glibc cũ hơn thì chạy được trên bản mới hơn, ngược lại thì không.
+#
+# Dùng: xem scripts/build_appimage.sh
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONUTF8=1 \
+    UV_LINK_MODE=copy
+
+# Nhóm 1: dựng và tải. Nhóm 2: thư viện Qt cần lúc CHẠY, cũng là 8 thư viện mà CP-16 liệt kê —
+# PyInstaller chỉ gom được chúng nếu chúng có mặt trên máy build.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential ca-certificates curl file git zsync desktop-file-utils \
+        libsndfile1 libportaudio2 \
+        libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+        libxcb-render-util0 libxcb-util1 libxcb-xkb1 libxkbcommon-x11-0 \
+        libxcb-shape0 libxcb-randr0 libxcb-xinerama0 libxcb-xfixes0 \
+        libgl1 libegl1 libfontconfig1 libfreetype6 libdbus-1-3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# uv quản lý cả Python 3.11 lẫn phụ thuộc; Ubuntu 22.04 chỉ có 3.10 nên không dùng python hệ thống.
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+
+# appimagetool chạy trong container không có FUSE nên luôn gọi kèm --appimage-extract-and-run.
+RUN curl -Lo /usr/local/bin/appimagetool \
+        https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage \
+    && chmod +x /usr/local/bin/appimagetool
+
+WORKDIR /src

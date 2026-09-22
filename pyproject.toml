@@ -31,6 +31,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["morsedesk"]
+# Font tải bằng `tools/fetch_fonts.py` nên nằm trong .gitignore, mà hatchling mặc định loại mọi
+# file bị git bỏ qua. Không khai báo ở đây thì wheel (và AppImage dựng từ nó) không có font, và
+# máy Linux tối giản sẽ vẽ chữ Kazakh thành ô vuông (CP-11).
+artifacts = ["morsedesk/app/fonts/*.ttf", "morsedesk/app/fonts/*.otf"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -29,7 +29,8 @@ def clean_reference(raw: str, profile_id: str) -> str:
     return profile.render(text_to_tokens(raw, profile, strict=False))
 
 
-def build_manifest(audio_dir: Path, source: str, profile_id: str) -> list[dict]:
+def build_manifest(audio_dir: Path, source: str, profile_id: str,
+                   license_id: str = "unknown") -> list[dict]:
     rows = []
     for audio in sorted(p for p in Path(audio_dir).iterdir() if p.suffix.lower() in AUDIO_EXT):
         txt = audio.with_suffix(".txt")
@@ -41,6 +42,7 @@ def build_manifest(audio_dir: Path, source: str, profile_id: str) -> list[dict]:
             "text": clean_reference(raw, profile_id),
             "raw_text": raw.strip(),
             "source": source,
+            "license": license_id,
             "wpm": parse_wpm(audio.name),
             "profile": profile_id,
         })

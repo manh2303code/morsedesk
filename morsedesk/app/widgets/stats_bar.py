@@ -46,8 +46,25 @@ class StatsBar(QWidget):
         self.retranslate()
 
     def set_busy(self, flag: bool) -> None:
-        """Hiện/ẩn thanh tiến trình không xác định trong lúc giải mã."""
+        """Hiện/ẩn thanh tiến trình và đưa nó về trạng thái vô định.
+
+        Mỗi lần giải mã bắt đầu ở trạng thái vô định vì tổng số cửa sổ chỉ biết được sau khi
+        đọc file; `set_progress` sẽ chuyển sang phần trăm ngay ở bước đầu tiên.
+        """
         self.progress.setVisible(flag)
+        self.progress.setRange(0, 0)
+
+    def set_progress(self, done: int, total: int) -> None:
+        """Chuyển sang phần trăm theo số cửa sổ đã xử lý (CP-08).
+
+        Tổng không hợp lệ (0 hoặc âm) thì giữ nguyên thanh vô định thay vì chia cho 0; `done`
+        bị kẹp trong [0, total] để một lần báo lỗi không làm thanh nhảy quá đầu.
+        """
+        if total <= 0:
+            self.progress.setRange(0, 0)
+            return
+        self.progress.setRange(0, int(total))
+        self.progress.setValue(max(0, min(int(done), int(total))))
 
     def text(self) -> str:
         return self.stats_widget.text() + " " + self.language_widget.text()
