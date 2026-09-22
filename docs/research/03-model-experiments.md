@@ -207,3 +207,24 @@ nó học QSB nặng làm hỏng mọi kênh còn lại. Kết quả này khớp
 đúng việc đó ngay sau E6 cho thấy 74 % lỗi là **xóa** ký tự chứ không phải nhận sai, và bản vá
 đúng chỗ (thưởng ký tự trong beam, `docs/research/02-baseline-numbers.md`) lấy lại 2,27 điểm
 trong vài phút mà không cần huấn luyện gì.
+
+## Lexicon rộng hơn: kết quả âm (2026-09-22)
+
+HamFist thưởng mọi từ nằm trong từ điển 9787 từ, còn `en.yaml` của mình chỉ liệt kê 21 viết tắt
+nghiệp vụ, nên có vẻ như đang bỏ sót một nguồn thông tin rẻ. Quét trên 167 clip `en` của T1,
+thêm top-N từ của `corpus/en.txt` (chỉ giữ từ toàn chữ cái trong bảng của profile) vào
+`lexicon_bonus`:
+
+| Số từ thêm | Tổng từ trong lexicon | CER |
+|---|---|---|
+| 0 | 21 | 18,19 % |
+| 1 000 | 1 021 | 18,13 % |
+| 5 000 | 5 021 | 18,23 % |
+
+**Không lấy.** 1 000 từ chỉ được 0,06 điểm — dưới mức nhiễu đo — và 5 000 từ đã xấu đi. Lý do
+hợp lý: LM ký tự 4-gram huấn luyện trên chính corpus đó đã mang gần hết thông tin từ vựng, nên
+phần thưởng lexicon chỉ cộng thêm một hằng số cho những giả thuyết mà LM vốn đã xếp hạng cao;
+càng nhiều từ thì phần thưởng càng ít phân biệt, và bắt đầu nâng cả những từ sai nhưng quen.
+
+Danh sách 21 viết tắt hiện tại thì khác: chúng là những chuỗi mà LM ký tự **không** thấy nhiều
+trong văn bản thường (CQ, QTH, QRZ, 73), nên phần thưởng của chúng mang thông tin thật.
