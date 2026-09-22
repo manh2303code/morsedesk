@@ -183,3 +183,27 @@ Nguyên nhân nghi ngờ, theo thứ tự ảnh hưởng:
 Bước tiếp (tuần 4+, không làm trong tuần này): validation dạng T1; tăng cường QSB/0 dB có trọng số; AGC tau ngắn hơn hoặc chuẩn hóa hai tầng; thử hidden 192 hoặc thêm một lớp Conv; chạy trong WSL (0,52 s/bước) để mỗi thí nghiệm 30k bước còn ~4,5 h; đánh giá language_acc trên tập câu tự nhiên thay T1.
 
 Kết quả `uv run pytest -m gate` với E3: xem `docs/research/02-baseline-numbers.md` mục "Model tuần 3".
+
+## E6 (2026-09-22): tăng cường QSB mạnh hơn — KẾT QUẢ ÂM
+
+Giả thuyết: ô QSB chiếm ~1/5 số clip nhưng ~1/2 tổng lỗi, nên huấn luyện với QSB đúng độ khó của
+T1 (sâu tới 20 dB, chu kỳ 2–8 s, tăng tỉ lệ lấy mẫu) sẽ thu hẹp khoảng cách.
+
+Cấu hình: đúng E3 cộng đúng một biến `--qsb-hard`, cùng seed 13, 30000 bước, hidden 128, window,
+cosine + warmup 500. Chạy trên GPU RTX 5090: **45 phút** thay vì 4,7 giờ trên CPU.
+
+| | val TER | CER greedy | CER beam+LM |
+|---|---|---|---|
+| E3 (mốc) | 22,29 % | 24,99 % | 23,85 % |
+| E6 (`--qsb-hard`) | 27,30 %* | **37,62 %** | **35,67 %** |
+
+\* tập validation của E6 cũng khó hơn nên số này không so trực tiếp được; chỉ T1 cố định mới so được.
+
+**Bị loại.** Xấu hơn 12,6 điểm. Model 200k tham số không đủ sức gánh cả điều kiện khó lẫn dễ; ép
+nó học QSB nặng làm hỏng mọi kênh còn lại. Kết quả này khớp với ghi chép âm của dự án `cwxss`
+(`models/README.md`): huấn luyện trên tay gõ thô hơn cũng làm kết quả xấu đi.
+
+**Bài học cho các thí nghiệm sau:** trước khi đổ thêm dữ liệu khó, hãy phân tích *loại* lỗi. Làm
+đúng việc đó ngay sau E6 cho thấy 74 % lỗi là **xóa** ký tự chứ không phải nhận sai, và bản vá
+đúng chỗ (thưởng ký tự trong beam, `docs/research/02-baseline-numbers.md`) lấy lại 2,27 điểm
+trong vài phút mà không cần huấn luyện gì.
