@@ -47,3 +47,12 @@ def test_a_bundled_font_covers_every_kazakh_letter(app):
         if not missing:
             return
     pytest.fail(f"không font nào phủ đủ chữ Kazakh: {missing_per_file}")
+
+
+def test_wheel_config_keeps_the_fonts():
+    """Font bị .gitignore, mà hatchling mặc định loại file git bỏ qua — phải khai báo artifacts."""
+    import tomllib
+
+    cfg = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    artifacts = cfg["tool"]["hatch"]["build"]["targets"]["wheel"].get("artifacts", [])
+    assert any("app/fonts" in a for a in artifacts), artifacts
