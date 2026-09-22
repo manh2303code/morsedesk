@@ -11,7 +11,10 @@ cd /src
 # Môi trường ảo phải nằm NGOÀI cây mount: repo được mount từ máy Windows, và một .venv kiểu
 # Linux tạo ở đó sẽ đè lên .venv của máy dev (đã gặp: `uv sync` trên Windows sau đó báo
 # "failed to remove file .venv/lib64: Access is denied").
+# `uv sync` đọc UV_PROJECT_ENVIRONMENT, còn `uv pip install` thì không — nó theo VIRTUAL_ENV
+# (hoặc .venv). Thiếu biến thứ hai, lệnh cài pyinstaller quay lại tìm /src/.venv và hỏng.
 export UV_PROJECT_ENVIRONMENT=/opt/venv
+export VIRTUAL_ENV=/opt/venv
 
 echo "== cài phụ thuộc =="
 uv sync --extra runtime --extra gui --extra dev

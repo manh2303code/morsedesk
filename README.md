@@ -37,3 +37,23 @@ Tùy chọn: cài `ffmpeg` (ví dụ `scoop install ffmpeg`) để bộ sinh d�
 - Bộ T2 gồm bản ghi thật: `uv run python tools/fetch_t2.py page --source arrl --profile en --index-url https://www.arrl.org/code-practice-files` rồi `uv run python tools/fetch_t2.py build`. Dữ liệu vào `testdata/private/t2/` (không commit). Các nguồn khác: `commons` (API Wikimedia), `local` (file tự thu), `synth` (bù tiếng Nga/Kazakh, đánh dấu `synthetic`).
 - Số đo ngày 22/09/2026: T1 tổng hợp **20,21 %** CER; bản ghi thật ARRL **4,0 %**, riêng dải 18–40 WPM **1,52 %** (đạt yêu cầu A2 của spec); T0 roundtrip audio sạch **CER = 0 trên cả 21 ô** (đạt D2). Chi tiết và cách tái lập: `docs/research/02-baseline-numbers.md`.
 - Bộ giải mã được chọn theo bằng chứng đo từ chính clip: tín hiệu sạch hơn dải huấn luyện của model thì lấy kết quả bộ DSP, còn lại dùng model (`morsedesk/dsp/selection.py`). `DecodeResult.decoded_by` cho biết đường nào đã sinh ra văn bản.
+
+## Đóng gói AppImage (tuần 6)
+
+```bash
+docker build -f packaging/Dockerfile.build -t morsedesk-build .
+docker run --rm -v "$PWD":/src morsedesk-build bash scripts/build_appimage.sh
+# -> dist/MorseDesk-x86_64.AppImage (146 MB) và dist/SHA256SUMS
+
+docker build -f packaging/Dockerfile.test -t morsedesk-test .
+docker run --rm -v "$PWD":/work morsedesk-test bash /work/scripts/test_appimage.sh
+```
+
+- Dựng trong Ubuntu 22.04 để liên kết với glibc cũ nhất được hỗ trợ; đã kiểm chạy trên **22.04
+  và 24.04** sạch (ảnh chụp trong `dist/` và `dist2404/`).
+- Ảnh kiểm **cố ý không cài** 8 thư viện xcb mà tài liệu rà soát liệt kê — nếu cửa sổ mở được ở
+  đó thì gói đã mang theo đủ.
+- Thư viện đồ họa `libEGL`/`libGL` **không** đóng gói: theo thông lệ AppImage chúng phải khớp
+  driver của máy chạy, và mọi cài đặt Ubuntu có màn hình đều đã có.
+- Model (`models/acoustic.onnx`) và ba mô hình ngôn ngữ được gói kèm nếu có mặt lúc dựng; thiếu
+  thì AppImage vẫn chạy ở engine baseline và báo đường dẫn còn thiếu.

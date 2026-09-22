@@ -1,0 +1,14 @@
+# Ubuntu 22.04 để kiểm AppImage trên máy "sạch" (CP-16, CP-05).
+#
+# Cố ý KHÔNG cài 8 thư viện xcb mà CP-16 liệt kê: nếu AppImage chạy được ở đây thì nó đã mang
+# theo đủ, và đó chính là điều cần chứng minh.
+#
+# CÓ cài libegl1/libgl1 vì theo thông lệ AppImage, thư viện đồ họa là thứ KHÔNG được đóng gói —
+# chúng phải khớp driver của máy chạy. Mọi cài đặt Ubuntu có màn hình đều có sẵn chúng.
+# `xvfb` thay cho máy có màn hình; `file` để soi nhị phân.
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        xvfb x11-apps imagemagick fontconfig file ca-certificates libegl1 libgl1 \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /work

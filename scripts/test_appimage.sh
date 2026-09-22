@@ -7,6 +7,7 @@ set -uo pipefail
 APP=${1:-/work/dist/MorseDesk-x86_64.AppImage}
 OUT=${2:-/work/dist}
 RC=0
+mkdir -p "$OUT"
 
 echo "== bung AppImage (container không có FUSE) =="
 cd /tmp && rm -rf squashfs-root
