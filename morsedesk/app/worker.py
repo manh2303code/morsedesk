@@ -20,7 +20,11 @@ from morsedesk.progress import DecodeCancelled, DecodeProgress
 
 log = logging.getLogger(__name__)
 
-MAX_SECONDS = 20 * 60
+# Spec mục 7 yêu cầu file tới 1 giờ. Trần 20 phút trước đây là hệ quả của ba thứ nay đã sửa:
+# không có tiến trình (CP-08), không hủy được (CP-09), và một lượt giải mã file 60 phút chạm
+# 5,4 GB vì ước lượng tone cùng envelope dựng mảng dài bằng cả clip. Đo lại sau khi sửa: 583 MB
+# và 162 giây cho 60 phút âm thanh, tức nhanh hơn thời gian thực 22 lần.
+MAX_SECONDS = 60 * 60
 MAX_COLUMNS = 4000
 MAX_FREQ_HZ = 2000.0
 DB_FLOOR = -60.0

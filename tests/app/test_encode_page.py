@@ -126,7 +126,7 @@ def test_text_over_duration_limit_disables_audio_without_building_it(qtbot, tmp_
     calls = []
     monkeypatch.setattr(page, "build_audio", lambda: calls.append(1))
     page.wpm_spin.setValue(20)
-    page.text_edit.setPlainText("PARIS " * 1000)          # ~ 50 phút ở 20 WPM
+    page.text_edit.setPlainText("PARIS " * 1400)          # ~ 70 phút ở 20 WPM, quá trần 60
     assert page.estimate_seconds() > MAX_SECONDS
     assert not page.play_button.isEnabled() and not page.save_button.isEnabled()
     assert page.banner.level == "warning" and str(MAX_MINUTES) in page.banner.text()

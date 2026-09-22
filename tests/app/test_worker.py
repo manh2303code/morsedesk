@@ -89,7 +89,8 @@ def test_worker_rejects_files_longer_than_limit(qtbot, tiny_lm_dir, tmp_path, mo
         with qtbot.waitSignal(w.failed, timeout=30000) as blocker:
             w.request(DecodeRequest(long_wav, "en", False))
         # detail của too_long là số phút đã format; UI ghép thành câu qua tr()
-        assert blocker.args[0] == "too_long" and blocker.args[1].startswith("20.")
+        assert blocker.args[0] == "too_long"
+        assert blocker.args[1].startswith(f"{MAX_SECONDS / 60:.0f}.")
         assert blocker.args[2] == str(long_wav)
     finally:
         w.stop()
