@@ -286,29 +286,67 @@
 <context>
     <name>MainWindow</name>
     <message>
-        <location filename="../main_window.py" line="103" />
+        <location filename="../main_window.py" line="107" />
         <source>MorseDesk</source>
         <translation>MorseDesk</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="104" />
+        <location filename="../main_window.py" line="108" />
         <source>UI language:</source>
         <translation>Язык интерфейса:</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="105" />
+        <location filename="../main_window.py" line="109" />
         <source>Decode</source>
         <translation>Декодирование</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="106" />
+        <location filename="../main_window.py" line="110" />
         <source>Encode</source>
         <translation>Кодирование</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="132" />
+        <location filename="../main_window.py" line="111" />
+        <source>Settings</source>
+        <translation>Настройки</translation>
+    </message>
+    <message>
+        <location filename="../main_window.py" line="138" />
         <source>Finishing the current decode; the window will close right after.</source>
         <translation>Завершается текущее декодирование; окно закроется сразу после этого.</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPage</name>
+    <message>
+        <location filename="../settings_page.py" line="36" />
+        <source>MP3 export: available through libsndfile (built-in LAME).</source>
+        <translation>Экспорт MP3: доступен через libsndfile (встроенный LAME).</translation>
+    </message>
+    <message>
+        <location filename="../settings_page.py" line="38" />
+        <source>MP3 export: available through the external ffmpeg command.</source>
+        <translation>Экспорт MP3: доступен через внешнюю команду ffmpeg.</translation>
+    </message>
+    <message>
+        <location filename="../settings_page.py" line="40" />
+        <source>MP3 export: NOT available. libsndfile here has no LAME encoder and ffmpeg is not on PATH; install ffmpeg or export another format.</source>
+        <translation>Экспорт MP3: НЕДОСТУПЕН. В libsndfile здесь нет кодера LAME, а ffmpeg отсутствует в PATH; установите ffmpeg или выберите другой формат.</translation>
+    </message>
+    <message>
+        <location filename="../settings_page.py" line="47" />
+        <source>Decoding engine: {engine}</source>
+        <translation>Движок декодирования: {engine}</translation>
+    </message>
+    <message>
+        <location filename="../settings_page.py" line="49" />
+        <source>Other formats written directly: {exts}</source>
+        <translation>Другие форматы записываются напрямую: {exts}</translation>
+    </message>
+    <message>
+        <location filename="../settings_page.py" line="50" />
+        <source>Log file: {path}</source>
+        <translation>Файл журнала: {path}</translation>
     </message>
 </context>
 <context>

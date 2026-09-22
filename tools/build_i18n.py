@@ -22,17 +22,21 @@ APP_DIR = ROOT / "morsedesk" / "app"
 I18N_DIR = APP_DIR / "i18n"
 LANGS = ("ru", "kk")
 SOURCES = sorted(p for p in APP_DIR.rglob("*.py"))
-# Cho phép xuống dòng giữa `self.tr(` và chuỗi: chuỗi dài phải ngắt dòng để vừa 100 cột, và
-# `pyside6-lupdate` vẫn trích được dạng đó — regex hẹp hơn lupdate thì báo lệch giả.
-_TR_RE = re.compile(r'self\.tr\(\s*"((?:[^"\\]|\\.)*)"\s*\)')
+# Chuỗi dài phải ngắt dòng để vừa 100 cột, và Python nối ngầm nhiều literal liền nhau thành một.
+# `pyside6-lupdate` hiểu cả hai dạng đó, nên regex ở đây cũng phải hiểu: cho phép khoảng trắng
+# xuống dòng sau `self.tr(` và một dãy literal liên tiếp. Regex hẹp hơn lupdate thì báo lệch giả.
+_STR = r'"(?:[^"\\]|\\.)*"'
+_TR_RE = re.compile(rf'self\.tr\(\s*({_STR}(?:\s*{_STR})*)\s*[,)]')
+_PART_RE = re.compile(_STR)
 
 
 def tr_literals(paths: list[Path]) -> set[str]:
-    """Trích mọi chuỗi nguồn `self.tr("...")` (double-quote) trong các file `paths`."""
+    """Trích mọi chuỗi nguồn `self.tr("...")` (double-quote, kể cả nối ngầm) trong `paths`."""
     out: set[str] = set()
     for p in paths:
         for m in _TR_RE.finditer(p.read_text(encoding="utf-8")):
-            out.add(m.group(1).encode("utf-8").decode("unicode_escape") if "\\" in m.group(1) else m.group(1))
+            joined = "".join(part[1:-1] for part in _PART_RE.findall(m.group(1)))
+            out.add(joined.encode("utf-8").decode("unicode_escape") if "\\" in joined else joined)
     return out
 
 

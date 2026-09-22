@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication, QLocale, QStandardPaths
+from PySide6.QtCore import QCoreApplication, QLocale
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from morsedesk.app.main_window import MainWindow
+from morsedesk.app.paths import log_directory
 from morsedesk.app.settings import AppSettings, default_language
 from morsedesk.app.startup import check_models, missing_models_message
 from morsedesk.app.worker import DecoderWorker, Player
@@ -43,19 +43,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--engine", choices=["onnx", "baseline"], default="onnx")
     p.add_argument("--lang", choices=["en", "ru", "kk"], default=None, help="UI language override")
     return p
-
-
-def log_directory() -> Path:
-    """Thư mục log theo spec mục 7: `~/.local/share/morsedesk/logs/` trên Linux (CP-15).
-
-    Không dùng thẳng `QStandardPaths.AppDataLocation` vì Qt ghép cả tên tổ chức lẫn tên ứng dụng
-    và cho ra `~/.local/share/MorseDesk/MorseDesk/logs`, lệch spec. Linux là nền tảng đích nên ở
-    đó theo đúng chuẩn XDG; các nền tảng khác (chỉ dùng để chạy test trên máy dev) vẫn theo Qt.
-    """
-    if sys.platform.startswith("linux"):
-        base = os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share")
-        return Path(base) / "morsedesk" / "logs"
-    return Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)) / "logs"
 
 
 def setup_logging() -> None:

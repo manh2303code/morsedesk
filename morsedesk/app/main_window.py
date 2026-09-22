@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 from morsedesk.app.decode_page import DecodePage
 from morsedesk.app.encode_page import EncodePage
 from morsedesk.app.settings import UI_LANGUAGES, AppSettings
+from morsedesk.app.settings_page import SettingsPage
 from morsedesk.app.widgets.banner import Banner
 from morsedesk.app.worker import DecoderWorker, Player
 
@@ -56,8 +57,11 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget(self)
         self.decode_page = DecodePage(worker, settings, self)
         self.encode_page = EncodePage(player, settings, self)
+        # Engine lấy từ worker: trang Cài đặt chỉ báo cáo, không phải nguồn sự thật thứ hai.
+        self.settings_page = SettingsPage(engine=worker.engine, parent=self)
         self.tabs.addTab(self.decode_page, "")
         self.tabs.addTab(self.encode_page, "")
+        self.tabs.addTab(self.settings_page, "")
         central = QWidget(self)
         lay = QVBoxLayout(central)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -104,8 +108,10 @@ class MainWindow(QMainWindow):
         self.language_label.setText(self.tr("UI language:"))
         self.tabs.setTabText(0, self.tr("Decode"))
         self.tabs.setTabText(1, self.tr("Encode"))
+        self.tabs.setTabText(2, self.tr("Settings"))
         self.decode_page.retranslate()
         self.encode_page.retranslate()
+        self.settings_page.retranslate()
 
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.Type.LanguageChange:

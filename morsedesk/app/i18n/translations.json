@@ -67,7 +67,14 @@
     "Low confidence.": "Низкая уверенность.",
     "Low confidence; the DSP decoder result is shown too.": "Низкая уверенность; показан также результат DSP-декодера.",
     "Cancel": "Отмена",
-    "Decoding cancelled.": "Декодирование отменено."
+    "Decoding cancelled.": "Декодирование отменено.",
+    "Settings": "Настройки",
+    "Decoding engine: {engine}": "Движок декодирования: {engine}",
+    "MP3 export: available through libsndfile (built-in LAME).": "Экспорт MP3: доступен через libsndfile (встроенный LAME).",
+    "MP3 export: available through the external ffmpeg command.": "Экспорт MP3: доступен через внешнюю команду ffmpeg.",
+    "MP3 export: NOT available. libsndfile here has no LAME encoder and ffmpeg is not on PATH; install ffmpeg or export another format.": "Экспорт MP3: НЕДОСТУПЕН. В libsndfile здесь нет кодера LAME, а ffmpeg отсутствует в PATH; установите ffmpeg или выберите другой формат.",
+    "Other formats written directly: {exts}": "Другие форматы записываются напрямую: {exts}",
+    "Log file: {path}": "Файл журнала: {path}"
   },
   "kk": {
     "MorseDesk": "MorseDesk",
@@ -137,6 +144,13 @@
     "Low confidence.": "Сенімділік төмен.",
     "Low confidence; the DSP decoder result is shown too.": "Сенімділік төмен; DSP декодерінің нәтижесі де көрсетілген.",
     "Cancel": "Бас тарту",
-    "Decoding cancelled.": "Декодтау тоқтатылды."
+    "Decoding cancelled.": "Декодтау тоқтатылды.",
+    "Settings": "Параметрлер",
+    "Decoding engine: {engine}": "Декодтау қозғалтқышы: {engine}",
+    "MP3 export: available through libsndfile (built-in LAME).": "MP3 экспорты: libsndfile арқылы қолжетімді (кірістірілген LAME).",
+    "MP3 export: available through the external ffmpeg command.": "MP3 экспорты: сыртқы ffmpeg командасы арқылы қолжетімді.",
+    "MP3 export: NOT available. libsndfile here has no LAME encoder and ffmpeg is not on PATH; install ffmpeg or export another format.": "MP3 экспорты: ҚОЛЖЕТІМСІЗ. Мұндағы libsndfile-де LAME кодері жоқ, ffmpeg те PATH-та жоқ; ffmpeg орнатыңыз немесе басқа пішімді таңдаңыз.",
+    "Other formats written directly: {exts}": "Тікелей жазылатын басқа пішімдер: {exts}",
+    "Log file: {path}": "Журнал файлы: {path}"
   }
 }
