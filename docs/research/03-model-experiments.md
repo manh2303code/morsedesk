@@ -228,3 +228,36 @@ càng nhiều từ thì phần thưởng càng ít phân biệt, và bắt đầ
 
 Danh sách 21 viết tắt hiện tại thì khác: chúng là những chuỗi mà LM ký tự **không** thấy nhiều
 trong văn bản thường (CQ, QTH, QRZ, 73), nên phần thưởng của chúng mang thông tin thật.
+
+## E9: model lớn hơn (hidden 128 → 256) — kết quả ÂM (2026-09-22)
+
+Giả thuyết: chênh lệch với DeepCW trên kênh sạch (13,88 % so với 7,06 % lúc đặt giả thuyết) là
+do năng lực mô hình, nên tăng `hidden` sẽ thu hẹp. Cấu hình y hệt E3 trừ `hidden` 128 → 256
+(198 337 → 560 577 tham số), 40 000 bước thay vì 30 000, seed 19, chạy trên GPU trong 1,98 giờ.
+
+| | E3 (hidden 128) | E9 (hidden 256) |
+|---|---|---|
+| TER validation | 22,29 % | **19,67 %** |
+| **CER trên T1, 500 clip** | **20,21 %** | 28,44 % |
+| clean | 12,73 % | 23,45 % |
+| mp3 | 11,15 % | 22,78 % |
+| qrm | 12,69 % | 22,94 % |
+| qrn | 12,80 % | 23,24 % |
+| qsb | 51,68 % | **49,78 %** |
+
+**Bị loại.** Xấu hơn 8,2 điểm trên T1 dù thắng ở mọi mốc validation trong suốt lượt huấn luyện
+(bước 6000: 26,48 so với 29,28; bước 14000: 23,39 so với 24,72).
+
+### Bài học về phương pháp, quan trọng hơn chính thí nghiệm
+
+TER validation và CER trên T1 **đi ngược nhau**. Lý do: tập validation được sinh ngẫu nhiên từ
+`channel.py` theo seed của lượt huấn luyện, nên E3 (seed 13) và E9 (seed 19) chấm trên hai tập
+khác nhau; còn T1 là một **ma trận cố định** với các giá trị rời rạc (SNR 0/3/6/10/20 dB, WPM
+12/18/25/35, 5 kênh, 3 profile). Model lớn hơn học sát phân bố liên tục của bộ sinh và tổng
+quát hóa kém hơn sang các điểm rời rạc đó.
+
+Hệ quả cho các thí nghiệm sau: **TER validation không so sánh được giữa hai lượt khác seed**.
+Chỉ CER trên T1 (và nay cả T2) mới là thước đo để quyết định.
+
+Điểm dương duy nhất: E9 tốt hơn ở kênh `qsb` (49,78 so với 51,68), đúng ô khó nhất. Nếu sau này
+cần một model riêng cho vùng fading sâu thì đây là manh mối, nhưng không đủ để đổi model chính.
