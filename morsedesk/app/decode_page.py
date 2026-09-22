@@ -27,6 +27,7 @@ from morsedesk.app.widgets.stats_bar import StatsBar
 from morsedesk.app.widgets.word_view import WordView
 from morsedesk.app.worker import MAX_SECONDS, DecodeRequest, DecoderWorker, Spectrogram
 from morsedesk.audio.io import SUPPORTED_EXT
+from morsedesk.warnings import WARNING_TEXTS, DecodeWarning, WarningCode
 
 PROFILE_CHOICES = ("auto", "en", "ru", "kk-cyrl-ru")
 MAX_MINUTES = int(MAX_SECONDS // 60)
@@ -188,7 +189,9 @@ class DecodePage(QWidget):
         self.spectrogram.set_word_marks([w.start_s for w in result.words])
         self.spectrogram.set_cursor(None)
         self.stats.set_result(result, time.perf_counter() - self._t0)
-        if result.warnings:
+        if result.warning_codes:
+            self.banner.show_warning("; ".join(self._warning_text(w) for w in result.warning_codes))
+        elif result.warnings:                       # kết quả cũ chưa có mã: hiện nguyên văn
             self.banner.show_warning("; ".join(result.warnings))
         if result.fallback_text is not None:
             self.fallback_label.setText(
@@ -198,6 +201,38 @@ class DecodePage(QWidget):
         else:
             self.fallback_label.hide()
         self._set_has_result(True)
+
+    def _warning_sources(self) -> dict[str, str]:
+        """Chuỗi hiển thị cho từng mã cảnh báo của lõi, đã dịch sang ngôn ngữ giao diện.
+
+        Viết bằng literal truyền thẳng cho `self.tr`, không tra `WARNING_TEXTS` qua biến, vì
+        `pyside6-lupdate` chỉ trích được literal: tra qua biến thì chuỗi không bao giờ vào file
+        `.ts` và Qt lặng lẽ trả lại nguyên văn tiếng Anh. `tests/unit/test_warning_codes.py`
+        canh cho bảng này phủ đúng `WarningCode` và khớp từng ký tự với `WARNING_TEXTS`.
+        """
+        return {
+            WarningCode.NO_SIGNAL.value: self.tr("No Morse signal found in this audio."),
+            WarningCode.GUESSED_TONE.value: self.tr(
+                "Tone not detected clearly; guessing from the spectral peak, so the result may be wrong."
+            ),
+            WarningCode.SECOND_TONE.value: self.tr(
+                "A second tone was found at {second_hz:.0f} Hz; tracking {tracked_hz:.0f} Hz."
+            ),
+            WarningCode.LOW_CONFIDENCE.value: self.tr("Low confidence."),
+            WarningCode.LOW_CONFIDENCE_WITH_DSP.value: self.tr(
+                "Low confidence; the DSP decoder result is shown too."
+            ),
+        }
+
+    def _warning_text(self, w: DecodeWarning) -> str:
+        """Một cảnh báo của lõi, đã dịch và đã thay tham số (CP-10)."""
+        text = self._warning_sources().get(w.code)
+        if text is None:                            # mã lạ (bản lõi mới hơn giao diện): hiện thô
+            return WARNING_TEXTS.get(w.code, w.code)
+        try:
+            return text.format(**w.params)
+        except (KeyError, IndexError, ValueError):  # bản dịch sai chỗ giữ chỗ
+            return WARNING_TEXTS[w.code].format(**w.params)
 
     def failure_message(self, code: str, detail: str) -> str:
         """Thông điệp hiển thị cho một mã lỗi của worker, dựng hoàn toàn bằng `self.tr()`."""

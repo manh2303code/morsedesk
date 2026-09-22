@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -30,6 +30,7 @@ from morsedesk.lm.store import LMStore
 from morsedesk.model.ctc import greedy_decode_with_frames
 from morsedesk.model.protocol import AcousticModel
 from morsedesk.model.vocab import SPACE, UNK, VOCAB
+from morsedesk.warnings import DecodeWarning, WarningCode, warn
 
 LOW_CONFIDENCE = 0.6
 FALLBACK_CONFIDENCE = 0.5
@@ -59,6 +60,9 @@ class DecodeResult:
     warnings: list[str]
     engine: str
     fallback_text: str | None = None
+    # Song song với `warnings`: cùng thứ tự, cùng số phần tử. `warnings` là tiếng Việt cho CLI và
+    # log; `warning_codes` là mã ổn định để giao diện dịch sang en/ru/kk (CP-10).
+    warning_codes: list[DecodeWarning] = field(default_factory=list)
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False, indent=2)
@@ -264,9 +268,10 @@ class Decoder:
         store = LMStore(lm_dir)
         return all(store.available(pid) for pid in list_profiles())
 
-    def _empty(self, warnings: list[str]) -> DecodeResult:
+    def _empty(self, warnings: list[DecodeWarning]) -> DecodeResult:
         lang = self.profile.id if self.profile is not None else ""
-        return DecodeResult("", [], None, None, None, lang, {}, warnings, self.engine)
+        return DecodeResult("", [], None, None, None, lang, {}, [w.vi() for w in warnings],
+                            self.engine, warning_codes=list(warnings))
 
     def _windowed(self) -> bool:
         return self.engine == "onnx" and getattr(self._model, "feature_mode", "clip") == "window"
@@ -298,10 +303,10 @@ class Decoder:
                 # dựng lại đặc trưng theo tone đoán; giữ nguyên cfg (đặc biệt agc_tau_s) như lần tính đầu
                 windows = compute_features_windowed(x, tone_hz, cfg=self.feature_cfg)
         if tone_hz is None and self.engine != "deepcw":
-            return self._empty(["không có tín hiệu Morse trong đoạn âm thanh"])
+            return self._empty([warn(WarningCode.NO_SIGNAL)])
         warnings = self._tone_warnings(est)
         if guessed_tone:
-            warnings.append("không dò được tone rõ, đang đoán theo đỉnh phổ; kết quả có thể sai")
+            warnings.append(warn(WarningCode.GUESSED_TONE))
         snr_db = est.snr_db if est.has_signal else None
         if self.engine == "baseline":
             return self._decode_baseline(x, tone_hz, snr_db, warnings)
@@ -312,16 +317,16 @@ class Decoder:
         return self._decode_onnx(x, logp, n_in, tone_hz, snr_db, warnings)
 
     @staticmethod
-    def _tone_warnings(est: ToneEstimate) -> list[str]:
+    def _tone_warnings(est: ToneEstimate) -> list[DecodeWarning]:
         if not est.has_signal or est.second_peak_hz is None:
             return []
-        return [f"phát hiện tone thứ hai tại {est.second_peak_hz:.0f} Hz, đang bám {est.f0_hz:.0f} Hz"]
+        return [warn(WarningCode.SECOND_TONE, second_hz=est.second_peak_hz, tracked_hz=est.f0_hz)]
 
     def _baseline_tokens(self, x: np.ndarray, f0_hz: float):
         return self._baseline.decode_envelope(mix_envelope(x, f0_hz))
 
     def _decode_baseline(self, x, tone_hz: float, snr_db: float | None,
-                         warnings: list[str]) -> DecodeResult:
+                         warnings: list[DecodeWarning]) -> DecodeResult:
         res = self._baseline_tokens(x, tone_hz)
         profile, scores, letters = self.profile, {}, None
         if self.auto:                               # cùng thuật toán langid với engine onnx (spec §2.4)
@@ -330,12 +335,13 @@ class Decoder:
             letters = beam_letters(res.tokens, det.profile_id, det)
         confidence = float(np.exp(-res.cost)) if np.isfinite(res.cost) else 0.0
         if confidence < LOW_CONFIDENCE:
-            warnings.append("độ tin cậy thấp")
+            warnings.append(warn(WarningCode.LOW_CONFIDENCE))
         words = symbols_to_words(res.symbols, profile, FRAME_RATE, confidence, letters)
         # auto mà không giải mã được token nào (scores rỗng) -> language rỗng, vẫn dùng profile đầu để hiển thị
         lang = profile.id if (not self.auto or scores) else ""
         return DecodeResult(" ".join(w.text for w in words), words, res.wpm, tone_hz, snr_db,
-                            lang, scores, warnings, "baseline")
+                            lang, scores, [w.vi() for w in warnings], "baseline",
+                            warning_codes=list(warnings))
 
     def _log_probs(self, x: np.ndarray, f0_hz: float,
                    windows: list[Window] | None = None) -> tuple[np.ndarray, int]:
@@ -394,7 +400,7 @@ class Decoder:
         return words, emissions, frame_rate
 
     def _decode_deepcw(self, x: np.ndarray, tone_hz: float | None, snr_db: float | None,
-                       warnings: list[str]) -> DecodeResult:
+                       warnings: list[DecodeWarning]) -> DecodeResult:
         """`tone_hz` có thể là None: DeepCW không cần tone, chỉ fallback DSP và báo cáo mới cần.
 
         Không dò được tone mà model cũng không ra chữ nào thì mới coi là không có tín hiệu, giữ
@@ -402,21 +408,22 @@ class Decoder:
         """
         words, emissions, frame_rate = self._deepcw_words(x)
         if not words and tone_hz is None:
-            return self._empty(["không có tín hiệu Morse trong đoạn âm thanh"])
+            return self._empty([warn(WarningCode.NO_SIGNAL)])
         confidence = float(np.mean([w.confidence for w in words])) if words else 0.0
         fallback_text = None
         if confidence < FALLBACK_CONFIDENCE:
-            warnings.append("độ tin cậy thấp, kèm kết quả bộ giải mã DSP")
+            warnings.append(warn(WarningCode.LOW_CONFIDENCE_WITH_DSP))
             if self.fallback and tone_hz is not None:   # bộ giải mã DSP bắt buộc phải có tone
                 fallback_text = self.profile.render(self._baseline_tokens(x, tone_hz).tokens)
         elif confidence < LOW_CONFIDENCE:
-            warnings.append("độ tin cậy thấp")
+            warnings.append(warn(WarningCode.LOW_CONFIDENCE))
         return DecodeResult(" ".join(w.text for w in words), words,
                             estimate_wpm_from_emissions(emissions, frame_rate), tone_hz, snr_db,
-                            self.profile.id, {}, warnings, "deepcw", fallback_text)
+                            self.profile.id, {}, [w.vi() for w in warnings], "deepcw",
+                            fallback_text, warning_codes=list(warnings))
 
     def _decode_onnx(self, x, logp: np.ndarray, n_in: int, tone_hz: float, snr_db: float | None,
-                     warnings: list[str]) -> DecodeResult:
+                     warnings: list[DecodeWarning]) -> DecodeResult:
         stride = int(self._model.time_stride)
         if self.lm_enabled:
             words, emissions, profile, scores = self._beam_words(logp, stride, n_in)
@@ -428,16 +435,17 @@ class Decoder:
         confidence = float(np.mean([w.confidence for w in words])) if words else 0.0
         fallback_text = None
         if confidence < FALLBACK_CONFIDENCE:
-            warnings.append("độ tin cậy thấp, kèm kết quả bộ giải mã DSP")
+            warnings.append(warn(WarningCode.LOW_CONFIDENCE_WITH_DSP))
             if self.fallback:
                 fallback_text = profile.render(self._baseline_tokens(x, tone_hz).tokens)
         elif confidence < LOW_CONFIDENCE:
-            warnings.append("độ tin cậy thấp")
+            warnings.append(warn(WarningCode.LOW_CONFIDENCE))
         # auto mà detect() không ra điểm cho profile nào (scores rỗng) -> language rỗng
         lang = profile.id if (not self.auto or scores) else ""
         return DecodeResult(" ".join(w.text for w in words), words,
                             estimate_wpm_from_emissions(emissions, FRAME_RATE), tone_hz, snr_db,
-                            lang, scores, warnings, "onnx", fallback_text)
+                            lang, scores, [w.vi() for w in warnings], "onnx", fallback_text,
+                            warning_codes=list(warnings))
 
     def decode_file(self, path: str | Path) -> DecodeResult:
         x, sr = load_audio(path)

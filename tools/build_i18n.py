@@ -22,7 +22,9 @@ APP_DIR = ROOT / "morsedesk" / "app"
 I18N_DIR = APP_DIR / "i18n"
 LANGS = ("ru", "kk")
 SOURCES = sorted(p for p in APP_DIR.rglob("*.py"))
-_TR_RE = re.compile(r'self\.tr\("((?:[^"\\]|\\.)*)"\)')
+# Cho phép xuống dòng giữa `self.tr(` và chuỗi: chuỗi dài phải ngắt dòng để vừa 100 cột, và
+# `pyside6-lupdate` vẫn trích được dạng đó — regex hẹp hơn lupdate thì báo lệch giả.
+_TR_RE = re.compile(r'self\.tr\(\s*"((?:[^"\\]|\\.)*)"\s*\)')
 
 
 def tr_literals(paths: list[Path]) -> set[str]:
