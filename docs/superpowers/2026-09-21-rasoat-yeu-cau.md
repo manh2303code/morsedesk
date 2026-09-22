@@ -69,7 +69,7 @@ Mỗi dòng "bằng chứng" phải trỏ tới thứ kiểm lại được: đ�
 | C15 | Nguồn `.ts` cho cả en, ru, kk | **LỆCH** | Chỉ sinh `ru` và `kk`; tiếng Anh là ngôn ngữ nguồn nên không cần `.qm`. Ghi ở spec tuần 4 mục 5. |
 | C16 | Ngôn ngữ mặc định theo locale hệ thống, không khớp thì Anh | **ĐẠT** | `settings.default_language`; test `test_startup_settings.py`. |
 | C17 | Đóng gói font DejaVu Sans và Noto Sans, đặt làm font ứng dụng | **ĐẠT 22/09 (còn chờ kiểm trên VM)** | `morsedesk/app/fonts.py` nạp mọi font trong gói qua `QFontDatabase` rồi đặt font ứng dụng theo thứ tự ưu tiên DejaVu Sans → Noto Sans; `tools/fetch_fonts.py` tải 4 file (2,4 MB) vào `morsedesk/app/fonts/` (gitignored, AppImage đóng gói theo). Test kiểm một font trong gói phủ đủ Ә Ғ Қ Ң Ө Ұ Ү Һ І — DejaVu Sans phủ hết. Còn thiếu: ảnh chụp trên VM Ubuntu sạch (gộp vào CP-11). |
-| C18 | Bản dịch Kazakh do người bản ngữ soát; đến khi đó gắn nhãn "bản nháp" | **MỘT PHẦN** | Nhãn "Қазақша (nháp)" có ở combo (spec nói đặt trong Cài đặt). Chưa có người bản ngữ soát. → **CP-12** |
+| C18 | Bản dịch Kazakh do người bản ngữ soát; đến khi đó gắn nhãn "bản nháp" | **MỘT PHẦN** | Nhãn "Қазақша (жоба)" có ở combo (spec nói đặt trong Cài đặt) — sửa 22/09 từ "(nháp)", một ghi chú tiếng Việt lọt ra giao diện người dùng cuối, do ảnh chụp AppImage trên Ubuntu sạch phát hiện. Chưa có người bản ngữ soát. → **CP-12** |
 
 ## D. Bộ test (spec mục 6)
 

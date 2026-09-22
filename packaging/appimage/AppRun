@@ -1,0 +1,15 @@
+#!/bin/sh
+# AppRun: trỏ Qt tới plugin đi kèm rồi chạy nhị phân PyInstaller.
+#
+# `QT_QPA_PLATFORM_PLUGIN_PATH` và `QT_PLUGIN_PATH` là bắt buộc (spec mục 9): thiếu chúng, Qt
+# tìm plugin theo đường dẫn biên dịch sẵn trên máy build và trên máy đích sẽ báo
+# "could not load the Qt platform plugin xcb".
+#
+# PyInstaller 6 đặt mọi thứ trong `_internal/`, kể cả cây plugin của PySide6.
+HERE="$(dirname "$(readlink -f "$0")")"
+ROOT="$HERE/usr/lib/morsedesk"
+export QT_PLUGIN_PATH="$ROOT/_internal/PySide6/Qt/plugins"
+export QT_QPA_PLATFORM_PLUGIN_PATH="$QT_PLUGIN_PATH/platforms"
+export LD_LIBRARY_PATH="$ROOT/_internal:$LD_LIBRARY_PATH"
+# Không ép nền tảng: để Qt tự chọn wayland khi có, xcb khi không.
+exec "$ROOT/morsedesk-gui" "$@"

@@ -56,3 +56,17 @@ def test_wheel_config_keeps_the_fonts():
     cfg = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
     artifacts = cfg["tool"]["hatch"]["build"]["targets"]["wheel"].get("artifacts", [])
     assert any("app/fonts" in a for a in artifacts), artifacts
+
+
+def test_language_names_have_no_vietnamese_leaking_into_the_ui():
+    """Nhãn ngôn ngữ là thứ người dùng cuối đọc, không phải ghi chú nội bộ.
+
+    Ảnh chụp AppImage trên Ubuntu sạch cho thấy combo hiện "Қазақша (nháp)" — chữ "nháp" là
+    tiếng Việt, lọt ra từ một ghi chú của nhóm phát triển. Bản dịch chưa được người bản ngữ
+    soát vẫn cần đánh dấu, nhưng phải bằng chính ngôn ngữ đó.
+    """
+    from morsedesk.app.main_window import LANGUAGE_NAMES
+
+    joined = " ".join(LANGUAGE_NAMES.values())
+    for word in ("nháp", "bản", "chưa", "thử"):
+        assert word not in joined.lower(), (word, LANGUAGE_NAMES)

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=MorseDesk
+GenericName=Morse decoder
+Comment=Giải mã và tạo mã Morse ngoại tuyến (EN/RU/KK)
+Exec=morsedesk-gui
+Icon=morsedesk
+Categories=AudioVideo;Audio;HamRadio;
+Terminal=false
