@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
-WINDOW_FRAMES = 800       # 4 s ở 200 khung/s (chế độ file)
-STEP_FRAMES = 600         # 3 s, chồng 1 s
+# 8 s / 2 s chứ không phải 4 s / 3 s: đo trên toàn T1 (500 clip) cho CER 11,52 % so với
+# 17,96 %, mọi kênh và mọi profile đều tốt lên, và mỗi clip còn nhanh hơn (0,368 s so với
+# 0,492 s). T2 bản ghi thật cũng nhích từ 4,69 % xuống 4,47 % mà không ô nào xấu đi.
+# Cửa sổ dài cho BiGRU nhiều ngữ cảnh hai chiều hơn; chồng lấn 6 s làm mỗi khung được
+# nhiều cửa sổ bỏ phiếu, và `stitch_windows` luôn lấy cửa sổ có tâm gần khung nhất.
+WINDOW_FRAMES = 1600      # 8 s ở 200 khung/s (chế độ file)
+STEP_FRAMES = 400         # 2 s, chồng 6 s
 LIVE_WINDOW_FRAMES = 400  # 2 s (chế độ live)
 LIVE_STEP_FRAMES = 200    # 1 s
 

@@ -21,7 +21,10 @@ datas = (
     tree("morsedesk/profiles", "morsedesk/profiles")
     + [(str(p), "morsedesk/app/i18n") for p in (ROOT / "morsedesk/app/i18n").glob("*.qm")]
     + tree("morsedesk/app/fonts", "morsedesk/app/fonts")
-    + [(str(p), "models") for p in (ROOT / "models").glob("acoustic.*")]
+    # Chỉ hai file này: glob `acoustic.*` còn bắt cả `acoustic.golden.npz` (2,6 MB fixture so
+    # sánh bit-exact của bộ kiểm thử), thứ người dùng cuối không bao giờ đọc tới.
+    + [(str(ROOT / "models" / n), "models") for n in ("acoustic.onnx", "acoustic.json")
+       if (ROOT / "models" / n).exists()]
     + [(str(p), "models/lm") for p in (ROOT / "models/lm").glob("*.bin")]
     + [(str(p), "models/lm") for p in (ROOT / "models/lm").glob("*.md")]
 )

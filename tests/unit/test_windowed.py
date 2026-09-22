@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from morsedesk.api import Decoder, Encoder
-from morsedesk.constants import FEAT_DIM, HOP
+from morsedesk.constants import FEAT_DIM, FRAME_RATE, HOP
 from morsedesk.dsp.frontend import (
     WINDOW_CFG,
     FrontendConfig,
@@ -35,7 +35,7 @@ class PassThroughModel:
 
 
 def test_chunker_reexports_windowing():
-    assert chunker.WINDOW_FRAMES == WINDOW_FRAMES == 800 and chunker.STEP_FRAMES == STEP_FRAMES == 600
+    assert chunker.WINDOW_FRAMES == WINDOW_FRAMES == 1600 and chunker.STEP_FRAMES == STEP_FRAMES == 400
     assert chunker.frame_windows is frame_windows
     assert WINDOW_CFG == FrontendConfig(agc_init_s=0.5) and FrontendConfig().agc_init_s == 1.0
 
@@ -59,11 +59,14 @@ def test_windowed_shapes_tone_and_carry_over():
         assert w.feats.shape == (w.end_frame - w.start_frame, FEAT_DIM) and w.feats.dtype == np.float32
         assert w.has_signal and abs(w.f0_hz - 650.0) < 15.0
     rng = np.random.default_rng(0)
-    noise = rng.normal(0, 0.01, size=5 * 8000).astype(np.float32)
+    # Đuôi nhiễu phải dài hơn một cửa sổ, nếu không cửa sổ cuối vẫn còn dính tín hiệu và
+    # không kiểm được nhánh "không có tín hiệu". Tính theo hằng số để không vỡ khi đổi cửa sổ.
+    noise_s = WINDOW_FRAMES / FRAME_RATE + 2.0
+    noise = rng.normal(0, 0.01, size=int(noise_s * 8000)).astype(np.float32)
     wins2 = compute_features_windowed(np.concatenate([x, noise]))
     tail = wins2[-1]
     assert not tail.has_signal and abs(tail.f0_hz - wins2[-2].f0_hz) < 1e-9        # mang tone cửa sổ trước
-    short_noise = noise[: 3 * 8000]                                # dưới 1 cửa sổ (800 khung = 4 s)
+    short_noise = noise[: int(WINDOW_FRAMES / FRAME_RATE * 8000) - 8000]           # dưới 1 cửa sổ
     only_noise = compute_features_windowed(short_noise, f0_hint=720.0)
     assert len(only_noise) == 1 and not only_noise[0].has_signal and only_noise[0].f0_hz == 720.0
     assert compute_features_windowed(noise)[0].f0_hz == 700.0

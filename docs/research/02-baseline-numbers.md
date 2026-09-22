@@ -695,3 +695,60 @@ Siết ngưỡng xuống 0,01 để cứu `qsb` thì mất nhiều hơn được
 
 Ngưỡng 0,01 lấy lại 1,92 điểm ở `qsb` nhưng trả lại 1,25 ở `clean`, 0,55 ở `mp3`, 1,48 ở `qrm`
 và 1,22 ở `qrn` — lỗ ròng nửa điểm CER và gần hai điểm WER. Giữ 0,02.
+
+---
+
+## Cửa sổ 8 s / bước 2 s (2026-09-23)
+
+Xuất phát từ một phát hiện phụ của báo cáo research về giải mã realtime: trên 60 clip T1, cửa sổ
+4 s/bước 3 s cho 20,45 % còn 8 s/2 s cho 12,22 %. Sáu mươi clip không đủ để quyết định điều gì —
+đúng bài học E9 và E11 — nên đo lại toàn bộ.
+
+### T1, cả 500 clip, cùng lệnh cùng ngày
+
+Lượt baseline chạy lại ra đúng 17,96 %, khớp con số lịch sử ở mục trên, nên đường đo tin được.
+
+| | 4 s / 3 s | **8 s / 2 s** | Chênh |
+|---|---|---|---|
+| greedy (không LM) | 23,18 % | **13,10 %** | **−10,08** |
+| **beam + LM** | **17,96 %** | **11,52 %** | **−6,44** |
+| clean | 9,88 % | **2,78 %** | −7,10 |
+| mp3 | 8,50 % | **3,24 %** | −5,26 |
+| qrm | 7,99 % | **2,86 %** | −5,13 |
+| qrn | 8,83 % | **3,19 %** | −5,64 |
+| qsb | 54,60 % | **45,55 %** | −9,06 |
+| en | 16,07 % | **9,50 %** | −6,56 |
+| ru | 20,03 % | **12,92 %** | −7,11 |
+| kk-cyrl-ru | 17,79 % | **12,14 %** | −5,64 |
+| giây mỗi clip | 0,492 | **0,368** | −25 % |
+
+Không một ô nào xấu đi, kể cả `qsb` — khác hẳn mọi thay đổi trước đó, vốn luôn phải đánh đổi.
+Và nó còn **nhanh hơn**, dù cửa sổ dài gấp đôi và bước ngắn hơn: cửa sổ dài làm mô hình ra chuỗi
+gọn hơn, beam ít nhánh sống sót hơn, và nhiều clip đủ sạch để đi thẳng đường DSP.
+
+### T2, bản ghi thật
+
+| | 4 s / 3 s | 8 s / 2 s |
+|---|---|---|
+| CER toàn bộ (n=40) | 4,69 % | **4,47 %** |
+| WER | 17,73 % | **16,90 %** |
+| en | 0,95 % | 0,95 % |
+| ru | 1,94 % | **1,65 %** |
+| kk-cyrl-ru | 9,92 % | **9,63 %** |
+
+Từng ô trong bảng SNR × WPM hoặc giữ nguyên hoặc tốt lên: 12 WPM 5,48 → 4,94 và 18 WPM
+5,16 → 4,68, chín ô còn lại không đổi một chữ số.
+
+### Vì sao
+
+BiGRU đọc hai chiều nên mỗi khung được quyết định bằng cả quá khứ lẫn tương lai trong cùng cửa
+sổ. Cửa sổ 4 s ở 12 WPM chỉ chứa vài ký tự, quá ít ngữ cảnh. Nới lên 8 s vừa cho nhiều ngữ cảnh
+hơn, vừa — nhờ bước 2 s — làm mỗi khung nằm trong bốn cửa sổ thay vì hai, và `stitch_windows`
+luôn chọn cửa sổ có tâm gần khung nhất, tức là chọn lần dự đoán có nhiều ngữ cảnh hai bên nhất.
+
+Đây là thay đổi hai dòng, không huấn luyện lại một bước nào.
+
+### Còn lại
+
+`qsb` 45,55 % vẫn là toàn bộ phần thiệt hại: bốn kênh kia đều dưới 3,3 %, tức là đã ở ngay sát
+cổng 2 %. Việc tiếp theo có tỉ lệ lợi ích/công sức cao nhất là fading, không phải chỗ nào khác.
