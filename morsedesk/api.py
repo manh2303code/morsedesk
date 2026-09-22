@@ -447,6 +447,21 @@ class Decoder:
                             self.profile.id, {}, [w.vi() for w in warnings], "deepcw",
                             fallback_text, warning_codes=list(warnings))
 
+    def _letters_for_tokens(self, tokens: list[str], profile: Profile) -> list[str] | None:
+        """Chữ do mô hình ngôn ngữ chọn cho từng token; None khi không dùng được.
+
+        Dùng khi lấy phân đoạn của bộ DSP trên tín hiệu sạch: bộ DSP chỉ biết mẫu chấm gạch, còn
+        việc chọn giữa А và Ә là của LM. Trả None nếu không bật LM, không có LM cho profile này,
+        hoặc chuỗi token mà beam đi qua không khớp — khi đó bên gọi tự quyết.
+        """
+        if not tokens or not self.lm_enabled:
+            return None
+        lm = self._lms.get(profile.id)
+        if lm is None:
+            return None
+        det = detect_tokens(tokens, {profile.id: profile}, {profile.id: lm}, self.beam_params)
+        return beam_letters(tokens, profile.id, det)
+
     def _decode_onnx(self, x, logp: np.ndarray, n_in: int, tone_hz: float, snr_db: float | None,
                      warnings: list[DecodeWarning]) -> DecodeResult:
         stride = int(self._model.time_stride)
@@ -464,10 +479,15 @@ class Decoder:
         # đã vượt ngưỡng, để clip bình thường không phải trả thêm chi phí nào.
         if self.fallback and _finite_snr(snr_db) and float(snr_db) > SNR_OUT_OF_RANGE_DB:
             dsp = self._baseline_tokens(x, tone_hz)
-            ambiguous = any(len(profile.map.get(tok, ())) > 1 for tok in dsp.tokens)
+            # Mẫu mơ hồ (bảng Kazakh giải `.-` ra А hoặc Ә) không buộc phải bỏ đường DSP: giữ
+            # phân đoạn chính xác mà tín hiệu sạch cho không, rồi để mô hình ngôn ngữ chọn chữ.
+            # Chỉ khi không có LM mới phải nhường hẳn cho mô hình âm thanh.
+            dsp_letters = self._letters_for_tokens(list(dsp.tokens), profile)
+            ambiguous = (dsp_letters is None
+                         and any(len(profile.map.get(tok, ())) > 1 for tok in dsp.tokens))
             if prefer_dsp(snr_db, dsp.cost, ambiguous):
                 dsp_conf = float(np.exp(-dsp.cost)) if np.isfinite(dsp.cost) else 0.0
-                dsp_words = symbols_to_words(dsp.symbols, profile, FRAME_RATE, dsp_conf, None)
+                dsp_words = symbols_to_words(dsp.symbols, profile, FRAME_RATE, dsp_conf, dsp_letters)
                 lang = profile.id if (not self.auto or scores) else ""
                 return DecodeResult(
                     " ".join(w.text for w in dsp_words), dsp_words, dsp.wpm, tone_hz, snr_db,

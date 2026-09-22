@@ -76,7 +76,7 @@ Mỗi dòng "bằng chứng" phải trỏ tới thứ kiểm lại được: đ�
 | # | Tầng | Ngưỡng spec | Trạng thái | Bằng chứng |
 |---|---|---|---|---|
 | D1 | T0 unit: timing chính xác từng mẫu | — | **ĐẠT** | `tests/unit/` timing. |
-| D2 | T0: encode → decode audio sạch 10–40 WPM, ba profile, **CER = 0** | CER = 0 | **CHƯA ĐẠT** | `test_trained_model_roundtrip` (gate) FAIL: `ПРИВЕТ МИР` → `ПРИВЕТ МЕРН`, CER 0,2. Lưu ý thêm: chính test này đặt ngưỡng **0,1** chứ không phải 0 như spec, tức là kể cả khi test xanh vẫn chưa thỏa spec. → gộp vào **CP-01** |
+| D2 | T0: encode → decode audio sạch 10–40 WPM, ba profile, **CER = 0** | CER = 0 | **ĐẠT 22/09** | 21/21 ô đạt CER = 0 (ba profile x 10/15/20/25/30/35/40 WPM). Hai ô Kazakh cuối cùng đóng lại khi quy tắc chọn bộ giải mã thôi bỏ hẳn đường DSP với bảng có mẫu mơ hồ, và thay bằng giữ phân đoạn của DSP rồi để mô hình ngôn ngữ chọn chữ (`Decoder._letters_for_tokens`). Xem `docs/research/02-baseline-numbers.md`. |
 | D3 | T1 ma trận tổng hợp, gate trong pytest | CER < 2 % | **CHƯA ĐẠT** | Xem A1. Bộ T1 có đủ 500 clip đúng ma trận. |
 | D4 | T2 bản ghi thật (ARRL, Wikimedia, SRAA, QSO Ý, Nga/Kazakh tự thu) | ARRL < 2 %, QSO tay < 10 % | **CHƯA LÀM** | Không có `testdata/private`. → **CP-02** |
 | D5 | T3 live qua loopback | lệch CER < 1 điểm | **HOÃN** | Tuần 5. |

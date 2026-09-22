@@ -48,3 +48,26 @@ def test_profiles_with_ambiguity_are_the_ones_we_expect():
     counts = {pid: sum(1 for v in load_profile(pid).map.values() if len(v) > 1)
               for pid in ("en", "ru", "kk-cyrl-ru")}
     assert counts == {"en": 0, "ru": 1, "kk-cyrl-ru": 9}, counts
+
+
+def test_clean_kazakh_roundtrip_uses_the_language_model_to_pick_letters():
+    """Tín hiệu sạch + bảng có mẫu mơ hồ: lấy phân đoạn của DSP nhưng để LM chọn chữ.
+
+    Bảng Kazakh giải `.-` ra А hoặc Ә. Bỏ hẳn đường DSP ở đây thì mất phân đoạn chính xác mà
+    tín hiệu sạch cho không; lấy DSP mà không hỏi LM thì luôn ra lựa chọn đầu. Hai ô 15 và 25
+    WPM của bộ T0 hỏng đúng vì điều đó (spec D2 yêu cầu CER = 0 trên audio sạch).
+    """
+    from pathlib import Path
+
+    import pytest as _pytest
+
+    from morsedesk.api import Decoder, Encoder
+    from morsedesk.metrics import cer
+
+    if not Path("models/acoustic.onnx").is_file() or not Path("models/lm/kk.bin").is_file():
+        _pytest.skip("cần models/acoustic.onnx và models/lm/kk.bin")
+    text = "СӘЛЕМ ӘЛЕМ"
+    dec = Decoder("kk-cyrl-ru", engine="onnx")
+    for wpm in (15, 25):
+        got = dec.decode_array(Encoder("kk-cyrl-ru").to_audio(text, wpm=wpm)).text
+        assert cer(text, got) == 0.0, (wpm, got)

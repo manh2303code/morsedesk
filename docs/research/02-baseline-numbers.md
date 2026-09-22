@@ -575,3 +575,27 @@ Giả thuyết cũ trong `morsedesk/dsp/baseline.py` rằng tốc độ thấp h
 cũng **không đứng vững**: ở 5 WPM một dit dài 48 khung nên sai số nửa khung chỉ là 1 %, còn ở 40
 WPM dit chỉ 6 khung nên cùng sai số đó là 8 % — tức lượng tử hóa đáng lo ở tốc độ CAO, ngược với
 ghi chú cũ.
+
+## Spec D2 đã đạt: T0 roundtrip CER = 0 trên cả 21 ô (2026-09-22)
+
+Spec D2 yêu cầu encode → decode audio **sạch** ở 10–40 WPM cho cả ba profile với CER = 0. Đo
+sau khi có dither, chọn bộ giải mã và bước cuối là để mô hình ngôn ngữ chọn chữ cho phân đoạn
+của bộ DSP:
+
+| Profile | 10 | 15 | 20 | 25 | 30 | 35 | 40 WPM |
+|---|---|---|---|---|---|---|---|
+| `en` | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `ru` | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `kk-cyrl-ru` | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+**21/21 ô đạt CER = 0.**
+
+Bước cuối đáng nói riêng. Trước đó hai ô Kazakh (15 và 25 WPM) còn sai một chữ, vì quy tắc chọn
+bộ giải mã **bỏ hẳn** đường DSP khi bảng có mẫu giải ra nhiều chữ — bảng Kazakh giải `.-` thành
+А hoặc Ә. Nhưng bỏ cả đường DSP là vứt luôn phân đoạn chính xác mà tín hiệu sạch cho không.
+Cách đúng là giữ phân đoạn của DSP và **hỏi mô hình ngôn ngữ** chọn chữ, đúng như chế độ `auto`
+vẫn làm: `Decoder._letters_for_tokens` chạy `detect_tokens` trên chuỗi token của DSP với duy
+nhất profile hiện tại. Chỉ khi không bật LM mới phải nhường hẳn cho mô hình âm thanh.
+
+Lưu ý phạm vi: đây là audio **sạch không nhiễu**. Ô nhiễu vẫn do mô hình âm thanh gánh, và đó
+là nội dung của yêu cầu A1 (gate 2 % trên T1) — chưa đạt.

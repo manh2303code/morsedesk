@@ -103,7 +103,13 @@ def test_onnx_beam_lm_recovers_kazakh_letters(monkeypatch, lm_dir):
     assert r.text == "СӘЛЕМ ӘЛЕМ" and r.engine == "onnx" and r.language == "kk-cyrl-ru"
     assert [w.text for w in r.words] == ["СӘЛЕМ", "ӘЛЕМ"]
     assert all(w.confidence > 0.8 for w in r.words) and r.words[0].end_s <= r.words[1].start_s
-    assert r.fallback_text is None and r.language_scores == {}
+    assert r.language_scores == {}
+    if r.decoded_by == "dsp":
+        # Clip này không nhiễu nên vượt ngưỡng SNR và đi đường DSP; khi đó `fallback_text` là
+        # kết quả của MÔ HÌNH, và nó cũng phải đúng vì đây chính là ca beam+LM khôi phục Ә.
+        assert r.fallback_text == "СӘЛЕМ ӘЛЕМ"
+    else:
+        assert r.fallback_text is None
     greedy = Decoder("kk-cyrl-ru", engine="onnx", acoustic_model=FakeAcousticModel(), lm=False, lm_dir=lm_dir)
     assert greedy.decode_array(x).text == "САЛЕМ АЛЕМ"
 
