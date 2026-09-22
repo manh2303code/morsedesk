@@ -20,7 +20,7 @@ from morsedesk.dsp.frontend import (
     mix_envelope,
     window_cfg,
 )
-from morsedesk.dsp.selection import SNR_OUT_OF_RANGE_DB, prefer_dsp
+from morsedesk.dsp.selection import dsp_result_usable, prefer_dsp
 from morsedesk.dsp.tone import ToneEstimate, estimate_tone, fallback_tone_hz
 from morsedesk.encode.synth import add_noise, elements_to_audio, tone_power
 from morsedesk.encode.text import text_to_tokens
@@ -477,15 +477,20 @@ class Decoder:
         # này (T2 bản ghi thật: DSP 4,0 % so với mô hình 24,2 %), nên nếu timing cũng khớp thì
         # lấy kết quả của nó và để kết quả mô hình xuống dòng dự phòng. Chỉ chạy bộ DSP khi SNR
         # đã vượt ngưỡng, để clip bình thường không phải trả thêm chi phí nào.
-        if self.fallback and _finite_snr(snr_db) and float(snr_db) > SNR_OUT_OF_RANGE_DB:
+        # Bộ DSP nay chạy cho MỌI clip, không chỉ khi tín hiệu sạch: chi phí timing của nó là
+        # phép đo cần có để quyết định, và nhánh "timing khớp gần hoàn hảo" hoạt động ở cả mức
+        # nhiễu bình thường. Giá phải trả là khoảng một phần năm thời gian giải mã; đổi lại
+        # 101/461 clip T1 chuyển sang đường tốt hơn và CER giảm 0,78 điểm.
+        if self.fallback:
             dsp = self._baseline_tokens(x, tone_hz)
+            usable = dsp_result_usable(dsp.tokens, profile)
             # Mẫu mơ hồ (bảng Kazakh giải `.-` ra А hoặc Ә) không buộc phải bỏ đường DSP: giữ
             # phân đoạn chính xác mà tín hiệu sạch cho không, rồi để mô hình ngôn ngữ chọn chữ.
             # Chỉ khi không có LM mới phải nhường hẳn cho mô hình âm thanh.
-            dsp_letters = self._letters_for_tokens(list(dsp.tokens), profile)
+            dsp_letters = self._letters_for_tokens(list(dsp.tokens), profile) if usable else None
             ambiguous = (dsp_letters is None
                          and any(len(profile.map.get(tok, ())) > 1 for tok in dsp.tokens))
-            if prefer_dsp(snr_db, dsp.cost, ambiguous):
+            if usable and prefer_dsp(snr_db, dsp.cost, ambiguous):
                 dsp_conf = float(np.exp(-dsp.cost)) if np.isfinite(dsp.cost) else 0.0
                 dsp_words = symbols_to_words(dsp.symbols, profile, FRAME_RATE, dsp_conf, dsp_letters)
                 lang = profile.id if (not self.auto or scores) else ""

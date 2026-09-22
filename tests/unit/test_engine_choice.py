@@ -9,12 +9,12 @@ DSP 35,12 %. Nên không engine nào thắng ở mọi nơi, và việc chọn p
 from morsedesk.dsp.selection import DSP_MAX_TIMING_COST, SNR_OUT_OF_RANGE_DB, prefer_dsp
 
 
-def test_prefers_dsp_only_when_both_conditions_hold():
-    assert prefer_dsp(snr_db=60.0, timing_cost=0.003)
+def test_two_independent_branches_lead_to_the_dsp():
+    assert prefer_dsp(snr_db=60.0, timing_cost=0.003)        # cả hai nhánh cùng đúng
+    assert prefer_dsp(snr_db=60.0, timing_cost=0.0523)       # bản 5 WPM của ARRL: nhánh SNR
+    assert prefer_dsp(snr_db=12.0, timing_cost=0.003)        # nhánh timing, SNR tầm thường
     assert not prefer_dsp(snr_db=60.0, timing_cost=0.5)      # sạch nhưng nhịp gõ lộn xộn
-    assert prefer_dsp(snr_db=60.0, timing_cost=0.0523)       # bản 5 WPM của ARRL
-    assert not prefer_dsp(snr_db=12.0, timing_cost=0.003)    # trong dải huấn luyện: tin mô hình
-    assert not prefer_dsp(snr_db=12.0, timing_cost=0.5)
+    assert not prefer_dsp(snr_db=12.0, timing_cost=0.5)      # không nhánh nào đúng
 
 
 def test_thresholds_match_the_measured_populations():
@@ -28,11 +28,17 @@ def test_thresholds_match_the_measured_populations():
     assert 0.0523 < DSP_MAX_TIMING_COST < 0.15
 
 
-def test_missing_measurements_never_pick_dsp():
-    assert not prefer_dsp(snr_db=None, timing_cost=0.003)
+def test_missing_timing_cost_never_picks_dsp():
+    """Chi phí timing là phép đo bắt buộc; thiếu nó thì không có cơ sở nào để đổi đường.
+
+    SNR thiếu thì khác: nhánh timing vẫn đứng vững một mình, vì chi phí thấp nghĩa là bộ DSP đã
+    phân đoạn được tín hiệu — bằng chứng ấy không cần SNR xác nhận.
+    """
     assert not prefer_dsp(snr_db=60.0, timing_cost=None)
-    assert not prefer_dsp(snr_db=float("nan"), timing_cost=0.003)
     assert not prefer_dsp(snr_db=60.0, timing_cost=float("inf"))
+    assert not prefer_dsp(snr_db=None, timing_cost=0.5)
+    assert prefer_dsp(snr_db=None, timing_cost=0.003)
+    assert prefer_dsp(snr_db=float("nan"), timing_cost=0.003)
 
 
 def test_ambiguous_patterns_always_keep_the_model():
@@ -71,3 +77,40 @@ def test_clean_kazakh_roundtrip_uses_the_language_model_to_pick_letters():
     for wpm in (15, 25):
         got = dec.decode_array(Encoder("kk-cyrl-ru").to_audio(text, wpm=wpm)).text
         assert cer(text, got) == 0.0, (wpm, got)
+
+
+def test_very_low_timing_cost_alone_is_enough():
+    """Timing khớp gần hoàn hảo là bằng chứng đủ, không cần SNR cao đi kèm.
+
+    Đo trên 461 clip T1 có tín hiệu: chỉ dùng mô hình cho 15,73 %; thêm nhánh "chi phí timing
+    dưới 0,02" thì còn 14,95 % và 101 clip chuyển sang bộ DSP. Nới tới 0,05 lại xấu đi thành
+    18,48 %, nên ngưỡng phải nằm hẳn dưới mức đó.
+
+    Ca lộ ra điều này: một clip SNR 12,8 dB mà bộ DSP đọc đúng nguyên văn còn mô hình sai 8 %.
+    """
+    assert prefer_dsp(snr_db=12.8, timing_cost=0.0)        # timing hoàn hảo, SNR tầm thường
+    assert prefer_dsp(snr_db=5.0, timing_cost=0.015)
+    assert not prefer_dsp(snr_db=5.0, timing_cost=0.03)    # chưa đủ khớp, giữ mô hình
+    assert prefer_dsp(snr_db=60.0, timing_cost=0.03)       # sạch hơn dải huấn luyện thì vẫn lấy
+
+
+def test_low_cost_branch_still_respects_ambiguity():
+    assert not prefer_dsp(snr_db=12.8, timing_cost=0.0, has_ambiguous_tokens=True)
+
+
+def test_dsp_output_with_patterns_outside_the_table_is_rejected():
+    """Bộ DSP có thể sinh mẫu không tồn tại trong bảng khi tín hiệu nhiễu.
+
+    Trên clip nhiễu, phân đoạn sai đẻ ra những chuỗi như `.--..` hay `..-.-` — không mẫu nào
+    trong ba bảng có chúng. Đem đi tra bảng thì vỡ với `KeyError`; đo trên T1 là 67/500 clip.
+    Một kết quả chứa mẫu như vậy tự nó đã nói rằng bộ DSP đọc sai, nên phải giữ đường mô hình.
+    """
+    from morsedesk.dsp.selection import dsp_result_usable
+    from morsedesk.lm.profile import load_profile
+    from morsedesk.model.vocab import SPACE
+
+    profile = load_profile("en")
+    assert dsp_result_usable([".-", "-...", SPACE, "-.-"], profile)
+    assert not dsp_result_usable([".-", ".--..", SPACE], profile)
+    assert not dsp_result_usable(["..-.-"], profile)
+    assert dsp_result_usable([], profile)

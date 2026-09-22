@@ -31,6 +31,11 @@ SNR_OUT_OF_RANGE_DB = 30.0
 # nơi một dit dài 48 khung nên lượng tử hóa ranh giới nặng hơn); 0,06 giữ được cả mười mà vẫn
 # loại những ca sai lệch log trung bình trên 24 %.
 DSP_MAX_TIMING_COST = 0.06
+# Nhánh thứ hai, độc lập với SNR: timing khớp gần hoàn hảo tự nó đã là bằng chứng đủ. Đo trên
+# 461 clip T1 có tín hiệu — chỉ mô hình 15,73 %; thêm nhánh này 14,95 % với 101 clip chuyển
+# sang bộ DSP. Nới ngưỡng tới 0,05 thì xấu đi thành 18,48 %, nên nó phải nằm hẳn dưới mức đó.
+# Ca lộ ra điều này: một clip SNR 12,8 dB mà bộ DSP đọc đúng nguyên văn còn mô hình sai 8 %.
+DSP_TRUSTED_TIMING_COST = 0.02
 
 
 def _finite(v: float | None) -> bool:
@@ -41,6 +46,9 @@ def prefer_dsp(snr_db: float | None, timing_cost: float | None,
                has_ambiguous_tokens: bool = False) -> bool:
     """Có nên lấy kết quả của bộ giải mã DSP thay cho mô hình không.
 
+    Hai nhánh độc lập dẫn tới cùng kết luận: timing khớp gần hoàn hảo (dưới
+    `DSP_TRUSTED_TIMING_COST`), hoặc tín hiệu sạch hơn dải huấn luyện mà timing vẫn đủ khớp.
+
     `has_ambiguous_tokens`: kết quả DSP có chứa mẫu mà bảng của profile giải ra NHIỀU chữ không.
     Bảng Kazakh có 9 mẫu như vậy (`.-` là А hoặc Ә) và bảng Nga có một (`-..-` là Ь hoặc Ъ);
     chọn đúng giữa chúng là việc của mô hình ngôn ngữ, còn bộ DSP chỉ lấy lựa chọn đầu tiên. Gặp
@@ -49,6 +57,21 @@ def prefer_dsp(snr_db: float | None, timing_cost: float | None,
     Thiếu bất kỳ phép đo nào thì trả False: mô hình là đường mặc định, và đổi đường dựa trên số
     liệu không có là cách chắc chắn nhất để làm hỏng những ca vốn đang chạy tốt.
     """
-    if has_ambiguous_tokens or not _finite(snr_db) or not _finite(timing_cost):
+    if has_ambiguous_tokens or not _finite(timing_cost):
         return False
-    return float(snr_db) > SNR_OUT_OF_RANGE_DB and float(timing_cost) < DSP_MAX_TIMING_COST
+    cost = float(timing_cost)
+    if cost < DSP_TRUSTED_TIMING_COST:
+        return True
+    return _finite(snr_db) and float(snr_db) > SNR_OUT_OF_RANGE_DB and cost < DSP_MAX_TIMING_COST
+
+
+def dsp_result_usable(tokens, profile) -> bool:
+    """Kết quả của bộ DSP có tra được bằng bảng của profile không.
+
+    Trên clip nhiễu, phân đoạn sai đẻ ra những chuỗi như `.--..` hay `..-.-` mà không bảng nào
+    có. Một kết quả chứa mẫu như vậy tự nó đã nói rằng bộ DSP đọc sai, nên giữ đường mô hình;
+    đem chúng đi tra bảng thì vỡ với `KeyError` (đo trên T1 là 67/500 clip).
+    """
+    from morsedesk.model.vocab import SPACE
+
+    return all(tok == SPACE or tok in profile.map for tok in tokens)

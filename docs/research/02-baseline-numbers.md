@@ -629,3 +629,69 @@ cặp khung nào kẹp ngưỡng.
 Mã đã gỡ; giữ lại đây để người sau không mất thêm một lượt. Bài học chung với ngày hôm nay: một
 lập luận vật lý đúng về mặt số học vẫn có thể nhắm sai chỗ, nếu nó đo đại lượng mà thuật toán
 không dùng.
+
+## Chi phí timing thấp là bằng chứng đủ, không cần SNR cao đi kèm (2026-09-23)
+
+Quy tắc chọn bộ giải mã ban đầu chỉ lấy kết quả DSP khi SNR vượt 30 dB. Một clip đơn lẻ làm lộ
+ra rằng nó quá chặt: file mẫu 15,8 giây ở **SNR 12,8 dB** — tức giữa dải huấn luyện — được bộ
+DSP đọc đúng nguyên văn trong khi mô hình sai 8 %.
+
+Đo trên 461 clip T1 có tín hiệu, với mỗi clip tính cả chi phí timing của DSP lẫn CER của hai
+đường:
+
+| Quy tắc | CER | Số clip đi đường DSP |
+|---|---|---|
+| Chỉ mô hình | 15,73 % | 0 |
+| SNR > 30 (quy tắc cũ) | 15,73 % | 0 |
+| chi phí < 0,005 | 15,35 % | 36 |
+| chi phí < 0,01 | 15,12 % | 55 |
+| **chi phí < 0,02** | **14,95 %** | 101 |
+| chi phí < 0,05 | 18,48 % | 222 |
+
+Ngưỡng 0,02 tốt nhất, và quan trọng hơn là kết quả không nhạy cảm quanh đó — 0,005 và 0,01 đều
+cải thiện, chỉ tới 0,05 mới xấu đi hẳn. Nên đây không phải một con số vừa khít với tập đo.
+
+Hệ quả cho mã: bộ DSP nay chạy cho **mọi** clip chứ không chỉ khi tín hiệu sạch, vì chi phí
+timing là phép đo cần có để quyết định. Giá phải trả là khoảng một phần năm thời gian giải mã.
+
+### Một lỗi tự tạo, và cách phép đo bắt được nó
+
+Lần chạy T1 đầu tiên sau thay đổi cho **26,63 % với 67 clip lỗi** thay vì cải thiện. Nguyên
+nhân: trên clip nhiễu, bộ DSP sinh ra những mẫu chấm gạch **không tồn tại trong bảng** (`.--..`,
+`..-.-`, `-...-.`), và mã mới đem chúng đi tra bảng nên vỡ với `KeyError`. Quy tắc cũ không gặp
+vì nó chỉ chạy DSP trên tín hiệu sạch, nơi phân đoạn hiếm khi sai đến thế.
+
+`dsp_result_usable` chặn điều đó: một kết quả chứa mẫu ngoài bảng tự nó đã nói rằng bộ DSP đọc
+sai, nên giữ đường mô hình. Đây cũng là lời nhắc rằng mỗi thay đổi phải đo lại trên cả bộ, chứ
+một clip ví dụ chạy đúng không nói lên điều gì.
+
+### Kết quả thật trên toàn T1
+
+| Kênh | Trước | Sau | Chênh |
+|---|---|---|---|
+| clean | 12,73 % | **9,88 %** | −2,85 |
+| mp3 | 11,15 % | **8,50 %** | −2,65 |
+| qrm | 12,69 % | **7,99 %** | −4,70 |
+| qrn | 12,80 % | **8,83 %** | −3,97 |
+| qsb | 51,68 % | 54,60 % | **+2,92** |
+| **Toàn bộ** | **20,21 %** | **17,96 %** | **−2,25** |
+| WER | 44,41 % | **37,60 %** | −6,81 |
+
+Bốn kênh tốt lên rõ, riêng `qsb` xấu đi gần 3 điểm: fading sâu làm bộ DSP đọc sai ở những chỗ
+tín hiệu chìm, mà chi phí timing tính trên phần còn đọc được nên vẫn thấp. Tổng thể vẫn lời
+2,25 điểm CER và 6,81 điểm WER — WER giảm mạnh hơn cho thấy phần được nằm ở chỗ bộ DSP giữ
+đúng ranh giới từ, thứ mà mô hình hay làm nhoè.
+
+Trên T2 bản ghi thật, cả mười ô giữ nguyên từng con số: quy tắc mới chỉ thêm đường cho clip
+nhiễu chứ không đụng tới những clip vốn đã đi đường DSP.
+
+Siết ngưỡng xuống 0,01 để cứu `qsb` thì mất nhiều hơn được:
+
+| Cấu hình | CER | WER | clean | mp3 | qrm | qrn | qsb |
+|---|---|---|---|---|---|---|---|
+| chỉ SNR > 30 | 20,21 % | 44,41 % | 12,73 | 11,15 | 12,69 | 12,80 | 51,68 |
+| **cost < 0,02** | **17,96 %** | **37,60 %** | **9,88** | **8,50** | **7,99** | **8,83** | 54,60 |
+| cost < 0,01 | 18,48 % | 39,49 % | 11,13 | 9,05 | 9,47 | 10,05 | 52,68 |
+
+Ngưỡng 0,01 lấy lại 1,92 điểm ở `qsb` nhưng trả lại 1,25 ở `clean`, 0,55 ở `mp3`, 1,48 ở `qrm`
+và 1,22 ở `qrn` — lỗ ròng nửa điểm CER và gần hai điểm WER. Giữ 0,02.
