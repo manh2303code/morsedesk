@@ -45,3 +45,27 @@ def test_morse_view_is_monospaced_and_readable(qtbot, tmp_path):
     # Ô Morse phải cao ít nhất bằng một phần ba ô nhập, vì nội dung của nó luôn dài hơn.
     page.text_edit.setPlainText("CQ CQ DE R1ABC R1ABC K")
     assert page.morse_view.maximumHeight() >= 150, page.morse_view.maximumHeight()
+
+
+def test_decode_split_keeps_the_spectrogram_usable(qtbot, tmp_path):
+    """Thêm ô văn bản không được bóp chết biểu đồ phổ.
+
+    `setStretchFactor` của QSplitter chỉ chia phần dư khi co giãn, không quyết định kích thước
+    ban đầu — ảnh chụp cho thấy spectrogram bị ép còn khoảng 60 px trong khi ô văn bản chiếm
+    hơn 400. Phải đặt cả chiều cao tối thiểu lẫn kích thước ban đầu.
+    """
+    from PySide6.QtCore import QSettings
+
+    from morsedesk.app.decode_page import DecodePage
+    from morsedesk.app.settings import AppSettings
+    from morsedesk.app.worker import DecoderWorker
+
+    settings = AppSettings(settings=QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+    page = DecodePage(DecoderWorker(engine="baseline", model_path=None, lm_dir=None), settings)
+    qtbot.addWidget(page)
+    page.resize(1180, 760)
+
+    assert page.spectrogram.minimumHeight() >= 180, page.spectrogram.minimumHeight()
+    assert page.text_view.maximumHeight() <= 260, page.text_view.maximumHeight()
+    sizes = page.split.sizes()
+    assert len(sizes) == 3 and sizes[0] >= sizes[2], sizes

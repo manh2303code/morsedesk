@@ -84,13 +84,22 @@ class DecodePage(QWidget):
         self.text_view = QPlainTextEdit(self)
         self.text_view.setReadOnly(True)
         self.text_view.setPlaceholderText("")
-        split = QSplitter(Qt.Orientation.Vertical, self)
+        # `setStretchFactor` chỉ chia phần DƯ khi cửa sổ co giãn, không quyết định kích thước
+        # ban đầu: nếu chỉ dựa vào nó, ô văn bản chiếm hơn 400 px còn biểu đồ phổ bị ép còn
+        # khoảng 60 px (thấy rõ trên ảnh chụp). Phải đặt cả mức tối thiểu lẫn `setSizes`.
+        self.spectrogram.setMinimumHeight(220)
+        self.word_view.setMinimumHeight(56)
+        self.text_view.setMinimumHeight(70)
+        self.text_view.setMaximumHeight(200)
+        self.split = QSplitter(Qt.Orientation.Vertical, self)
+        split = self.split
         split.addWidget(self.spectrogram)
         split.addWidget(self.word_view)
         split.addWidget(self.text_view)
-        split.setStretchFactor(0, 4)
-        split.setStretchFactor(1, 2)
-        split.setStretchFactor(2, 3)
+        split.setStretchFactor(0, 5)
+        split.setStretchFactor(1, 1)
+        split.setStretchFactor(2, 2)
+        split.setSizes([340, 90, 140])
         self.stats = StatsBar(self)
         self.fallback_label = QLabel(self)
         self.fallback_label.setWordWrap(True)
