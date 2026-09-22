@@ -430,6 +430,38 @@ hưởng trải nghiệm. Đáng chú ý nhất là kênh `clean` xuống **2,76
 nằm trong tầm với ở một ô của ma trận. Lệnh tái lập ở
 `docs/superpowers/plans/2026-09-22-week5-quality.md` Task 3.
 
+## 6. pycw — bộ giải mã numpy có model kèm sẵn (CP-13, 2026-09-22)
+
+`pycw` 1.1.0 (Ian Xia, Apache 2.0, https://github.com/bigsk05/pycw) thường được biết đến như
+thư viện **tạo** Morse, nhưng bản 1.1 kèm luôn một bộ giải mã chỉ dùng numpy: trọng số
+`model.bin` xuất từ repo `cw-train`, đường suy luận không đụng tới PyTorch, và có bộ luật
+`rules.decode_runs` chạy sau model. Cùng trọng số đó dùng chung với một bản Go, và tác giả
+khẳng định hai bản khớp nhau tới từng bit.
+
+Đo trên đúng 167 clip `en` của T1, cùng cách tính CER:
+
+| Kênh | pycw | Bộ DSP của mình | Model `onnx` của mình | DeepCW + beam |
+|---|---|---|---|---|
+| clean | 35,56 % | 21,90 % | 12,73 % | 2,76 % |
+| mp3 | 38,94 % | 25,88 % | 11,15 % | 6,09 % |
+| qrm | 50,78 % | 21,66 % | 12,69 % | 35,42 % |
+| qrn | 37,46 % | 23,20 % | 12,80 % | 9,65 % |
+| qsb | **136,24 %** | 82,96 % | 51,68 % | 43,85 % |
+| **Tổng** | **59,52 %** | 33,04 % (`en`) | 18,19 % (`en`) | 19,39 % |
+
+(Cột "bộ DSP" và "model" lấy theo kênh trên toàn T1 ba profile, nên không so trực tiếp từng ô
+với hai cột kia được; con số tổng ở hàng cuối mới là cùng tập `en`.)
+
+Kết luận: **không lấy gì từ pycw**. Nó yếu hơn cả bộ giải mã dự phòng của mình sau khi bộ đó
+được thêm trễ Schmitt, và vượt 100 % ở kênh `qsb` — tức chèn thừa tràn lan, đúng kiểu hỏng của
+bộ giải mã phân đoạn cứng mà `docs/research/06-hamfist.md` đã mô tả. Giá trị của phép đo này là
+xác nhận mốc: sau một ngày làm việc, **bộ dự phòng của mình đã tốt hơn một bộ giải mã có model
+nơ-ron kèm sẵn**.
+
+Còn lại của CP-13: `multimon-ng` có trong kho Ubuntu nhưng cài cần quyền sudo tương tác, không
+tự cài được từ phiên làm việc — chạy `sudo apt-get install -y multimon-ng` trong WSL rồi đo lại.
+`ggmorse` phải build từ nguồn bằng cmake.
+
 ## Giấy phép và phạm vi sử dụng
 
 - **DeepCW / deepcw-engine — AGPL-3.0-only.** Dùng ở đây **chỉ để đo**. Không sao chép model,
