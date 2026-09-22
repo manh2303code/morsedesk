@@ -412,13 +412,34 @@ kỳ ô nào của ma trận T1 mà nằm ở **mép ngoài của nó**: mọi �
 chưa bao giờ được kiểm. Mười bản ghi thật tìm ra trong vài phút thứ mà 500 clip tổng hợp không
 thể tìm ra.
 
-### Hệ quả còn mở: beam search có chi phí bậc hai theo độ dài
+### Hệ quả: beam search từng có chi phí bậc hai theo độ dài (đã sửa)
 
 Đo trên cùng một bản ghi: 30 s → 3,6 s; 60 s → 3,7 s; 120 s → 5,9 s; **240 s → 18,7 s**. Gấp đôi
-độ dài làm thời gian gấp hơn ba. Nguyên nhân: mỗi tiền tố trong beam giữ nguyên cả tuple ký tự
-làm khóa từ điển, nên mỗi lần mở rộng phải sao chép và băm lại toàn bộ chuỗi. Với clip T1 (13 ký
-tự) không thấy gì; với bản tin 3 746 ký tự thì không chạy nổi. Đây là việc phải sửa trước khi
-nâng trần thời lượng của giao diện (CP-14).
+độ dài làm thời gian gấp hơn ba. Nguyên nhân: mỗi tiền tố trong beam giữ nguyên cả tuple token
+lẫn tuple chữ, và khóa của từ điển beam là chính cặp tuple đó, nên mỗi lần mở rộng phải sao chép
+và băm lại toàn bộ chuỗi. Với clip T1 (13 ký tự) không thấy gì; với bản tin 3 746 ký tự thì
+không chạy nổi.
+
+Sửa bằng cách tách hai thứ vốn bị gộp làm một:
+
+- `_Chars` — chuỗi ký tự dưới dạng danh sách liên kết chia sẻ phần đuôi, cấp phát qua `_Trie`
+  nên hai tiền tố giống nhau luôn nhận cùng một nút và **khóa beam chỉ còn là một số nguyên**.
+- `_Marks` — khung và xác suất của từng ký tự, chuỗi liên kết **riêng**. Phải riêng vì cùng một
+  chuỗi ký tự có thể đến từ hai đường trong một khung và thuật toán giữ khung của đóng góp nặng
+  hơn; `_Chars` thì chia sẻ giữa mọi chuỗi con nên không được sửa tại chỗ.
+
+Chi phí mỗi ký tự sau khi sửa, đo trên cùng máy:
+
+| Độ dài | Trước | Sau |
+|---|---|---|
+| 100 ký tự | 0,10 ms/ký tự | 0,097 ms/ký tự |
+| 200 | — | 0,080 |
+| 400 | 0,16 | 0,101 |
+| 800 | 0,24 | 0,092 |
+| 1 600 | — | 0,088 |
+
+Tức đã **hằng số**. `tests/unit/test_beam_scaling.py` canh lại tỉ lệ này để nó không trôi về cũ.
+Đây là điều kiện cần để nâng trần thời lượng của giao diện (CP-14).
 
 ## Chọn bộ giải mã theo bằng chứng đo được từ chính clip (2026-09-22)
 
