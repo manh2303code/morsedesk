@@ -22,9 +22,13 @@ cài đặt; muốn giải đúng thì cần manh mối ngoài timing (mô hình
 Ngược lại, các ca 40 WPM (SI), 48 WPM (HI) và 60 WPM (HI, SI) từng hỏng vì nhiễu lượng tử nay
 đã đúng nhờ trễ Schmitt — test tương ứng để `xfail(strict=False)` nên chúng hiện báo XPASS.
 
-Engine ONNX là bộ giải mã chính; baseline chỉ là đối chứng và là thứ GUI hiện ra khi độ tin cậy
-của model thấp. Hướng cải tiến sau: nội suy ranh giới dưới khung trong run_lengths để giảm
-nhiễu lượng tử.
+Engine ONNX là bộ giải mã chính; baseline vừa là đối chứng, vừa là thứ GUI hiện ra khi độ tin
+cậy của model thấp, vừa là đường chính khi tín hiệu sạch hơn dải huấn luyện của model (xem
+`morsedesk/dsp/selection.py`).
+
+Hướng cải tiến sau: nội suy ranh giới dưới khung trong run_lengths. Lưu ý nó giúp ở tốc độ CAO
+chứ không phải tốc độ thấp: ở 40 WPM một dit chỉ dài 6 khung nên sai số nửa khung là 8 %, còn ở
+5 WPM dit dài 48 khung nên cùng sai số đó chỉ là 1 %.
 """
 
 from __future__ import annotations

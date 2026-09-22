@@ -542,3 +542,36 @@ Phần còn lại tập trung ở tốc độ thấp, nơi một dit dài 24–4
 trong `run_lengths` nặng hơn — đúng hướng cải tiến mà `morsedesk/dsp/baseline.py` đã ghi sẵn
 trong docstring (nội suy ranh giới dưới khung). Lưu ý dải 5–15 WPM nằm ngoài yêu cầu A2 nhưng
 vẫn nằm trong dải 10–35 WPM của yêu cầu A1 trên T1.
+
+### Một phần lỗi ở tốc độ thấp là do file đáp án của ARRL không nhất quán
+
+Bản ghi 5 WPM giải ra `= NOW 5 WPM = TEXT IS FROM MAY 2024 QST PAGE 57 = THE LETTER K MEANS…`
+trong khi đáp án ghi `NOW 5 WPM TEXT IS FROM MAY 2024 QST PAGE 57 THE LETTER K MEANS…` — tức
+**đúng từng chữ**, chỉ thừa prosign `=` (BT) mà file text không ghi. Năm bản của ngày 260303 có
+`=` trong đáp án, bốn bản của ngày 260304 thì không, dù âm thanh cả hai nhóm đều phát nó.
+
+CER khi bỏ prosign phân đoạn khỏi cả hai phía:
+
+| Bản ghi | Đáp án có `=` | CER | Bỏ `=` |
+|---|---|---|---|
+| 20 WPM | có | 1,8 % | 1,8 % |
+| 25 WPM | có | 1,6 % | 1,6 % |
+| 30 WPM | có | 0,6 % | 0,6 % |
+| 35 WPM | có | 1,1 % | 1,1 % |
+| 40 WPM | có | 2,0 % | 2,0 % |
+| 18 WPM | có | 2,0 % | 2,0 % |
+| 15 WPM | **không** | 5,4 % | **3,1 %** |
+| 13 WPM | **không** | 5,9 % | **3,2 %** |
+| 10 WPM | **không** | 6,1 % | **2,4 %** |
+| 5 WPM | **không** | 14,1 % | **7,1 %** |
+| **Trung bình** | | **4,0 %** | **2,5 %** |
+
+Cách tính mặc định vẫn giữ nguyên (không bỏ prosign), vì tự chuẩn hóa cho hợp ý mình là cách
+chắc chắn nhất để đo ra số đẹp mà sản phẩm không tốt lên. Con số 2,5 % ghi ở đây để biết phần
+nào của khoảng cách là **thật** và phần nào là quy ước của bộ đo: gần một nửa lỗi ở tốc độ thấp
+thuộc loại thứ hai.
+
+Giả thuyết cũ trong `morsedesk/dsp/baseline.py` rằng tốc độ thấp hỏng vì lượng tử hóa ranh giới
+cũng **không đứng vững**: ở 5 WPM một dit dài 48 khung nên sai số nửa khung chỉ là 1 %, còn ở 40
+WPM dit chỉ 6 khung nên cùng sai số đó là 8 % — tức lượng tử hóa đáng lo ở tốc độ CAO, ngược với
+ghi chú cũ.
