@@ -87,3 +87,42 @@ vẫn là đường chính.
 
 **Một chi tiết nhỏ đáng lấy**: danh sách viết tắt nghiệp dư (`CQ DE K AR BT SK BK AS KN TNX FER UR
 OM ES AGN PSE HW ...`) để làm giàu phần thưởng từ vựng cho profile `en`.
+
+## 5. Đã áp dụng: trễ Schmitt + xóa run ngắn cho bộ giải mã DSP (2026-09-22)
+
+Điểm 1 ở mục 4 đã làm xong, nhưng **không** bằng cách port bộ giải mã Bayes của HamFist: chỉ lấy
+đúng hai cơ chế tách mark/space của nó và đặt vào bộ giải mã DSP sẵn có
+(`morsedesk/dsp/baseline.py`), vì bộ quét (ngưỡng × độ dài dit) theo chi phí timing của mình vốn
+đã tốt hơn khâu k-means của họ khi phân đoạn sạch.
+
+| Cách dựng mask | CER trên 152 clip `en` của T1 |
+|---|---|
+| Ngưỡng cứng (bản cũ) | 306,84 % |
+| + trễ Schmitt (tắt ở 0,67 × ngưỡng) | 72,20 % |
+| + xóa run ngắn hơn 0,6 dit | **26,44 %** |
+
+Tốt hơn **11,6 lần**. Theo kênh: clean 281,91 → 18,44 %; mp3 287,30 → 20,52; qrm 203,96 → 17,44;
+qrn 286,17 → 19,44; qsb 556,86 → 70,65.
+
+### Ba chi tiết chỉ lộ ra khi đo
+
+1. **Ngưỡng xóa run phải suy từ chính ứng viên dit đang xét**, không từ thống kê chung của clip.
+   Lấy trung vị độ dài các dấu thì bản tin nhiều gạch có trung vị bằng 3 dit, và 0,4 × 3 = 1,2 dit
+   nuốt luôn khoảng lặng 1 dit trong chữ — "CQ CQ DE R1ABC K" đọc thành "FFE EDII". Lấy tâm cụm
+   thấp của 2-means thì bản tin toàn gạch vẫn hỏng ("TTT" thành "S"), vì khi chỉ có một cụm thì
+   tâm đó chính là dah. Suy từ ứng viên đang xét thì giả thuyết sai tự lộ ra ở chi phí timing và
+   vòng quét loại nó.
+2. **Xóa gai bật trước, lấp khe tắt sau — hai bước tuần tự.** Lật mọi run ngắn cùng một lúc làm
+   hai run ngắn kề nhau đổi chỗ cho nhau mỗi vòng và không bao giờ ổn định.
+3. **Quét song song cả mask cứng lẫn mask Schmitt rồi để chi phí timing tự chọn thì xấu hơn**
+   (33,62 % so với 26,44 %): trên clip nhiễu, mask cứng sinh những giả thuyết có chi phí thấp giả
+   tạo. Đây là hướng nghe rất hợp lý mà số đo bác bỏ.
+
+Hệ quả phụ đáng nói: bốn ca "giới hạn đã biết" của bộ DSP (SI ở 40 WPM, HI ở 48 và 60 WPM, SI ở
+60 WPM) nay giải đúng, vì chúng hỏng do nhiễu lượng tử ở ranh giới run chứ không do mơ hồ thật.
+Đổi lại, "TTT" ở 35 WPM chuyển thành ca mơ hồ: nó khớp timing hệt "S" ở 12 WPM tới bốn chữ số,
+nên chỉ còn prior tốc độ phá thế hòa và prior lại ưu ái giả thuyết chậm. Bản cũ đúng ca này nhờ
+nhiễu lượng tử chứ không nhờ nguyên lý, nên giữ nó làm mốc chặn sẽ là chuẩn giả.
+
+Điểm 2 ở mục 4 (ước lượng nền có cổng cho đặc trưng của model) **đã bị bác bỏ** bằng phép đo d'
+trong `docs/research/02-baseline-numbers.md`: 2,56 so với 4,50 của AGC hiện tại.

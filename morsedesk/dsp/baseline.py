@@ -4,13 +4,27 @@ Dùng làm baseline đo lường và fallback khi mô hình nơ-ron kém tin c�
 (bản tin ngắn không tương phản dot/dash), một prior tốc độ nhẹ quanh SPEED_PRIOR_WPM
 phá thế hòa giữa các giả thuyết (ngưỡng, độ dài dit) có timing_cost gần bằng nhau.
 
-Giới hạn đã biết: bản tin ngắn không có tương phản chấm/gạch (HI, SI, TTT) có thể bị
-đọc thành alias 3× tại một số tốc độ cao khi một dit chỉ dài 4–6 khung (200 khung/s) và
-độ lượng tử hóa át manh mối khoảng tắt 9 so với 7 dit. Đã quan sát lỗi ở 40 WPM (SI),
-48 WPM (HI) và 60 WPM (HI, SI); dải 5–35 WPM và 50 WPM hiện đúng theo test. "TTT" ở
-60 WPM trùng hoàn toàn với "S" ở 20 WPM nên không có manh mối. Engine ONNX là bộ giải
-mã chính; baseline chỉ là đối chứng và dự phòng. Hướng cải tiến sau: nội suy ranh giới
-dưới khung trong run_lengths để giảm nhiễu lượng tử.
+Tách mark/space dùng **trễ Schmitt** rồi **xóa run ngắn hơn MIN_RUN_RATIO lần dit**. Với một
+ngưỡng cứng, mỗi lần envelope rung qua ngưỡng lại sinh thêm một run, và bộ giải mã sinh một ký
+tự cho MỌI run nên chèn thừa tràn lan: đo trên 152 clip `en` của T1 là 306,84 % CER với ngưỡng
+cứng, 72,20 % khi thêm trễ Schmitt, **26,44 %** khi thêm cả xóa run ngắn. Cơ chế trễ lấy từ
+HamFist (`cw_decoder/cw_dsp.cpp`, MIT); xem `docs/research/06-hamfist.md`.
+
+Đã thử và bỏ: quét song song cả mask ngưỡng cứng lẫn mask Schmitt rồi để chi phí timing tự
+chọn. Nghe hợp lý nhưng làm xấu đi (33,62 % so với 26,44 %), vì trên clip nhiễu mask cứng sinh
+những giả thuyết có chi phí thấp giả tạo.
+
+Giới hạn đã biết: bản tin ngắn không có tương phản chấm/gạch (HI, SI, TTT) có thể bị đọc thành
+alias 3× khi timing của hai cách đọc trùng nhau. "TTT" ở 36 WPM khớp hệt "S" ở 12 WPM, và "TTT"
+ở 60 WPM khớp hệt "S" ở 20 WPM: chi phí timing bằng nhau tới bốn chữ số, chỉ còn prior tốc độ
+phá thế hòa và prior lại ưu ái giả thuyết chậm. Đây là mơ hồ thật của tín hiệu, không phải lỗi
+cài đặt; muốn giải đúng thì cần manh mối ngoài timing (mô hình ngôn ngữ), tức engine ONNX.
+Ngược lại, các ca 40 WPM (SI), 48 WPM (HI) và 60 WPM (HI, SI) từng hỏng vì nhiễu lượng tử nay
+đã đúng nhờ trễ Schmitt — test tương ứng để `xfail(strict=False)` nên chúng hiện báo XPASS.
+
+Engine ONNX là bộ giải mã chính; baseline chỉ là đối chứng và là thứ GUI hiện ra khi độ tin cậy
+của model thấp. Hướng cải tiến sau: nội suy ranh giới dưới khung trong run_lengths để giảm
+nhiễu lượng tử.
 """
 
 from __future__ import annotations
@@ -25,6 +39,15 @@ from morsedesk.dsp.tone import ToneEstimate, estimate_tone
 from morsedesk.model.vocab import SPACE
 
 THRESHOLDS = (0.15, 0.25, 0.35, 0.45, 0.55, 0.65)
+# Trễ Schmitt: bật khi vượt ngưỡng, chỉ tắt khi rơi dưới HYSTERESIS_RATIO lần ngưỡng. Lấy từ
+# HamFist (`cw_decoder/cw_dsp.cpp`, MIT), nơi tỉ lệ là 0,7; đo trên 152 clip `en` của T1 thì 0,67
+# cho kết quả tốt nhất trong dải 0,55-0,80.
+HYSTERESIS_RATIO = 0.67
+# Run ngắn hơn ngần này lần dit bị gộp vào hàng xóm. Bộ giải mã sinh một ký tự cho MỌI run nên
+# vài chục gai nhiễu một khung đủ đẩy CER vượt 100 % vì chèn thừa. Quét trên 152 clip `en` của T1:
+# 0,0 -> 72,20 %; 0,4 -> 29,72; 0,6 -> 26,44; 0,8 -> 34,64; 0,9 -> 34,93. Phải nhỏ hơn 1 để không
+# bao giờ nuốt khoảng lặng 1 dit giữa hai dấu trong cùng một chữ.
+MIN_RUN_RATIO = 0.6
 IDEAL_ON = np.array([1.0, 3.0])
 IDEAL_OFF = np.array([1.0, 3.0, 7.0])
 
@@ -68,6 +91,44 @@ def run_lengths(mask: np.ndarray) -> list[tuple[bool, int, int]]:
     starts = np.concatenate([[0], change])
     ends = np.concatenate([change, [len(mask)]])
     return [(bool(mask[s]), int(s), int(e)) for s, e in zip(starts, ends, strict=True)]
+
+
+def schmitt_mask(env: np.ndarray, threshold: float, ratio: float = HYSTERESIS_RATIO) -> np.ndarray:
+    """Mask bật/tắt với trễ Schmitt: bật khi vượt `threshold`, tắt khi rơi dưới `ratio*threshold`.
+
+    Một ngưỡng cứng cắt mỗi lần envelope rung qua ngưỡng thành một run mới, và mỗi run thừa là một
+    ký tự thừa. Vòng lặp vectơ hóa được vì trạng thái phụ thuộc quá khứ, nên giữ dạng lặp: envelope
+    dài nhất trong spec là 20 phút x 200 khung/s = 240k khung, đo 0,05 s.
+    """
+    hi = float(threshold)
+    lo = hi * float(ratio)
+    mask = np.zeros(len(env), dtype=bool)
+    on = False
+    for i in range(len(env)):
+        v = float(env[i])
+        on = v > lo if on else v > hi
+        mask[i] = on
+    return mask
+
+
+def despeckle(mask: np.ndarray, min_len: int) -> np.ndarray:
+    """Xóa gai bật ngắn hơn `min_len`, rồi lấp khe tắt ngắn hơn `min_len`.
+
+    Hai bước tuần tự chứ không lật mọi run ngắn cùng lúc: lật đồng thời làm hai run ngắn kề nhau
+    đổi chỗ cho nhau mỗi vòng và không bao giờ ổn định. Thứ tự này cũng đúng về mặt vật lý — bỏ
+    gai nhiễu trước, rồi mới nối lại dấu bị nhiễu cắt vỡ.
+
+    Khe tắt hợp lệ ngắn nhất là 1 dit, còn `min_len` đặt theo `MIN_RUN_RATIO` (0,4 dit), nên bước
+    lấp khe không nuốt mất khoảng lặng thật. Run duy nhất phủ toàn mask không bao giờ bị xóa.
+    """
+    if min_len <= 1 or len(mask) == 0:
+        return mask
+    m = np.asarray(mask, dtype=bool).copy()
+    for polarity in (True, False):
+        for on, s, e in run_lengths(m):
+            if on is polarity and e - s < min_len and not (s == 0 and e == len(m)):
+                m[s:e] = not polarity
+    return m
 
 
 def _two_means_log(values: np.ndarray) -> tuple[float, float]:
@@ -166,16 +227,29 @@ class BaselineDecoder:
         env = np.convolve(env, np.ones(3) / 3.0, mode="same")
         best: tuple[float, float, float, float, list[tuple[bool, int, int]]] | None = None
         for thr in self.thresholds:
-            runs = run_lengths(env > thr)
-            on_lengths = np.array([e - s for on, s, e in runs if on])
-            if len(on_lengths) < 2:
+            mask = schmitt_mask(env, thr)
+            raw_runs = run_lengths(mask)
+            raw_on = np.array([e - s for on, s, e in raw_runs if on])
+            if len(raw_on) < 2:
                 continue
-            for unit in candidate_units(on_lengths):
-                cost = timing_cost(runs, unit)
-                wpm = 1.2 * FRAME_RATE / unit
-                total = cost + SPEED_PRIOR_WEIGHT * float(np.log(wpm / SPEED_PRIOR_WPM)) ** 2
-                if best is None or total < best[0]:
-                    best = (total, cost, thr, unit, runs)
+            # Ngưỡng xóa run ngắn suy từ CHÍNH ứng viên dit đang xét, không từ thống kê chung:
+            # một giả thuyết dit sai sẽ xóa nhầm (hoặc bỏ sót) và tự lộ ra ở timing_cost, nên
+            # vòng quét tự loại nó. Dùng trung vị các dấu thì bản tin nhiều gạch có trung vị bằng
+            # 3 dit và ngưỡng nuốt luôn khoảng lặng 1 dit trong chữ ("CQ CQ DE R1ABC K" đọc thành
+            # "FFE EDII"); dùng tâm cụm thấp thì bản tin toàn gạch vẫn hỏng ("TTT" thành "S").
+            for unit in candidate_units(raw_on):
+                cleaned = despeckle(mask, max(2, int(MIN_RUN_RATIO * unit)))
+                runs = run_lengths(cleaned)
+                on_lengths = np.array([e - s for on, s, e in runs if on])
+                if len(on_lengths) < 2:
+                    continue
+                # Xóa run ngắn đổi thống kê độ dài, nên xét lại cả ứng viên dit của mask đã sạch.
+                for u in (unit, *candidate_units(on_lengths)):
+                    cost = timing_cost(runs, u)
+                    wpm = 1.2 * FRAME_RATE / u
+                    total = cost + SPEED_PRIOR_WEIGHT * float(np.log(wpm / SPEED_PRIOR_WPM)) ** 2
+                    if best is None or total < best[0]:
+                        best = (total, cost, thr, u, runs)
         if best is None:
             return BaselineResult([], 0.0, 0.0, float("inf"))
         _total, cost, thr, unit, runs = best

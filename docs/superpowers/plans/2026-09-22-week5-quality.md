@@ -1065,7 +1065,7 @@ Expected: hai trailer hiện đủ.
   - `deepcw_beam.CharHypothesis(text, chars, frames, probs, acoustic_logp, lm_logp, score, n_words)` với thuộc tính `emissions -> list[tuple[str, int, float]]`
   - `deepcw_beam.char_beam_search(log_probs, chars: list[str], blank: int, lm=None, alphabet=None, params=None) -> CharHypothesis`
 
-- [ ] **Step 1: Viết test thất bại**
+- [x] **Step 1: Viết test thất bại**
 
 Tạo `tests/unit/test_deepcw_beam.py`:
 
@@ -1145,7 +1145,7 @@ def test_beam_accepts_batched_lattice():
     assert char_beam_search(lp, CHARS, BLANK, params=CharBeamParams(beam=8)).text == "CQ"
 ```
 
-- [ ] **Step 2: Chạy test để thấy nó đỏ**
+- [x] **Step 2: Chạy test để thấy nó đỏ**
 
 ```bash
 cd /c/Users/Admin/morsedesk && uv run pytest tests/unit/test_deepcw_beam.py -q
@@ -1153,7 +1153,7 @@ cd /c/Users/Admin/morsedesk && uv run pytest tests/unit/test_deepcw_beam.py -q
 
 Expected: lỗi thu thập `ModuleNotFoundError: No module named 'morsedesk.model.deepcw_beam'`, `1 error`.
 
-- [ ] **Step 3: Viết `morsedesk/model/deepcw_beam.py`**
+- [x] **Step 3: Viết `morsedesk/model/deepcw_beam.py`**
 
 ```python
 """Beam ký tự CTC trên hậu nghiệm DeepCW, chấm bằng LM ký tự của profile `en`.
@@ -1340,7 +1340,7 @@ def char_beam_search(log_probs: np.ndarray, chars: list[str], blank: int,
     return best if best is not None else CharHypothesis("", (), (), (), NEG_INF, 0.0, NEG_INF, 0)
 ```
 
-- [ ] **Step 4: Chạy test để thấy nó xanh**
+- [x] **Step 4: Chạy test để thấy nó xanh**
 
 ```bash
 cd /c/Users/Admin/morsedesk && uv run pytest tests/unit/test_deepcw_beam.py -q
@@ -1348,7 +1348,7 @@ cd /c/Users/Admin/morsedesk && uv run pytest tests/unit/test_deepcw_beam.py -q
 
 Expected: `5 passed`.
 
-- [ ] **Step 5: Nối beam vào `Decoder._decode_deepcw`**
+- [x] **Step 5: Nối beam vào `Decoder._decode_deepcw`**
 
 Trong `morsedesk/api.py`, thay `_deepcw_words` (viết ở Task 2) bằng bản có nhánh beam; phần còn lại của `_decode_deepcw` giữ nguyên:
 
@@ -1382,7 +1382,7 @@ Trong `morsedesk/api.py`, thay `_deepcw_words` (viết ở Task 2) bằng bản 
 
 `Decoder("en", engine="deepcw")` mặc định `lm=True` nên nó cần `models/lm/en.bin` — đúng như engine `onnx`. Test của Task 2 dùng `lm=False` nên không đổi.
 
-- [ ] **Step 6: Chạy lại toàn bộ test liên quan**
+- [x] **Step 6: Chạy lại toàn bộ test liên quan**
 
 ```bash
 cd /c/Users/Admin/morsedesk && uv run pytest tests/unit/test_deepcw.py tests/unit/test_deepcw_beam.py tests/unit/test_deepcw_engine.py -q
@@ -1390,7 +1390,7 @@ cd /c/Users/Admin/morsedesk && uv run pytest tests/unit/test_deepcw.py tests/uni
 
 Expected: `28 passed`.
 
-- [ ] **Step 7: Đo trước/sau trên tập con `en` của T1**
+- [x] **Step 7: Đo trước/sau trên tập con `en` của T1**
 
 ```bash
 cd /c/Users/Admin/morsedesk && grep '"profile": "en"' testdata/generated/t1/manifest.jsonl > testdata/generated/t1/manifest_en.jsonl && wc -l testdata/generated/t1/manifest_en.jsonl
@@ -1410,7 +1410,7 @@ cd /c/Users/Admin/morsedesk && PYTHONUTF8=1 uv run morsedesk bench --manifest te
 
 Expected: một con số CER mới (beam + LM) và thời gian mỗi clip lớn hơn (greedy 0,019 s/clip). Ghi lại **cả hai** con số.
 
-- [ ] **Step 8: Quyết định giữ hay bỏ**
+- [x] **Step 8: Quyết định giữ hay bỏ**
 
 - Nếu `CER(beam+LM) < CER(greedy)`: giữ `DEEPCW_LM = True` trong `morsedesk/api.py`, không sửa gì.
 - Nếu `CER(beam+LM) >= CER(greedy)`: sửa đúng một hằng số trong `morsedesk/api.py` thành
@@ -1423,7 +1423,7 @@ DEEPCW_LM = False
 
 Trong cả hai trường hợp, module `deepcw_beam.py` và test của nó **ở lại**.
 
-- [ ] **Step 9: Ghi số vào `docs/research/04-pretrained-baselines.md`**
+- [x] **Step 9: Ghi số vào `docs/research/04-pretrained-baselines.md`**
 
 Chèn trước mục "Giấy phép và phạm vi sử dụng" một mục mới; điền số đo thật từ Step 7 vào các ô `<...>`:
 
@@ -1442,7 +1442,7 @@ Quyết định: <giữ / bỏ> beam+LM cho engine `deepcw` (`api.DEEPCW_LM = <T
 lệch đo được>. Lệnh tái lập ở `docs/superpowers/plans/2026-09-22-week5-quality.md` Task 3.
 ```
 
-- [ ] **Step 10: Ruff, test đầy đủ, commit**
+- [x] **Step 10: Ruff, test đầy đủ, commit**
 
 ```bash
 cd /c/Users/Admin/morsedesk && uv run ruff check morsedesk tests tools && uv run pytest -q
