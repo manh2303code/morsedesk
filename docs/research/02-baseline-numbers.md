@@ -315,3 +315,26 @@ lực mô hình âm thanh**, không ở khâu tiền xử lý hay khâu giải m
 kênh sạch (mình 13,88 % so với DeepCW 7,06 %), nơi không có fade nào để đổ lỗi. Vì vậy bước tiếp
 theo là tăng năng lực mô hình (thí nghiệm E9, `hidden` 128 → 256), chứ không tiếp tục tinh chỉnh
 tham số giải mã.
+
+## Mốc cuối ngày 2026-09-22 trên toàn T1 (500 clip, 3 profile)
+
+Không huấn luyện lại lần nào trong ngày; toàn bộ mức cải thiện đến từ khâu giải mã và khâu
+tiền xử lý.
+
+| Engine | CER | WER | Ghi chú |
+|---|---|---|---|
+| `onnx` + beam + LM | **20,21 %** | 44,41 % | alpha 0,3 · char_bonus 1,25 · đoán tone theo đỉnh phổ |
+| `baseline` (DSP) | **35,12 %** | 70,11 % | trễ Schmitt + xóa run ngắn |
+
+Đường đi của engine `onnx` trong ngày: 25,27 % → 24,99 % (đoán tone) → 23,85 % → 21,58 %
+(char_bonus) → **20,21 %** (alpha 0,3). Bộ DSP: ~296 % → **35,12 %**.
+
+Engine `onnx` theo kênh: clean 12,73 %, mp3 11,15 %, qrm 12,69 %, qrn 12,80 %, qsb 51,68 %.
+Theo profile: en 18,19 %, ru 21,18 %, kk-cyrl-ru 21,27 %.
+
+Bộ DSP theo kênh: clean 21,90 %, mp3 25,88 %, qrm 21,66 %, qrn 23,20 %, qsb 82,96 %. Nó vẫn
+kém model rõ rệt, đúng vai trò dự phòng, nhưng đã ở mức đọc được thay vì sinh rác.
+
+Khoảng cách còn lại tập trung ở `qsb` (51,68 % so với 12,7 % của bốn kênh kia) — đã đo là gần
+giới hạn vật lý ở mục trên — và ở năng lực mô hình trên kênh sạch, đang được thí nghiệm E9
+(`hidden` 128 → 256) kiểm chứng.

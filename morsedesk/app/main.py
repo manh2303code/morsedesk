@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -44,10 +45,22 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def log_directory() -> Path:
+    """Thư mục log theo spec mục 7: `~/.local/share/morsedesk/logs/` trên Linux (CP-15).
+
+    Không dùng thẳng `QStandardPaths.AppDataLocation` vì Qt ghép cả tên tổ chức lẫn tên ứng dụng
+    và cho ra `~/.local/share/MorseDesk/MorseDesk/logs`, lệch spec. Linux là nền tảng đích nên ở
+    đó theo đúng chuẩn XDG; các nền tảng khác (chỉ dùng để chạy test trên máy dev) vẫn theo Qt.
+    """
+    if sys.platform.startswith("linux"):
+        base = os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share")
+        return Path(base) / "morsedesk" / "logs"
+    return Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)) / "logs"
+
+
 def setup_logging() -> None:
-    """Ghi log xoay vòng (1 MB x 3) vào thư mục dữ liệu ứng dụng; rơi về basicConfig nếu không tạo được."""
-    base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
-    log_dir = Path(base) / "logs"
+    """Ghi log xoay vòng (1 MB x 3) vào thư mục log; rơi về basicConfig nếu không tạo được."""
+    log_dir = log_directory()
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
         handler = RotatingFileHandler(
