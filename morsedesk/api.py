@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from morsedesk.dsp.frontend import (
     mix_envelope,
     window_cfg,
 )
+from morsedesk.dsp.selection import SNR_OUT_OF_RANGE_DB, prefer_dsp
 from morsedesk.dsp.tone import ToneEstimate, estimate_tone, fallback_tone_hz
 from morsedesk.encode.synth import add_noise, elements_to_audio, tone_power
 from morsedesk.encode.text import text_to_tokens
@@ -65,9 +67,16 @@ class DecodeResult:
     # Song song với `warnings`: cùng thứ tự, cùng số phần tử. `warnings` là tiếng Việt cho CLI và
     # log; `warning_codes` là mã ổn định để giao diện dịch sang en/ru/kk (CP-10).
     warning_codes: list[DecodeWarning] = field(default_factory=list)
+    # Đường thực sự sinh ra `text`: "model" như thường lệ, hoặc "dsp" khi tín hiệu sạch hơn dải
+    # huấn luyện và bộ giải mã DSP đo được tốt hơn hẳn (xem morsedesk/dsp/selection.py).
+    decoded_by: str = "model"
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False, indent=2)
+
+
+def _finite_snr(v: float | None) -> bool:
+    return v is not None and math.isfinite(float(v))
 
 
 def _resolve_profile(profile: str | Profile) -> Profile:
@@ -449,6 +458,22 @@ class Decoder:
                                        for i, f, p in greedy_decode_with_frames(logp, VOCAB.blank_id)])
             words = emissions_to_words(emissions, profile, FRAME_RATE, n_in)
         confidence = float(np.mean([w.confidence for w in words])) if words else 0.0
+        # Tín hiệu sạch hơn dải huấn luyện: bộ DSP đo được TỐT HƠN HẲN mô hình trên đúng loại
+        # này (T2 bản ghi thật: DSP 4,0 % so với mô hình 24,2 %), nên nếu timing cũng khớp thì
+        # lấy kết quả của nó và để kết quả mô hình xuống dòng dự phòng. Chỉ chạy bộ DSP khi SNR
+        # đã vượt ngưỡng, để clip bình thường không phải trả thêm chi phí nào.
+        if self.fallback and _finite_snr(snr_db) and float(snr_db) > SNR_OUT_OF_RANGE_DB:
+            dsp = self._baseline_tokens(x, tone_hz)
+            ambiguous = any(len(profile.map.get(tok, ())) > 1 for tok in dsp.tokens)
+            if prefer_dsp(snr_db, dsp.cost, ambiguous):
+                dsp_conf = float(np.exp(-dsp.cost)) if np.isfinite(dsp.cost) else 0.0
+                dsp_words = symbols_to_words(dsp.symbols, profile, FRAME_RATE, dsp_conf, None)
+                lang = profile.id if (not self.auto or scores) else ""
+                return DecodeResult(
+                    " ".join(w.text for w in dsp_words), dsp_words, dsp.wpm, tone_hz, snr_db,
+                    lang, scores, [w.vi() for w in warnings], "onnx",
+                    " ".join(w.text for w in words), warning_codes=list(warnings),
+                    decoded_by="dsp")
         fallback_text = None
         if confidence < FALLBACK_CONFIDENCE:
             warnings.append(warn(WarningCode.LOW_CONFIDENCE_WITH_DSP))
