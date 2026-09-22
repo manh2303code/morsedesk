@@ -3,6 +3,18 @@
 Ứng dụng desktop Linux air-gap giải mã và tạo mã Morse cho tiếng Anh, Nga, Kazakh.
 Spec: `docs/superpowers/specs/2026-09-18-morsedesk-design.md`.
 
+## Chạy ứng dụng
+
+| Nền tảng | Cách nhanh nhất |
+|---|---|
+| Windows | bấm đúp `MorseDesk.cmd` ở gốc kho — tự cài phụ thuộc lần đầu rồi mở giao diện |
+| Windows (dòng lệnh) | `uv run morsedesk-gui` |
+| Linux | `chmod +x dist/MorseDesk-x86_64.AppImage` rồi bấm đúp |
+
+Model và ba mô hình ngôn ngữ nằm sẵn trong `models/` nên giao diện mở thẳng. Thiếu chúng thì
+hộp thoại nêu đúng đường dẫn còn thiếu; muốn chạy không cần model nơ-ron thì thêm
+`--engine baseline`.
+
 ## Thiết lập môi trường dev
 
 ```bash
