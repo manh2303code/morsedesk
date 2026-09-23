@@ -35,6 +35,31 @@ for lib in libxcb-cursor.so.0 libxcb-icccm.so.4 libxcb-image.so.0 libxcb-keysyms
     if [ -e "$INTERNAL/$lib" ]; then echo "  có   $lib"; else echo "  THIẾU $lib"; RC=1; fi
 done
 
+echo "== tự kiểm giải mã bằng model trong gói, so với mã nguồn trên cùng file =="
+# Mẫu là các cặp *.wav + *.dev.json mà scripts/test_windows_exe.ps1 để lại (mã nguồn chạy trên
+# Windows). Phần mở cửa sổ bên dưới dùng engine baseline, nên KHÔNG chứng minh được model, LM và
+# onnxruntime trong gói chạy — phần này thì có. `--self-test` không nạp Qt, không cần màn hình.
+SELFTEST=${3:-/work/dist/selftest}
+N=0
+for WAV in "$SELFTEST"/*.wav; do
+    [ -e "$WAV" ] || continue
+    REF="${WAV%.wav}.dev.json"
+    [ -e "$REF" ] || continue
+    OUTJ="/tmp/$(basename "${WAV%.wav}").appimage.json"
+    "$APPDIR/AppRun" --self-test "$WAV" "$OUTJ" >/dev/null 2>/tmp/selftest.err
+    # Dòng "text" cấp cao nhất (thụt đúng 2 dấu cách). File sinh trên Windows kết thúc dòng CRLF.
+    GOT=$(grep -m1 '^  "text":' "$OUTJ" 2>/dev/null | tr -d '\r')
+    WANT=$(grep -m1 '^  "text":' "$REF" | tr -d '\r')
+    if [ -n "$GOT" ] && [ "$GOT" = "$WANT" ]; then
+        echo "  giống  $(basename "$WAV"):$GOT"
+    else
+        echo "  KHÁC   $(basename "$WAV"): gói ra [$GOT], mã nguồn [$WANT]"
+        cat "$OUTJ" 2>/dev/null | head -3; tail -5 /tmp/selftest.err; RC=1
+    fi
+    N=$((N + 1))
+done
+[ "$N" -gt 0 ] || { echo "  không có mẫu nào — chạy scripts/test_windows_exe.ps1 trước"; RC=1; }
+
 echo "== mở cửa sổ thật dưới Xvfb rồi chụp màn hình =="
 export HOME=/tmp
 Xvfb :99 -screen 0 1280x800x24 >/tmp/xvfb.log 2>&1 &

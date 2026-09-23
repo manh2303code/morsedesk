@@ -126,3 +126,25 @@ def test_logging_is_set_up_after_the_app_identity(tmp_path, monkeypatch):
     assert rc == 2 and len(seen) == 1
     assert not before.endswith("MorseDesk/MorseDesk")
     assert seen[0].endswith("MorseDesk/MorseDesk"), seen[0]
+
+
+def test_close_splash_is_a_no_op_outside_the_one_file_build(monkeypatch):
+    """Chạy từ mã nguồn hay AppImage thì không có `pyi_splash`; không được ném lỗi."""
+    import sys
+
+    monkeypatch.setitem(sys.modules, "pyi_splash", None)     # None trong sys.modules -> ImportError
+    app_main.close_splash()
+
+
+def test_splash_is_closed_before_the_missing_models_dialog(tmp_path, monkeypatch):
+    """Ảnh chờ luôn nằm trên cùng: còn mở thì nó che hộp thoại báo thiếu model."""
+    import sys
+    import types
+
+    events = []
+    fake = types.ModuleType("pyi_splash")
+    fake.close = lambda: events.append("close")
+    monkeypatch.setitem(sys.modules, "pyi_splash", fake)
+    monkeypatch.setattr(app_main, "show_missing_dialog", lambda msg: events.append("dialog"))
+    assert main(["--model", str(tmp_path / "none.onnx"), "--lm-dir", str(tmp_path)]) == 2
+    assert events == ["close", "dialog"]

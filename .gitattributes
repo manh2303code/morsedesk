@@ -3,4 +3,6 @@
 # và thông điệp đó không hề gợi ra nguyên nhân.
 *.sh text eol=lf
 AppRun text eol=lf
+# appimagetool từ chối file .desktop có CR ("line ending with a carriage return") — gặp 23/09.
+*.desktop text eol=lf
 Dockerfile* text eol=lf

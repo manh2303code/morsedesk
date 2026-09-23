@@ -7,7 +7,8 @@ Spec: `docs/superpowers/specs/2026-09-18-morsedesk-design.md`.
 
 | Nền tảng | Cách nhanh nhất |
 |---|---|
-| Windows | bấm đúp `MorseDesk.cmd` ở gốc kho — tự cài phụ thuộc lần đầu rồi mở giao diện |
+| Windows, máy người dùng | chép **một file** `dist/MorseDesk.exe` (137 MB) rồi bấm đúp — không cần Python, không cài đặt. Dựng bằng `scripts/build_windows.ps1` |
+| Windows, máy dev | bấm đúp `MorseDesk.cmd` ở gốc kho — tự cài phụ thuộc lần đầu rồi mở giao diện |
 | Windows (dòng lệnh) | `uv run morsedesk-gui` |
 | Linux | `bash scripts/install_linux.sh dist/MorseDesk-x86_64.AppImage` một lần, rồi mở từ menu ứng dụng. Chép file rồi bấm đúp **không chạy**: file từ USB/Windows mất bit thực thi và trình quản lý file im lặng bỏ qua |
 
@@ -52,12 +53,33 @@ Tùy chọn: cài `ffmpeg` (ví dụ `scoop install ffmpeg`) để bộ sinh d�
 - Số đo ngày 23/09/2026 (model E9 v0.3.0, cửa sổ 12 s): T1 tổng hợp **8,99 %** CER, bộ dev cùng ma trận khác seed **10,38 %** (sai số mỗi bộ ±1 điểm) — gần như toàn bộ phần còn lại nằm ở kênh `qsb`; bản ghi thật ARRL **3,93 %**, riêng dải 18–40 WPM **1,52 %** (đo 22/09) (đạt yêu cầu A2 của spec); T0 roundtrip audio sạch **CER = 0 trên cả 21 ô** (đạt D2). Chi tiết và cách tái lập: `docs/research/02-baseline-numbers.md`.
 - Bộ giải mã được chọn theo bằng chứng đo từ chính clip: tín hiệu sạch hơn dải huấn luyện của model thì lấy kết quả bộ DSP, còn lại dùng model (`morsedesk/dsp/selection.py`). `DecodeResult.decoded_by` cho biết đường nào đã sinh ra văn bản.
 
+## Đóng gói Windows: một file `.exe`
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build_windows.ps1     # -> dist/MorseDesk.exe
+powershell -ExecutionPolicy Bypass -File scripts/test_windows_exe.ps1  # khởi động + tự kiểm giải mã
+```
+
+- Một file chứa sẵn model âm thanh, ba mô hình ngôn ngữ, Qt và onnxruntime. Mỗi lần chạy nó bung
+  vào `%TEMP%\_MEIxxxx` rồi tự dọn khi đóng cửa sổ bình thường (giết cứng tiến trình thì thư mục
+  đó ở lại).
+- Đo 23/09 (máy đang bận train): ảnh chờ hiện sau **0,3–0,6 s**, cửa sổ chính sau **5,0–5,4 s**;
+  chạy từ mã nguồn là 2,6–3,1 s. Ảnh chờ do bootloader PyInstaller vẽ, nói chuyện với ứng dụng qua
+  socket **loopback 127.0.0.1** — không ra mạng ngoài.
+- `MorseDesk.exe --self-test VÀO.wav RA.json` giải một file bằng đúng model trong gói rồi ghi
+  JSON, không mở cửa sổ. `test_windows_exe.ps1` dùng nó để đòi kết quả **giống hệt** mã nguồn trên
+  cùng file (ru, kk, và một ca en đi đường model).
+- File chưa ký: SmartScreen có thể cảnh báo khi file đến từ Internet; chép qua USB thì không có
+  dấu "tải từ mạng" nên thường không hỏi. **Smart App Control** (Windows 11) thì khác: nếu đang
+  bật, nó chặn file chưa ký bất kể nguồn gốc, và chỉ tắt được một chiều. Chi tiết:
+  `.superpowers/sdd/research-distribution.md` §2.
+
 ## Đóng gói AppImage (tuần 6)
 
 ```bash
 docker build -f packaging/Dockerfile.build -t morsedesk-build .
 docker run --rm -v "$PWD":/src morsedesk-build bash scripts/build_appimage.sh
-# -> dist/MorseDesk-x86_64.AppImage (146 MB) và dist/SHA256SUMS
+# -> dist/MorseDesk-x86_64.AppImage (145 MB) và dist/SHA256SUMS
 
 docker build -f packaging/Dockerfile.test -t morsedesk-test .
 docker run --rm -v "$PWD":/work morsedesk-test bash /work/scripts/test_appimage.sh
@@ -70,5 +92,8 @@ docker run --rm -v "$PWD":/work morsedesk-test bash /work/scripts/test_appimage.
 - Thư viện đồ họa `libEGL`/`libGL` **không** đóng gói: theo thông lệ AppImage chúng phải khớp
   driver của máy chạy, và mọi cài đặt Ubuntu có màn hình đều đã có.
 - Model (`models/acoustic.onnx`) và ba mô hình ngôn ngữ được gói kèm nếu có mặt lúc dựng; thiếu
-  thì ứng dụng hiện hộp thoại nêu đường dẫn còn thiếu rồi thoát mã 2 (`morsedesk/app/main.py`). Bản
-  `dist/` hiện có dựng 22/09 với model v0.2.0 — dựng lại trước khi dùng.
+  thì ứng dụng hiện hộp thoại nêu đường dẫn còn thiếu rồi thoát mã 2 (`morsedesk/app/main.py`).
+- `test_appimage.sh` còn chạy `AppRun --self-test` trên các mẫu `dist/selftest/` mà
+  `scripts/test_windows_exe.ps1` để lại, và đòi văn bản **giống hệt** mã nguồn — phần mở cửa sổ chỉ
+  dùng engine baseline nên không chứng minh được model trong gói. Bản dựng 23/09 (model v0.3.0,
+  145 MB) đạt cả ba mẫu ru/kk/en.

@@ -123,7 +123,7 @@ audio → dò tone 14 ms → dither nếu SNR>25dB → đặc trưng 11 chiều,
 - **Nhận diện bảng mã tự động cần ~8 ký tự.** Dưới ngưỡng đó `auto` đúng 66,7 %, và đoán sai bảng
   mã thì mọi ký tự sau đều sai. Đây đúng là tình cảnh những giây đầu một phiên nghe.
 - Ở tín hiệu sạch, model **đã bão hòa**: mọi tần số 300–1500 Hz và mọi tốc độ 5–45 WPM đều CER 0 %.
-  Khoảng cách còn lại nằm ở **nhiễu** (qsb 41 % T1 / 47 % dev), không ở tham số tín hiệu.
+  Khoảng cách còn lại nằm ở **nhiễu** (qsb 38 % trên cả T1 lẫn dev, sau bản sửa 23/09), không ở tham số tín hiệu.
 
 ### Nghiên cứu
 Quét GitHub/paper/diễn đàn trước khi tự mò — nhưng **research xong vẫn phải đo trên dữ liệu của
@@ -235,8 +235,12 @@ nhận trên T1: T1 9,70 → 9,79 %, dev và T2 không đổi, 120/120 lần ch�
 cậy ~0,99 — về đường bao nó chính là Morse chữ E. Test cũ kiểm §7 bằng `engine="baseline"` nên không bắt
 được việc engine `onnx` bịa chữ; test mới chạy trên `onnx`.
 
-**Bản đóng gói cũ:** `dist/MorseDesk-x86_64.AppImage` dựng 22/09 23:24 với model **v0.2.0** và cửa
-sổ 4 s, trước 19 commit. Phải dựng lại trước khi đưa ai dùng.
+**Đóng gói (dựng lại 23/09, model v0.3.0 + mọi bản sửa).** Windows `dist/MorseDesk.exe` một file
+137 MB (`scripts/build_windows.ps1`); Linux `dist/MorseDesk-x86_64.AppImage` 145 MB. Kiểm: chạy
+`scripts/test_windows_exe.ps1` TRƯỚC (nó sinh mẫu `dist/selftest/`), rồi `scripts/test_appimage.sh`
+— cả hai đòi `--self-test` ra văn bản giống hệt mã nguồn. Đổi model thì phải dựng lại CẢ HAI.
+Docker Desktop có lúc báo "running" mà máy ảo đã chết (lỗi 500): `docker desktop restart` — train
+trong WSL vẫn sống qua lần khởi động lại đó (đã thử 23/09).
 
 Chưa làm: T3 live so với file lệch **3,1 điểm** (spec đòi dưới 1); trang Nghe chưa hiện bộ đếm khối
 bị bỏ (spec tuần 5–6 §7.6); người bản ngữ soát Kazakh (CP-12); đo chế độ nghe qua micro thật.

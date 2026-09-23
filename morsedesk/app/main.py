@@ -62,6 +62,22 @@ def setup_logging() -> None:
         logging.basicConfig(level=logging.INFO)
 
 
+def close_splash() -> None:
+    """Đóng màn hình chờ của bản `.exe` một file, nếu đang chạy trong bản đó.
+
+    Bản một file phải bung ~300 MB vào thư mục tạm trước khi Python chạy được dòng nào; lần đầu
+    Defender quét từng file bung ra và việc đó từng mất 55 giây mà không có gì trên màn hình.
+    Bootloader của PyInstaller hiện ảnh chờ trong lúc đó; đây là chỗ tắt nó. Module `pyi_splash`
+    chỉ có trong bản đóng gói có splash, và nói chuyện với bootloader qua socket loopback
+    127.0.0.1 — không ra mạng ngoài. Chạy từ mã nguồn, AppImage: không có module, không làm gì.
+    """
+    try:
+        import pyi_splash  # type: ignore[import-not-found]
+    except ImportError:
+        return
+    pyi_splash.close()
+
+
 def show_missing_dialog(message: str) -> None:
     """Hộp thoại lỗi liệt kê file model/LM thiếu; tách riêng để test monkeypatch không mở hộp thoại thật."""
     app = QApplication.instance() or QApplication(sys.argv[:1])
@@ -108,6 +124,7 @@ def main(argv: list[str] | None = None) -> int:
     if missing:
         msg = missing_models_message(missing)
         log.error(msg)
+        close_splash()                  # ảnh chờ nằm trên cùng sẽ che mất hộp thoại lỗi
         show_missing_dialog(msg)
         return 2
 
@@ -118,6 +135,7 @@ def main(argv: list[str] | None = None) -> int:
     sys.excepthook = excepthook
     app, window = create_app(args)
     window.show()
+    close_splash()
     return int(app.exec())
 
 
