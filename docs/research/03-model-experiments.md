@@ -363,3 +363,35 @@ sức gánh cả điều kiện khó lẫn dễ"* — nói về hidden 128, và 
 **Trùng tên cần tránh:** `runs/E10` = hidden 256 + đuôi SNR sạch. "E10" trong spec tuần 5–6 §3.4 =
 dữ liệu thật gán nhãn giả bằng DeepCW. Cái sau chưa bao giờ được làm; E8 (nhiễu thật HamNoise) cũng
 chưa. Thang thí nghiệm E6–E10 của spec **chưa chạy hết**.
+
+## E16: hidden 384 + fading nặng — model v0.4.0 (2026-09-23)
+
+Ghép hai hướng từng thắng riêng: model lớn hơn (E9, hidden 256 → nay 384) và phân bố fading nặng
+của E6 (`--qsb-hard`: 60 % clip có QSB, sâu 10–24 dB, chu kỳ 2–8 s). 60 000 bước, batch 16, AdamW
+lr 1e-3 cosine, seed 23, trên RTX 5090 trong WSL: 2,7 giờ. **1 119 425 tham số** (Conv 32 640 +
+BiGRU 1 036 800 + Linear 49 985), ONNX 4,5 MB. TER validation 18,61 % — KHÔNG dùng để so với E9
+(khác seed, khác đề).
+
+So ghép cặp với E9 trên cùng clip, cùng pipeline hiện tại (có quy tắc độ dài DSP và đáp án T2 đã
+sửa), bootstrap 5 000 lần:
+
+| Bộ | E9 (0.3.0) | E16 | Hiệu [khoảng 95 %] | Kết luận |
+|---|---|---|---|---|
+| dev | 10,38 % | **8,07 %** | −2,31 [−3,10; −1,52] | tốt hơn chắc chắn |
+| T1 | 8,99 % | **7,78 %** | −1,21 [−1,84; −0,60] | tốt hơn chắc chắn (xác nhận) |
+| T2 | 1,84 % | 1,62 % | −0,22 [−0,65; 0,00] | không phân biệt được |
+
+Theo kênh (T1 / dev): clean 1,97→1,64 / 2,72→2,56; mp3 1,78→1,44 / 3,54→3,05; qrm 1,39→1,69 /
+4,19→2,70; qrn 1,56→1,54 / 2,95→2,73; **qsb 38,26→32,61 / 38,47→29,31**. qrm trên T1 nhích lên
+0,30 điểm nhưng dev giảm 1,49 — trong nhiễu từng kênh (±0,5–2,8).
+
+qsb theo SNR (T1 / dev), 0–3–6–10–20 dB: 59,43 / 46,28 / 32,77 / 19,83 / 4,74 và 49,88 / 35,29 /
+32,27 / 23,42 / 5,68. Phần thắng nằm cả ở vùng SNR thấp mà trước đây coi là "vật lý": ở 0 dB dev
+71,36 → 49,88. Nghĩa là một phần của nó vẫn là năng lực model, chưa chạm trần.
+
+Theo ngôn ngữ (T1 / dev): en 7,94→7,73 / 8,86→6,76; ru 9,18→7,23 / 9,63→6,67; kk 9,86→8,40 /
+12,66→10,80. T2: mười bản ARRL giống hệt từng chữ số (đi đường DSP), Kazakh 4,08→3,50.
+
+**Đã chọn E16 làm `models/acoustic.onnx` v0.4.0.** E9 lưu ở `models/archive/` (gitignored).
+Giá phải trả: file model 2,2 → 4,5 MB; model từ ~2 % lên vài phần trăm thời gian giải mã (beam +
+LM vẫn chiếm phần lớn).

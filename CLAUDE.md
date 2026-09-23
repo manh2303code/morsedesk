@@ -106,7 +106,7 @@ audio → dò tone 14 ms → dither nếu SNR>25dB → đặc trưng 11 chiều,
 
 | | Là gì | Ghi chú |
 |---|---|---|
-| `models/acoustic.onnx` | CTC 65 lớp, hidden 256, 2,2 MB (E9 v0.3.0) | 65 lớp là **cả ký tự** (`.-`, `-...`), không phải từng chấm gạch |
+| `models/acoustic.onnx` | CTC 65 lớp, hidden 384, 4,5 MB, 1 119 425 tham số (E16 v0.4.0) | 65 lớp là **cả ký tự** (`.-`, `-...`), không phải từng chấm gạch |
 | `models/lm/{en,ru,kk}.bin` | n-gram ký tự bậc 6, 41 MB | **bảng đếm thống kê, không phải nơ-ron**; chấm cùng đáp án gốc thì đáng ~3,9 điểm CER (T1 13,57 → 9,70 %), riêng Kazakh ~8,5 điểm |
 | `models/deepcw/model.onnx` | model ngoài, 15 MB | chỉ profile `en`, dùng đối chứng |
 
@@ -186,15 +186,15 @@ mình**. Trong một phiên đã có hai kết luận research không sống só
 
 ## Hiện trạng
 
-Model E9 v0.3.0, cửa sổ 12 s, beam `alpha` 0,3 / `char_bonus` 1,25. Hai bộ tổng hợp cùng ma trận:
+Model **E16 v0.4.0** (hidden 384, 1 119 425 tham số, fading nặng; thay E9 ngày 23/09 — thắng chắc chắn trên dev và T1, không xấu trên T2), cửa sổ 12 s, beam `alpha` 0,3 / `char_bonus` 1,25. Hai bộ tổng hợp cùng ma trận:
 
 | | tổng | clean | mp3 | qrm | qrn | qsb |
 |---|---|---|---|---|---|---|
-| T1 (seed 1000) | **8,99 %** | 1,97 | 1,78 | 1,39 | 1,56 | 38,26 |
-| dev (seed 500000) | **10,38 %** | 2,72 | 3,54 | 4,19 | 2,95 | 38,47 |
+| T1 (seed 1000) | **7,78 %** | 1,64 | 1,44 | 1,69 | 1,54 | 32,61 |
+| dev (seed 500000) | **8,07 %** | 2,56 | 3,05 | 2,70 | 2,73 | 29,31 |
 
-T2 **1,84 %** (bản ghi ARRL thật 0,95 %, 18–40 WPM không sai ký tự nào; trước 23/09 báo 3,93 % vì đáp án Kazakh bị viết phẳng — xem 02-baseline-numbers). **Không kênh nào qua cổng 2 % một cách chắc chắn** — trên T1 bốn kênh
-chạm dưới 2 % nhưng dev độc lập cho 2,7–4,2 %.
+T2 **1,62 %** (bản ghi ARRL thật 0,95 %, 18–40 WPM không sai ký tự nào; trước 23/09 báo 3,93 % vì đáp án Kazakh bị viết phẳng — xem 02-baseline-numbers). **Không kênh nào qua cổng 2 % một cách chắc chắn** — trên T1 bốn kênh
+chạm dưới 2 % nhưng dev độc lập cho 2,6–3,1 %.
 
 ### Nhiễu đo — đọc trước khi tin một con số
 
