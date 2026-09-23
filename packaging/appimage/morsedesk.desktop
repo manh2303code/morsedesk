@@ -2,8 +2,12 @@
 Type=Application
 Name=MorseDesk
 GenericName=Morse decoder
-Comment=Giải mã và tạo mã Morse ngoại tuyến (EN/RU/KK)
+Comment=Decode and send Morse code offline (English, Russian, Kazakh)
+Comment[ru]=Декодирование и передача азбуки Морзе без интернета (английский, русский, казахский)
+Comment[kk]=Морзе әліпбиін интернетсіз декодтау және жіберу (ағылшын, орыс, қазақ)
 Exec=morsedesk-gui
 Icon=morsedesk
 Categories=AudioVideo;Audio;HamRadio;
 Terminal=false
+# Lớp WM_CLASS mà Qt đặt trên X11 = tên ứng dụng; thiếu dòng này dock không ghép cửa sổ với logo.
+StartupWMClass=MorseDesk

@@ -29,7 +29,7 @@ def test_create_app_builds_window_with_language(qtbot, tiny_lm_dir, tmp_path, mo
     qtbot.addWidget(window)
     try:
         assert window.current_language == "ru" and settings.ui_language == "ru"
-        assert window.tabs.count() == 4          # Giải mã, Nghe, Tạo mã, Cài đặt
+        assert window.tabs.count() == 5          # Giải mã, Nghe, Tạo mã, Cài đặt, Giới thiệu
         assert window.language_bar.buttons["ru"].isChecked()
         assert window.decode_page is not None and window.worker.isRunning()
         from morsedesk.app.encode_page import EncodePage

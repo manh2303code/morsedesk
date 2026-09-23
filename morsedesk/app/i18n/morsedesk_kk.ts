@@ -2,6 +2,24 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="kk_KZ">
 <context>
+    <name>AboutPage</name>
+    <message>
+        <location filename="../about_page.py" line="184" />
+        <source>Turns Morse code audio into text in English, Russian and Kazakh, and text back into Morse. Nothing leaves this computer.</source>
+        <translation>Морзе әліпбиінің дыбысын ағылшын, орыс және қазақ тілдеріндегі мәтінге, ал мәтінді қайтадан Морзе белгілеріне айналдырады. Ешқандай дерек бұл компьютерден шықпайды.</translation>
+    </message>
+    <message>
+        <location filename="../about_page.py" line="186" />
+        <source>Technical documentation</source>
+        <translation>Техникалық құжаттама</translation>
+    </message>
+    <message>
+        <location filename="../about_page.py" line="187" />
+        <source>Version {app}, acoustic model {model}</source>
+        <translation>Нұсқа {app}, акустикалық модель {model}</translation>
+    </message>
+</context>
+<context>
     <name>DecodePage</name>
     <message>
         <location filename="../decode_page.py" line="159" />
@@ -407,37 +425,42 @@
 <context>
     <name>MainWindow</name>
     <message>
-        <location filename="../main_window.py" line="113" />
+        <location filename="../main_window.py" line="135" />
         <source>MorseDesk</source>
         <translation>MorseDesk</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="114" />
+        <location filename="../main_window.py" line="136" />
         <source>UI language:</source>
         <translation>Интерфейс тілі:</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="119" />
+        <location filename="../main_window.py" line="141" />
         <source>Decode</source>
         <translation>Декодтау</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="121" />
+        <location filename="../main_window.py" line="143" />
         <source>Listen</source>
         <translation>Тыңдау</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="123" />
+        <location filename="../main_window.py" line="145" />
         <source>Encode</source>
         <translation>Кодтау</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="125" />
+        <location filename="../main_window.py" line="147" />
+        <source>About</source>
+        <translation>Бағдарлама туралы</translation>
+    </message>
+    <message>
+        <location filename="../main_window.py" line="149" />
         <source>Settings</source>
         <translation>Параметрлер</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="161" />
+        <location filename="../main_window.py" line="188" />
         <source>Finishing the current decode; the window will close right after.</source>
         <translation>Ағымдағы декодтау аяқталуда; содан кейін терезе жабылады.</translation>
     </message>
@@ -587,6 +610,35 @@
         <location filename="../widgets/stats_bar.py" line="99" />
         <source>Language: {lang}</source>
         <translation>Тіл: {lang}</translation>
+    </message>
+</context>
+<context>
+    <name>TechDocWindow</name>
+    <message>
+        <location filename="../doc_window.py" line="136" />
+        <source>MorseDesk technical reference</source>
+        <translation>MorseDesk техникалық сипаттамасы</translation>
+    </message>
+    <message>
+        <location filename="../doc_window.py" line="139" />
+        <location filename="../doc_window.py" line="147" />
+        <source>Save as PDF…</source>
+        <translation>PDF ретінде сақтау…</translation>
+    </message>
+    <message>
+        <location filename="../doc_window.py" line="148" />
+        <source>PDF files (*.pdf)</source>
+        <translation>PDF файлдары (*.pdf)</translation>
+    </message>
+    <message>
+        <location filename="../doc_window.py" line="160" />
+        <source>Saved {path}</source>
+        <translation>Сақталды: {path}</translation>
+    </message>
+    <message>
+        <location filename="../doc_window.py" line="161" />
+        <source>Could not save {path}</source>
+        <translation>{path} сақталмады</translation>
     </message>
 </context>
 <context>

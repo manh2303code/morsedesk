@@ -121,6 +121,26 @@ def main() -> int:
         pump(300)
         grab(win, name)
 
+    # Giới thiệu và tài liệu kỹ thuật, cả ba ngôn ngữ: tài liệu mở đúng ngôn ngữ giao diện.
+    for code in ("en", "ru", "kk"):
+        btn = win.language_bar.buttons.get(code)
+        if btn is not None:
+            btn.click()
+        pump(400)
+        show(win.about_page)
+        win.about_page.strip.finish()           # ảnh chụp: đèn đã sáng hết
+        pump(300)
+        grab(win, f"11-gioithieu-{code}")
+        doc = win.open_docs()
+        doc.resize(1080, 760)
+        pump(500)
+        grab(doc, f"12-tailieu-{code}")
+        doc.view.scrollToAnchor("tables")
+        pump(300)
+        grab(doc, f"13-tailieu-bangma-{code}")
+    if win.doc_window is not None:
+        win.doc_window.close()
+
     live.shutdown()
     live.wait(3000)
     worker.stop()

@@ -61,10 +61,13 @@ cat > "${DESKTOP_DIR}/morsedesk.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=MorseDesk
-Comment=Giải mã và tạo mã Morse (EN/RU/KK)
+Comment=Decode and send Morse code offline (English, Russian, Kazakh)
+Comment[ru]=Декодирование и передача азбуки Морзе без интернета (английский, русский, казахский)
+Comment[kk]=Морзе әліпбиін интернетсіз декодтау және жіберу (ағылшын, орыс, қазақ)
 Exec=${dest}
 Icon=morsedesk
 Terminal=false
+StartupWMClass=MorseDesk
 Categories=AudioVideo;Audio;Utility;
 EOF
 chmod +x "${DESKTOP_DIR}/morsedesk.desktop"

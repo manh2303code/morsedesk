@@ -13,12 +13,12 @@
 # là lần chạy ĐẦU (55 s, Defender quét từng file bung ra) nên bản một file có màn hình chờ.
 
 import argparse
-import struct
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_dynamic_libs
 
 ROOT = Path(SPECPATH).parent
+ICON_DIR = ROOT / "morsedesk" / "app" / "icons"
 
 opts = argparse.ArgumentParser()
 opts.add_argument("--onefile", action="store_true")
@@ -33,17 +33,21 @@ def tree(src: str, dst: str) -> list[tuple[str, str]]:
             for p in base.rglob("*") if p.is_file()]
 
 
-def png_to_ico(png: Path, ico: Path) -> Path:
-    """Bọc nguyên file PNG vào một ICO một ảnh (Windows Vista trở đi đọc được PNG trong ICO).
+def build_ico(ico: Path) -> Path:
+    """ICO nhiều cỡ (16…256) từ bộ PNG của `packaging/make_icon.py`, mỗi mục là PNG nguyên vẹn.
 
-    PyInstaller chỉ tự đổi PNG sang ICO khi có Pillow; không đáng thêm phụ thuộc vì một biểu tượng.
-    Kích thước 256 ghi là 0 trong ICONDIRENTRY — đó là quy ước của định dạng, không phải lỗi.
+    Explorer và thanh tác vụ chọn cỡ gần nhất; một ICO chỉ có bản 256 bị thu nhỏ thành nhòe ở 16 px.
+    PyInstaller chỉ tự đổi PNG sang ICO khi có Pillow — không đáng thêm phụ thuộc vì một biểu tượng.
     """
-    data = png.read_bytes()
-    width, height = struct.unpack(">II", data[16:24])
-    entry = struct.pack("<BBBBHHII", width % 256, height % 256, 0, 0, 1, 32, len(data), 6 + 16)
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("make_icon", ROOT / "packaging" / "make_icon.py")
+    mk = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mk)
+    pngs = [(s, (ICON_DIR / f"morsedesk-{s}.png").read_bytes())
+            for s in (16, 20, 24, 32, 40, 48, 64, 128, 256)]
     ico.parent.mkdir(parents=True, exist_ok=True)
-    ico.write_bytes(struct.pack("<HHH", 0, 1, 1) + entry + data)
+    ico.write_bytes(mk.ico_bytes(pngs))
     return ico
 
 
@@ -51,6 +55,8 @@ datas = (
     tree("morsedesk/profiles", "morsedesk/profiles")
     + [(str(p), "morsedesk/app/i18n") for p in (ROOT / "morsedesk/app/i18n").glob("*.qm")]
     + tree("morsedesk/app/fonts", "morsedesk/app/fonts")
+    + tree("morsedesk/app/icons", "morsedesk/app/icons")      # logo cửa sổ và thanh tác vụ
+    + tree("morsedesk/app/docs", "morsedesk/app/docs")        # trang Giới thiệu, tài liệu kỹ thuật
     # Chỉ hai file này: glob `acoustic.*` còn bắt cả `acoustic.golden.npz` (2,6 MB fixture so
     # sánh bit-exact của bộ kiểm thử), thứ người dùng cuối không bao giờ đọc tới.
     + [(str(ROOT / "models" / n), "models") for n in ("acoustic.onnx", "acoustic.json")
@@ -73,10 +79,10 @@ a = Analysis(
     noarchive=False,
 )
 pyz = PYZ(a.pure)
-ICON_PNG = ROOT / "packaging" / "appimage" / "morsedesk.png"
+ICON_PNG = ICON_DIR / "morsedesk-256.png"
 
 if options.onefile:
-    icon = png_to_ico(ICON_PNG, Path(workpath) / "morsedesk.ico")
+    icon = build_ico(Path(workpath) / "morsedesk.ico")
     # Bootloader vẽ ảnh chờ bằng Tcl/Tk riêng của nó (không cần module tkinter trong gói) và cập
     # nhật dòng chữ theo tên file đang bung — đó là dấu hiệu "đang chạy" trong lúc chờ Defender.
     splash = Splash(str(ICON_PNG), binaries=a.binaries, datas=a.datas,

@@ -1,0 +1,128 @@
+<html>
+<body>
+
+<h2>What it works out on its own</h2>
+<p>Most Morse decoders ask you to set the pitch, the speed and the alphabet before they can read
+anything. MorseDesk measures all three from the recording itself.</p>
+
+<table class="facts" width="100%" cellspacing="0" cellpadding="8">
+<tr><td class="term" width="26%">Alphabet</td>
+<td>English, Russian or Kazakh. MorseDesk reads the message with each alphabet and keeps the one
+that reads like real language. From about eight characters on, the automatic choice is as good as
+choosing by hand.</td></tr>
+<tr><td class="term">Tone</td>
+<td>The pitch of the signal, anywhere from 300 to 1500&nbsp;Hz. There is nothing to tune.</td></tr>
+<tr><td class="term">Speed</td>
+<td>Tested from 5 to 45 words per minute, including hand-sent Morse that speeds up and slows
+down.</td></tr>
+<tr><td class="term">Confidence</td>
+<td>Every decoded word is coloured: <span class="sure">green</span> means sure,
+<span class="check">yellow</span> means worth checking, <span class="doubt">red</span> means probably
+wrong. Click a word to hear that moment of the recording.</td></tr>
+</table>
+
+<h2>Where it is stronger</h2>
+<p><b>Three alphabets in one decoder.</b> Latin, Russian Cyrillic and Kazakh Cyrillic, chosen
+automatically, or by you.</p>
+<p><b>Kazakh letters restored from context.</b> Ә, Ғ, Қ, Ң, Ө, Ұ, Ү, Һ and І are sent with the
+codes of Russian letters, so the sound alone cannot tell Қ from К. A Kazakh language model decides
+from the surrounding words: a message keyed as САЛЕМ КАЗАКСТАН is written
+<span class="kk">СӘЛЕМ ҚАЗАҚСТАН</span>.</p>
+<p><b>Accurate in noise.</b> On our test set of 500 recordings with noise, fading and interference,
+MorseDesk gets about 8 characters wrong in every 100. DeepCW, a public neural Morse decoder, gets
+24 wrong on the same recordings. On six real ARRL practice broadcasts sent at 18 to 40 words per
+minute (9,498 characters), the text came out exactly as published.</p>
+<p><b>It does not make things up.</b> When there is no Morse in the audio, you get an empty result
+and a message saying so, not invented letters.</p>
+<p><b>Nothing leaves the computer.</b> No internet connection, no account, no data collection.
+The program is a single file.</p>
+
+<h2>Getting started</h2>
+<ol>
+<li><b>Decode a recording.</b> On the <i>Decode</i> tab, drop an audio file onto the window or
+click <i>Open file</i>, then <i>Decode</i>. WAV, FLAC, OGG, MP3 and AIFF files up to one hour.</li>
+<li><b>Check the result.</b> Words are coloured by confidence. Press <i>Play</i> to listen along;
+the word being played is outlined. Copy the text, or export it as TXT or JSON.</li>
+<li><b>Listen live.</b> On the <i>Listen</i> tab, choose the sound input (a receiver connected to
+the line input, or a microphone), then <i>Listen</i>. Grey text may still change; plain text is
+final.</li>
+<li><b>Send Morse.</b> On the <i>Encode</i> tab, type a message, then <i>Play</i> or
+<i>Save</i>. Speed, tone, Farnsworth spacing and added noise are adjustable.</li>
+</ol>
+
+<h2>How Kazakh is sent in Morse</h2>
+<p>There is no separate international Morse code for the nine letters of the Kazakh alphabet that
+Russian does not have. MorseDesk sends each of them with the code of the closest Russian letter:</p>
+
+<table class="data" cellspacing="0" cellpadding="6">
+<tr><th>Kazakh letter</th><th>Sent as</th><th>Code</th></tr>
+<tr><td class="kk">Ә</td><td>А</td><td class="morse">·–</td></tr>
+<tr><td class="kk">Ғ</td><td>Г</td><td class="morse">––·</td></tr>
+<tr><td class="kk">Қ</td><td>К</td><td class="morse">–·–</td></tr>
+<tr><td class="kk">Ң</td><td>Н</td><td class="morse">–·</td></tr>
+<tr><td class="kk">Ө</td><td>О</td><td class="morse">–––</td></tr>
+<tr><td class="kk">Ұ, Ү</td><td>У</td><td class="morse">··–</td></tr>
+<tr><td class="kk">Һ</td><td>Х</td><td class="morse">····</td></tr>
+<tr><td class="kk">І</td><td>И</td><td class="morse">··</td></tr>
+</table>
+
+<p>As in Russian practice, Ё is sent as Е, and Ь and Ъ share one code (–··–). When decoding, the
+Kazakh language model chooses between the letters that share a code. If a message is too short to
+give context, the plain Russian letter may appear instead.</p>
+
+<h2>What is inside</h2>
+<p>A neural network with <b>1,119,425 parameters</b> (4.5&nbsp;MB) listens to the recording in
+12-second windows and recognises whole Morse characters. It was trained only on generated signals,
+split evenly between English, Russian and Kazakh text, with noise, fading, interference and
+imperfect hand keying mixed in.</p>
+<p>Three language models, one per language, then turn the characters into the most likely text.
+They are tables of how often sequences of up to six letters occur (English 19&nbsp;MB, Russian
+14&nbsp;MB, Kazakh 10&nbsp;MB).</p>
+<p>A classic signal-processing decoder runs alongside. When the signal is very clean, its timing
+is more exact than the network's, and MorseDesk uses its reading instead.</p>
+<p><a href="doc:technical">The technical documentation</a> describes every stage, with the
+measurements behind each design decision.</p>
+
+<h2>Limits you should know</h2>
+<ul>
+<li><b>Deep fading on a weak signal.</b> When a weak signal fades below the noise, a third to
+more than half of the characters can be wrong. No decoder can recover letters that were
+never audible.</li>
+<li><b>One signal at a time.</b> MorseDesk follows the strongest tone. When two stations
+transmit at once, it decodes the stronger one.</li>
+<li><b>Short messages.</b> Automatic alphabet choice needs about eight characters. Radio
+abbreviations such as CQ, DE and 73 read the same in every alphabet; for those, choose the language
+yourself.</li>
+<li><b>Live listening</b> is about three characters in a hundred less accurate than decoding a
+file, and trails the audio by one to two seconds.</li>
+<li><b>Files</b> up to one hour.</li>
+<li><b>The Kazakh interface</b> is a draft that has not yet been reviewed by a native
+speaker.</li>
+</ul>
+
+<h2>Computer requirements</h2>
+<table class="facts" width="100%" cellspacing="0" cellpadding="8">
+<tr><td class="term" width="26%">System</td>
+<td>Windows 10 or 11 (64-bit), or Linux on x86-64. Tested on Ubuntu 22.04 and 24.04.</td></tr>
+<tr><td class="term">Processor</td>
+<td>Runs on the processor alone. No graphics card is needed.</td></tr>
+<tr><td class="term">Memory</td>
+<td>About 2,033&nbsp;MB while decoding a one-hour recording. 8&nbsp;GB of RAM or more is
+recommended.</td></tr>
+<tr><td class="term">Disk</td>
+<td>One file of about 140&nbsp;MB. On Windows it unpacks about 300&nbsp;MB into a temporary folder
+while running and removes it on exit.</td></tr>
+<tr><td class="term">Speed</td>
+<td>A one-hour recording takes about 9 minutes with automatic language choice, and
+about 3 minutes when you choose the language yourself (measured on an Intel Core Ultra 9 285H laptop processor).</td></tr>
+<tr><td class="term">Sound input</td>
+<td>Any input the system can record from, for live listening. Files need none.</td></tr>
+</table>
+
+<h2>About this project</h2>
+<p>Developer: <b>Шабданбек Бақытжан Асанханұлы</b></p>
+<p class="muted">The icon is a face made of two dits and a dah. Read from the top, it is
+·&nbsp;·&nbsp;–, the letter U.</p>
+
+</body>
+</html>

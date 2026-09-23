@@ -2,6 +2,24 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="ru_RU">
 <context>
+    <name>AboutPage</name>
+    <message>
+        <location filename="../about_page.py" line="184" />
+        <source>Turns Morse code audio into text in English, Russian and Kazakh, and text back into Morse. Nothing leaves this computer.</source>
+        <translation>Превращает звук азбуки Морзе в текст на английском, русском и казахском языках, а текст — обратно в сигналы Морзе. Ничто не покидает этот компьютер.</translation>
+    </message>
+    <message>
+        <location filename="../about_page.py" line="186" />
+        <source>Technical documentation</source>
+        <translation>Техническая документация</translation>
+    </message>
+    <message>
+        <location filename="../about_page.py" line="187" />
+        <source>Version {app}, acoustic model {model}</source>
+        <translation>Версия {app}, акустическая модель {model}</translation>
+    </message>
+</context>
+<context>
     <name>DecodePage</name>
     <message>
         <location filename="../decode_page.py" line="159" />
@@ -407,37 +425,42 @@
 <context>
     <name>MainWindow</name>
     <message>
-        <location filename="../main_window.py" line="113" />
+        <location filename="../main_window.py" line="135" />
         <source>MorseDesk</source>
         <translation>MorseDesk</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="114" />
+        <location filename="../main_window.py" line="136" />
         <source>UI language:</source>
         <translation>Язык интерфейса:</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="119" />
+        <location filename="../main_window.py" line="141" />
         <source>Decode</source>
         <translation>Декодирование</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="121" />
+        <location filename="../main_window.py" line="143" />
         <source>Listen</source>
         <translation>Слушать</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="123" />
+        <location filename="../main_window.py" line="145" />
         <source>Encode</source>
         <translation>Кодирование</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="125" />
+        <location filename="../main_window.py" line="147" />
+        <source>About</source>
+        <translation>О программе</translation>
+    </message>
+    <message>
+        <location filename="../main_window.py" line="149" />
         <source>Settings</source>
         <translation>Настройки</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="161" />
+        <location filename="../main_window.py" line="188" />
         <source>Finishing the current decode; the window will close right after.</source>
         <translation>Завершается текущее декодирование; окно закроется сразу после этого.</translation>
     </message>
@@ -587,6 +610,35 @@
         <location filename="../widgets/stats_bar.py" line="99" />
         <source>Language: {lang}</source>
         <translation>Язык: {lang}</translation>
+    </message>
+</context>
+<context>
+    <name>TechDocWindow</name>
+    <message>
+        <location filename="../doc_window.py" line="136" />
+        <source>MorseDesk technical reference</source>
+        <translation>Техническое описание MorseDesk</translation>
+    </message>
+    <message>
+        <location filename="../doc_window.py" line="139" />
+        <location filename="../doc_window.py" line="147" />
+        <source>Save as PDF…</source>
+        <translation>Сохранить как PDF…</translation>
+    </message>
+    <message>
+        <location filename="../doc_window.py" line="148" />
+        <source>PDF files (*.pdf)</source>
+        <translation>Файлы PDF (*.pdf)</translation>
+    </message>
+    <message>
+        <location filename="../doc_window.py" line="160" />
+        <source>Saved {path}</source>
+        <translation>Сохранено: {path}</translation>
+    </message>
+    <message>
+        <location filename="../doc_window.py" line="161" />
+        <source>Could not save {path}</source>
+        <translation>Не удалось сохранить {path}</translation>
     </message>
 </context>
 <context>

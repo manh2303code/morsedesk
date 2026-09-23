@@ -19,8 +19,10 @@ from morsedesk.textio import force_utf8_streams
 UA = "MorseDesk-fonts/1.0 (offline research)"
 DEJAVU_ZIP = "https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.zip"
 DEJAVU_WANT = ("DejaVuSans.ttf", "DejaVuSans-Bold.ttf", "DejaVuSansMono.ttf")
-NOTO_TTF = ("https://github.com/notofonts/notofonts.github.io/raw/main/fonts/NotoSans/hinted/ttf/"
-            "NotoSans-Regular.ttf")
+NOTO_BASE = "https://github.com/notofonts/notofonts.github.io/raw/main/fonts/NotoSans/hinted/ttf/"
+# Regular cho giao diện; Bold và SemiBold cho trang Giới thiệu và tài liệu kỹ thuật — thiếu chúng
+# Qt tô đậm GIẢ từ bản Regular, nét dày lệch và chữ Kazakh có dấu móc bị dính.
+NOTO_WANT = ("NotoSans-Regular.ttf", "NotoSans-SemiBold.ttf", "NotoSans-Bold.ttf")
 
 
 def fetch(url: str) -> bytes:
@@ -40,8 +42,9 @@ def main() -> int:
                 if base in DEJAVU_WANT:
                     (FONT_DIR / base).write_bytes(z.read(name))
                     written.append(base)
-        (FONT_DIR / "NotoSans-Regular.ttf").write_bytes(fetch(NOTO_TTF))
-        written.append("NotoSans-Regular.ttf")
+        for name in NOTO_WANT:
+            (FONT_DIR / name).write_bytes(fetch(NOTO_BASE + name))
+            written.append(name)
     except OSError as e:
         print(f"lỗi tải font: {e}", file=sys.stderr)
         return 2

@@ -99,7 +99,16 @@
     "SNR {v:.1f} dB": "ОСШ {v:.1f} дБ",
     "Tone {v:.0f} Hz": "Тон {v:.0f} Гц",
     "WPM {v:.1f}": "Слов/мин {v:.1f}",
-    "{v:.0f} s heard": "принято {v:.0f} с"
+    "{v:.0f} s heard": "принято {v:.0f} с",
+    "About": "О программе",
+    "Turns Morse code audio into text in English, Russian and Kazakh, and text back into Morse. Nothing leaves this computer.": "Превращает звук азбуки Морзе в текст на английском, русском и казахском языках, а текст — обратно в сигналы Морзе. Ничто не покидает этот компьютер.",
+    "Technical documentation": "Техническая документация",
+    "Version {app}, acoustic model {model}": "Версия {app}, акустическая модель {model}",
+    "MorseDesk technical reference": "Техническое описание MorseDesk",
+    "Save as PDF…": "Сохранить как PDF…",
+    "PDF files (*.pdf)": "Файлы PDF (*.pdf)",
+    "Saved {path}": "Сохранено: {path}",
+    "Could not save {path}": "Не удалось сохранить {path}"
   },
   "kk": {
     "MorseDesk": "MorseDesk",
@@ -201,6 +210,15 @@
     "SNR {v:.1f} dB": "СШҚ {v:.1f} дБ",
     "Tone {v:.0f} Hz": "Тон {v:.0f} Гц",
     "WPM {v:.1f}": "Сөз/мин {v:.1f}",
-    "{v:.0f} s heard": "{v:.0f} с қабылданды"
+    "{v:.0f} s heard": "{v:.0f} с қабылданды",
+    "About": "Бағдарлама туралы",
+    "Turns Morse code audio into text in English, Russian and Kazakh, and text back into Morse. Nothing leaves this computer.": "Морзе әліпбиінің дыбысын ағылшын, орыс және қазақ тілдеріндегі мәтінге, ал мәтінді қайтадан Морзе белгілеріне айналдырады. Ешқандай дерек бұл компьютерден шықпайды.",
+    "Technical documentation": "Техникалық құжаттама",
+    "Version {app}, acoustic model {model}": "Нұсқа {app}, акустикалық модель {model}",
+    "MorseDesk technical reference": "MorseDesk техникалық сипаттамасы",
+    "Save as PDF…": "PDF ретінде сақтау…",
+    "PDF files (*.pdf)": "PDF файлдары (*.pdf)",
+    "Saved {path}": "Сақталды: {path}",
+    "Could not save {path}": "{path} сақталмады"
   }
 }

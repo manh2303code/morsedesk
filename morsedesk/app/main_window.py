@@ -1,4 +1,4 @@
-"""Cửa sổ chính: thanh công cụ (ngôn ngữ giao diện), hai tab Giải mã | Tạo mã, đổi QTranslator."""
+"""Cửa sổ chính: thanh công cụ (ngôn ngữ giao diện), các tab chức năng + Giới thiệu, đổi QTranslator."""
 
 from __future__ import annotations
 
@@ -14,7 +14,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from morsedesk.app.about_page import AboutPage
+from morsedesk.app.branding import app_icon
 from morsedesk.app.decode_page import DecodePage
+from morsedesk.app.doc_window import TechDocWindow
 from morsedesk.app.encode_page import EncodePage
 from morsedesk.app.live_page import LivePage
 from morsedesk.app.settings import UI_LANGUAGES, AppSettings
@@ -45,7 +48,9 @@ class MainWindow(QMainWindow):
         self.current_language = "en"
         self._translator: QTranslator | None = None
         self._closing = False   # đã hoãn một lần đóng để chờ worker chạy xong chưa
+        self.doc_window: TechDocWindow | None = None
         self.resize(1000, 700)
+        self.setWindowIcon(app_icon())
 
         bar = QToolBar(self)
         bar.setMovable(False)
@@ -75,6 +80,9 @@ class MainWindow(QMainWindow):
             self.tabs.addTab(self.live_page, "")
         self.tabs.addTab(self.encode_page, "")
         self.tabs.addTab(self.settings_page, "")
+        self.about_page = AboutPage(self)
+        self.about_page.open_docs_requested.connect(self.open_docs)
+        self.tabs.addTab(self.about_page, "")
         central = QWidget(self)
         lay = QVBoxLayout(central)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -106,8 +114,22 @@ class MainWindow(QMainWindow):
         self.current_language = code
         self.settings.ui_language = code
         self.language_bar.set_current(code)
+        self.about_page.set_language(code)
+        if self.doc_window is not None:
+            self.doc_window.set_language(code)
         self.retranslate()
         return ok
+
+    def open_docs(self) -> TechDocWindow:
+        """Tài liệu kỹ thuật đúng ngôn ngữ giao diện hiện tại; mở lại thì đưa cửa sổ cũ lên trước."""
+        if self.doc_window is None:
+            self.doc_window = TechDocWindow(self.current_language, self)
+        elif self.doc_window.language != self.current_language:
+            self.doc_window.set_language(self.current_language)
+        self.doc_window.show()
+        self.doc_window.raise_()
+        self.doc_window.activateWindow()
+        return self.doc_window
 
     def retranslate(self) -> None:
         self.setWindowTitle(self.tr("MorseDesk"))
@@ -121,11 +143,16 @@ class MainWindow(QMainWindow):
                 self.tabs.setTabText(i, self.tr("Listen"))
             elif page is self.encode_page:
                 self.tabs.setTabText(i, self.tr("Encode"))
+            elif page is self.about_page:
+                self.tabs.setTabText(i, self.tr("About"))
             else:
                 self.tabs.setTabText(i, self.tr("Settings"))
         self.decode_page.retranslate()
         self.encode_page.retranslate()
         self.settings_page.retranslate()
+        self.about_page.retranslate()
+        if self.doc_window is not None:
+            self.doc_window.retranslate()
         if self.live_page is not None:
             self.live_page.retranslate()
 

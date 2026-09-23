@@ -11,6 +11,7 @@ from pathlib import Path
 from PySide6.QtCore import QCoreApplication, QLocale
 from PySide6.QtWidgets import QApplication, QMessageBox
 
+from morsedesk.app.branding import install_app_identity, set_windows_app_id
 from morsedesk.app.fonts import apply_application_font
 from morsedesk.app.live_worker import LiveWorker
 from morsedesk.app.main_window import MainWindow
@@ -81,6 +82,7 @@ def close_splash() -> None:
 def show_missing_dialog(message: str) -> None:
     """Hộp thoại lỗi liệt kê file model/LM thiếu; tách riêng để test monkeypatch không mở hộp thoại thật."""
     app = QApplication.instance() or QApplication(sys.argv[:1])
+    install_app_identity(app)
     QMessageBox.critical(None, "MorseDesk", message)
     _ = app
 
@@ -93,6 +95,7 @@ def create_app(args: argparse.Namespace) -> tuple[QApplication, MainWindow]:
     """Dựng QApplication (tái dùng nếu đã có) + MainWindow đã đặt ngôn ngữ giao diện; chưa show()."""
     app = QApplication.instance() or QApplication(sys.argv[:1])
     set_app_identity()              # idempotent: create_app có thể được gọi thẳng (script, test)
+    install_app_identity(app)       # logo trên thanh tác vụ, Alt-Tab, dock
     # Font trong gói: máy air-gap tối giản có thể không có font nào phủ Ә Ғ Қ Ң Ө Ұ Ү Һ І, khi
     # đó Qt vẽ thành ô vuông. Không nạp được thì cứ chạy tiếp với font hệ thống (CP-11).
     family = apply_application_font()
@@ -117,6 +120,9 @@ def create_app(args: argparse.Namespace) -> tuple[QApplication, MainWindow]:
 def main(argv: list[str] | None = None) -> int:
     """Điểm vào `morsedesk-gui`: thiếu model/LM -> hộp thoại lỗi + mã 2; đủ -> mở cửa sổ, chạy vòng lặp Qt."""
     force_utf8_streams()
+    # Phải trước MỌI cửa sổ, kể cả hộp thoại thiếu model: Windows gán nhóm thanh tác vụ ngay khi
+    # cửa sổ đầu tiên xuất hiện, và nếu lúc đó chưa có AppUserModelID thì logo Python sẽ hiện.
+    set_windows_app_id()
     args = build_parser().parse_args(argv)
     set_app_identity()
     setup_logging()
