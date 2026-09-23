@@ -64,6 +64,9 @@ Tùy chọn: cài `ffmpeg` (ví dụ `scoop install ffmpeg`) để bộ sinh d�
   khi mô hình ngôn ngữ đã xong. Tiến trình chia theo tầng đúng tỉ trọng đo được
   (`morsedesk/progress.py`): trước đây nó chạm 100 % ở ~5 % thời gian rồi đứng im.
 - Trang Nghe: thác nước 3D cuộn kiểu SDR trên thác nước phẳng, số đo trực tiếp.
+- Nghe lại ở trang Giải mã: nút phát tròn ▶/❚❚ (chữ nằm ở tooltip và tên trợ năng); trong cảnh
+  3D phần đã nghe nổi lên, phần chưa tới chìm xuống, kèm luồng sáng chiếu từ trên đi theo con
+  trỏ phát. Vẽ một khung 5–21 ms, đủ theo nhịp 50 ms của thanh phát.
 - Trang Tạo mã: băng Morse trực quan (dit/dah như đèn tín hiệu, chữ dưới từng nhóm).
 - Mở lên là có sẵn file mẫu "Xin chào" đúng ngôn ngữ giao diện (HELLO / ЗДРАВСТВУЙТЕ /
   СӘЛЕМЕТСІЗ БЕ), đã giải mã. Sinh lại: `uv run python tools/make_samples.py`.
