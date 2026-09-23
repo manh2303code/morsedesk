@@ -53,6 +53,24 @@ Tùy chọn: cài `ffmpeg` (ví dụ `scoop install ffmpeg`) để bộ sinh d�
 - Số đo ngày 23/09/2026 (model E16 v0.4.0, cửa sổ 12 s): T1 tổng hợp **7,78 %** CER, bộ dev cùng ma trận khác seed **8,07 %** (sai số mỗi bộ ±1 điểm) — gần như toàn bộ phần còn lại nằm ở kênh `qsb`; T2 **1,62 %** (bản ghi thật ARRL 0,95 %, riêng dải 18–40 WPM **0 lỗi trên 9 498 ký tự**) (đạt yêu cầu A2 của spec); T0 roundtrip audio sạch **CER = 0 trên cả 21 ô** (đạt D2). Chi tiết và cách tái lập: `docs/research/02-baseline-numbers.md`.
 - Bộ giải mã được chọn theo bằng chứng đo từ chính clip: tín hiệu sạch hơn dải huấn luyện của model thì lấy kết quả bộ DSP, còn lại dùng model (`morsedesk/dsp/selection.py`). `DecodeResult.decoded_by` cho biết đường nào đã sinh ra văn bản.
 
+## Giao diện (24/09)
+
+- Giao diện "thiết bị đo" nền đêm theo tham chiếu SDR Console: một màu hành động (vàng đèn tín
+  hiệu), dữ liệu dùng chung một bảng màu phổ. Hệ thống giao diện: `morsedesk/app/theme.py`.
+- Trang Giải mã: dải số đo (ngôn ngữ, tone, tốc độ, SNR, đường giải mã), **phong cảnh phổ 3D**
+  (ngang là thời gian, sâu là tần số quanh tone — thấy từng chấm gạch) hoặc phổ 2D, chữ lớn tô
+  theo độ tin cậy, nút một chạm "Đọc theo tiếng Anh/Nga/Kazakh" khi chế độ tự động đọc nhầm.
+- Trong lúc giải mã: vòng tiến trình % theo thời gian thực phủ lên vùng kết quả; kết quả chỉ hiện
+  khi mô hình ngôn ngữ đã xong. Tiến trình chia theo tầng đúng tỉ trọng đo được
+  (`morsedesk/progress.py`): trước đây nó chạm 100 % ở ~5 % thời gian rồi đứng im.
+- Trang Nghe: thác nước 3D cuộn kiểu SDR trên thác nước phẳng, số đo trực tiếp.
+- Trang Tạo mã: băng Morse trực quan (dit/dah như đèn tín hiệu, chữ dưới từng nhóm).
+- Mở lên là có sẵn file mẫu "Xin chào" đúng ngôn ngữ giao diện (HELLO / ЗДРАВСТВУЙТЕ /
+  СӘЛЕМЕТСІЗ БЕ), đã giải mã. Sinh lại: `uv run python tools/make_samples.py`.
+- Logo: phím Morse nét trắng, trên là `· · –`. Khi khởi động, màn hình chờ động gõ ra đúng ba dấu
+  đó kèm dòng bản quyền và tên tác giả (`--no-splash` để bỏ qua). Sinh lại biểu tượng và ảnh
+  chờ: `uv run python packaging/make_icon.py` rồi `uv run python packaging/make_splash.py`.
+
 ## Đóng gói Windows: một file `.exe`
 
 ```powershell

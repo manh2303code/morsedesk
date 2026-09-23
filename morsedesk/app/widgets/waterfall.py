@@ -18,6 +18,7 @@ import numpy as np
 from PySide6.QtGui import QColor, QImage, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
+from morsedesk.app.theme import spectrum_rgb
 from morsedesk.constants import SAMPLE_RATE
 
 MAX_HZ = 2000.0         # trên dải này Morse nghiệp vụ không dùng tới
@@ -30,22 +31,6 @@ N_COLS = 600            # bề rộng lịch sử; ở 10 cột/giây là khoả
 DB_RANGE = 45.0
 NOISE_PCT = 25
 FFT_SIZE = 512
-
-
-def _viridis(v: np.ndarray) -> np.ndarray:
-    """Bảng màu gần giống viridis, dựng bằng nội suy tuyến tính qua năm điểm neo.
-
-    Không kéo theo matplotlib chỉ để lấy một bảng màu: gói đó nặng hơn cả mô hình âm thanh và
-    đã nằm trong danh sách `excludes` của bản đóng gói.
-    """
-    stops = np.array([[68, 1, 84], [59, 82, 139], [33, 145, 140], [94, 201, 98], [253, 231, 37]],
-                     dtype=np.float32)
-    pos = np.linspace(0.0, 1.0, len(stops))
-    v = np.clip(v, 0.0, 1.0)
-    out = np.empty(v.shape + (3,), dtype=np.uint8)
-    for c in range(3):
-        out[..., c] = np.interp(v, pos, stops[:, c]).astype(np.uint8)
-    return out
 
 
 class WaterfallView(QWidget):
@@ -78,11 +63,15 @@ class WaterfallView(QWidget):
         self._tone_hz = None
         self.update()
 
-    def push(self, block) -> None:
-        """Thêm một khối audio; mỗi FFT_SIZE mẫu thành một cột mới."""
+    def push(self, block) -> np.ndarray:
+        """Thêm một khối audio; mỗi FFT_SIZE mẫu thành một cột mới.
+
+        Trả các cột mới (0..1, [N_BINS, n], hàng 0 = 0 Hz) để cảnh 3D trực tiếp dùng lại, khỏi
+        tính FFT lần thứ hai.
+        """
         b = np.asarray(block, dtype=np.float32).reshape(-1)
         if not len(b):
-            return
+            return np.zeros((N_BINS, 0), np.float32)
         self._pending = np.concatenate([self._pending, b]) if len(self._pending) else b
         cols = []
         while len(self._pending) >= FFT_SIZE:
@@ -97,23 +86,24 @@ class WaterfallView(QWidget):
             np.maximum.at(col, self._bin_of, db)        # gộp bin: lấy đỉnh, không lấy trung bình
             cols.append(np.clip((col - floor) / DB_RANGE, 0.0, 1.0))
         if not cols:
-            return
+            return np.zeros((N_BINS, 0), np.float32)
         new = np.stack(cols, axis=1)
         n = min(new.shape[1], N_COLS)
         self._data = np.roll(self._data, -n, axis=1)
         self._data[:, -n:] = new[:, -n:]
         self.update()
+        return new
 
     def paintEvent(self, event) -> None:
         p = QPainter(self)
         try:
             w, h = max(1, self.width()), max(1, self.height())
-            rgb = _viridis(self._data[::-1])            # hàng 0 = tần số cao ở trên
+            rgb = spectrum_rgb(self._data[::-1])        # hàng 0 = tần số cao ở trên; bảng màu chung
             img = QImage(rgb.tobytes(), N_COLS, N_BINS, N_COLS * 3, QImage.Format.Format_RGB888)
             p.drawImage(self.rect(), img)
             if self._tone_hz:
                 y = h - int(h * min(self._tone_hz, MAX_HZ) / MAX_HZ)
-                pen = QPen(QColor(255, 80, 80, 180))
+                pen = QPen(QColor(245, 165, 36, 200))      # màu đèn tín hiệu, như cảnh 3D
                 pen.setWidth(1)
                 p.setPen(pen)
                 p.drawLine(0, y, w, y)

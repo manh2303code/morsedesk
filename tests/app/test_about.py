@@ -39,17 +39,20 @@ def test_icon_set_is_complete_and_matches_the_generator():
 
 
 @pytest.mark.parametrize("size", branding.ICON_SIZES)
-def test_face_reads_as_two_dits_and_a_dah_at_every_size(size):
-    """Hai mắt và miệng là BA khối tách rời ở mọi cỡ, kể cả 16 px trên thanh tác vụ."""
+def test_three_marks_stay_apart_at_every_size(size):
+    """`· · –` phải là BA khối vàng tách rời ở mọi cỡ, kể cả 16 px trên thanh tác vụ, và phím trắng
+    phải có mặt. Bản đầu của logo phím Morse dính ba dấu thành một khối ở 16–24 px."""
     from scipy import ndimage
 
     img = make_icon.render(size).astype(float)
-    lamp = np.array(make_icon.LAMP, dtype=float)
-    dusk = np.array(make_icon.DUSK, dtype=float)
-    closer_to_lamp = (np.linalg.norm(img[..., :3] - lamp, axis=2)
-                      < np.linalg.norm(img[..., :3] - dusk, axis=2)) & (img[..., 3] > 128)
-    _, n = ndimage.label(closer_to_lamp)
-    assert n == 3
+    d_lamp = np.linalg.norm(img[..., :3] - np.array(make_icon.LAMP_RGB), axis=2)
+    d_ink = np.linalg.norm(img[..., :3] - np.array(make_icon.INK_RGB), axis=2)
+    d_tile = np.linalg.norm(img[..., :3] - np.array(make_icon.TOP_RGB), axis=2)
+    opaque = img[..., 3] > 128
+    lamp = (d_lamp < d_ink) & (d_lamp < d_tile) & (d_lamp < 90) & opaque
+    ink = (d_ink < d_lamp) & (d_ink < 90) & opaque
+    assert ndimage.label(lamp)[1] == 3
+    assert ink.sum() >= size * size * 0.08
 
 
 def test_ico_holds_every_size_as_png():
@@ -199,6 +202,91 @@ def test_hero_tagline_is_never_clipped(qtbot, tiny_lm_dir, tmp_path, lang):
         tag = win.about_page.tagline
         assert tag.height() >= tag.heightForWidth(tag.width())
         assert win.about_page.strip.geometry().top() >= tag.geometry().bottom()
+    finally:
+        win.set_language("en")
+        QCoreApplication.processEvents()
+        win.close()
+
+
+# ---- màn hình chờ động, vòng tiến trình, file mẫu ----
+
+def test_splash_taps_out_the_logo_then_finishes(qtbot):
+    from morsedesk.app import splash as sp
+
+    assert sp.frame_state(0)[1] == (0.0, 0.0, 0.0)             # đứng yên: chưa dấu nào sáng
+    lever, lit, spark = sp.frame_state(sp.PRE_MS + 0.5 * sp.UNIT_MS)
+    assert lever > 0 and spark > 0 and lit[0] == 1.0             # đang nhấn dit đầu
+    assert 0.0 < sp.frame_state(sp.PRE_MS + 5.5 * sp.UNIT_MS)[1][2] < 1.0   # dah đang dài dần
+    assert sp.frame_state(sp.TOTAL_MS)[1] == (1.0, 1.0, 1.0)    # hết: đủ logo
+    w = sp.SplashScreen()
+    qtbot.addWidget(w)
+    with qtbot.waitSignal(w.finished, timeout=5000):
+        w.play()
+    img = sp.render_image(0.0)
+    assert (img.width(), img.height()) == (sp.SIZE.width(), sp.SIZE.height())
+
+
+def test_splash_names_the_author():
+    from morsedesk.app.splash import COPYRIGHT
+
+    assert DEVELOPER in COPYRIGHT and "©" in COPYRIGHT
+
+
+def test_packaged_splash_image_is_the_first_frame():
+    """Ảnh tĩnh của PyInstaller phải trùng khung đầu, nếu không chỗ nối hai màn hình sẽ giật."""
+    from PySide6.QtGui import QImage
+
+    img = QImage(str(Path("packaging/splash.png")))
+    assert not img.isNull() and (img.width(), img.height()) == (520, 380)
+
+
+def test_progress_ring_behaves_like_a_progress_bar(qtbot):
+    from morsedesk.app.widgets.progress_ring import ProgressRing
+
+    r = ProgressRing()
+    qtbot.addWidget(r)
+    r.setRange(0, 0)
+    assert r.indeterminate() and r.maximum() == 0
+    r.setRange(0, 1000)
+    r.setValue(430)
+    assert (r.minimum(), r.maximum(), r.value(), r.percent()) == (0, 1000, 430, 43)
+    r.setValue(5000)
+    assert r.value() == 1000                                    # kẹp, không vượt
+
+
+@pytest.mark.parametrize("lang,text", [("en", "HELLO"), ("ru", "ЗДРАВСТВУЙТЕ"),
+                                       ("kk", "СӘЛЕМЕТСІЗ БЕ")])
+def test_hello_samples_decode_in_auto_mode(lang, text):
+    """File mẫu phải được TỰ nhận đúng ngôn ngữ — đó là thứ người dùng thấy đầu tiên."""
+    from morsedesk.api import DEFAULT_MODEL_PATH, Decoder
+    from morsedesk.app.decode_page import SAMPLE_FILES, SAMPLES_DIR
+
+    if not DEFAULT_MODEL_PATH.exists():
+        pytest.skip("cần models/acoustic.onnx")
+    r = Decoder("auto", engine="onnx").decode_file(SAMPLES_DIR / SAMPLE_FILES[lang])
+    assert r.text == text
+
+
+def test_sample_follows_ui_language_until_the_user_opens_a_file(qtbot, tiny_lm_dir, tmp_path):
+    worker = DecoderWorker(engine="baseline", model_path=None, lm_dir=tiny_lm_dir)
+    settings = AppSettings(settings=QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+    win = MainWindow(worker, Player(), settings, I18N_DIR)
+    qtbot.addWidget(win)
+    page = win.decode_page
+    try:
+        win.set_language("ru")
+        assert page._path is None                  # trang trần (test): không tự nạp mẫu
+        page.enable_samples()
+        win.set_language("kk")
+        assert page.showing_sample() and page._path.name == "hello_kk.wav"
+        assert not page.sample_badge.isHidden()
+        win.set_language("ru")
+        assert page._path.name == "hello_ru.wav"
+        own = tmp_path / "mine.wav"
+        own.write_bytes((page._path).read_bytes())
+        page.load_file(own)
+        win.set_language("en")                     # file của người dùng: không bị thay
+        assert page._path == own and not page.showing_sample() and page.sample_badge.isHidden()
     finally:
         win.set_language("en")
         QCoreApplication.processEvents()

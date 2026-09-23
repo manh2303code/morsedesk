@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from PySide6.QtCore import QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter
 from PySide6.QtWidgets import (
     QFrame,
@@ -24,7 +24,16 @@ from PySide6.QtWidgets import (
 )
 
 from morsedesk import __version__
-from morsedesk.app.branding import DUSK, DUSK_DEEP, LAMP, MIST, PAPER, app_icon, morse_elements
+from morsedesk.app.branding import (
+    DUSK,
+    LAMP,
+    MIST,
+    PAPER,
+    TILE_BOTTOM,
+    TILE_TOP,
+    morse_elements,
+)
+from morsedesk.app.key_art import paint_logo
 from morsedesk.app.reading import BODY_FONT, ReadingView, load_doc
 
 MODEL_META = Path(__file__).resolve().parents[2] / "models" / "acoustic.json"
@@ -99,6 +108,19 @@ class MorseStrip(QWidget):
         p.end()
 
 
+class LogoView(QWidget):
+    """Logo vẽ bằng QPainter (sắc nét ở mọi tỉ lệ màn hình), cùng hình với biểu tượng."""
+
+    def __init__(self, size: int = 92, parent=None) -> None:
+        super().__init__(parent)
+        self.setFixedSize(size, size)
+
+    def paintEvent(self, event) -> None:
+        p = QPainter(self)
+        paint_logo(p, QRectF(0, 0, self.width(), self.height()))
+        p.end()
+
+
 class AboutPage(QWidget):
     open_docs_requested = Signal()
 
@@ -107,13 +129,13 @@ class AboutPage(QWidget):
         self.language = "en"
         self.hero = QFrame(self)
         self.hero.setObjectName("aboutHero")
+        # Nền phần đầu là dải màu của chính ô logo: logo, màn hình chờ và trang này cùng một chất liệu.
         self.hero.setStyleSheet(
-            f"#aboutHero {{ background: {DUSK}; border-bottom: 3px solid {DUSK_DEEP}; }}"
-            f"#aboutHero QLabel {{ background: transparent; }}"
+            f"#aboutHero {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {TILE_TOP},"
+            f" stop:1 {TILE_BOTTOM}); border-bottom: 1px solid #2A3B60; }}"
+            f"#aboutHero QLabel, #aboutHero QWidget {{ background: transparent; }}"
         )
-        self.logo = QLabel(self.hero)
-        self.logo.setPixmap(app_icon().pixmap(QSize(76, 76)))
-        self.logo.setFixedSize(76, 76)          # thiếu dòng này QLabel giãn ngang, đẩy cột chữ sang phải
+        self.logo = LogoView(92, self.hero)
         self.title = QLabel("MorseDesk", self.hero)
         tf = QFont(BODY_FONT)
         tf.setPointSizeF(24)
@@ -156,7 +178,7 @@ class AboutPage(QWidget):
         top.addWidget(self.logo, 0, Qt.AlignmentFlag.AlignTop)
         top.addLayout(text_col, 1)
         actions = QHBoxLayout()
-        actions.addSpacing(96)                  # thẳng hàng với cột chữ, không với logo
+        actions.addSpacing(112)                 # thẳng hàng với cột chữ, không với logo
         actions.addWidget(self.docs_button)
         actions.addSpacing(16)
         actions.addWidget(self.version)
@@ -167,7 +189,7 @@ class AboutPage(QWidget):
         hero_lay.addLayout(top)
         hero_lay.addLayout(actions)
 
-        self.body = ReadingView(self)
+        self.body = ReadingView(self, dark=True)
         self.body.anchorClicked.connect(self._on_link)
 
         lay = QVBoxLayout(self)

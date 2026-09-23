@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication, QEvent, QTranslator
+from PySide6.QtCore import QCoreApplication, QEvent, QSize, QTranslator
 from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
+    QSizePolicy,
     QTabWidget,
     QToolBar,
     QVBoxLayout,
@@ -55,7 +56,18 @@ class MainWindow(QMainWindow):
         bar = QToolBar(self)
         bar.setMovable(False)
         self.addToolBar(bar)
+        # Nhận diện ngay trong cửa sổ: logo + tên bên trái, ngôn ngữ giao diện bên phải.
+        self.brand_logo = QLabel(self)
+        self.brand_logo.setPixmap(app_icon().pixmap(QSize(24, 24)))
+        self.brand_name = QLabel("MorseDesk", self)
+        self.brand_name.setStyleSheet("font-size: 12pt; font-weight: 700; padding-left: 4px;")
+        bar.addWidget(self.brand_logo)
+        bar.addWidget(self.brand_name)
+        spacer = QWidget(self)
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        bar.addWidget(spacer)
         self.language_label = QLabel(self)
+        self.language_label.setProperty("role", "caption")
         bar.addWidget(self.language_label)
         # Ba lá cờ thay hộp chọn: nhận ra ngôn ngữ mình cần mà không phải đọc, kể cả khi giao
         # diện đang ở thứ tiếng mình không biết — đúng tình huống người dùng mở app lần đầu và
@@ -115,6 +127,7 @@ class MainWindow(QMainWindow):
         self.settings.ui_language = code
         self.language_bar.set_current(code)
         self.about_page.set_language(code)
+        self.decode_page.load_sample(code)       # "Xin chào" bằng chính ngôn ngữ vừa chọn
         if self.doc_window is not None:
             self.doc_window.set_language(code)
         self.retranslate()

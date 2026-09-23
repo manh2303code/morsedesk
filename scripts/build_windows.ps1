@@ -18,6 +18,10 @@ Write-Host "== model âm thanh v$ver =="
 uv pip install --quiet "pyinstaller>=6.6,<7"
 if ($LASTEXITCODE -ne 0) { throw "không cài được pyinstaller" }
 
+Write-Host "== khung đầu màn hình chờ (khớp logo hiện tại) =="
+uv run python packaging/make_splash.py
+if ($LASTEXITCODE -ne 0) { throw "không sinh được packaging/splash.png" }
+
 Write-Host "== dựng bản một file =="
 uv run pyinstaller --noconfirm --log-level WARN --workpath build/win --distpath dist `
     packaging/morsedesk.spec -- --onefile

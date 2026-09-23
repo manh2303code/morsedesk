@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QPlainTextEdit,
@@ -24,8 +25,10 @@ from PySide6.QtWidgets import (
 
 from morsedesk.api import Encoder
 from morsedesk.app.settings import AppSettings
+from morsedesk.app.theme import mark_primary
 from morsedesk.app.widgets.banner import Banner
 from morsedesk.app.widgets.charmap import CharMap
+from morsedesk.app.widgets.morse_tape import MorseTape
 from morsedesk.app.worker import MAX_SECONDS, Player
 from morsedesk.audio.io import SUPPORTED_EXT, save_audio
 from morsedesk.constants import SAMPLE_RATE
@@ -72,14 +75,23 @@ class EncodePage(QWidget):
         self._unsupported: list[str] = []   # ký tự văn bản hiện tại không mã hóa được
 
         self.text_label = QLabel(self)
+        self.text_label.setProperty("role", "section")
         self.text_edit = QPlainTextEdit(self)
+        self.text_edit.setStyleSheet("QPlainTextEdit { font-size: 14pt; }")
+        self.text_edit.setMinimumHeight(110)
         self.charmap = CharMap(self)
         self.morse_label = QLabel(self)
+        self.morse_label.setProperty("role", "section")
+        # Băng Morse trực quan: dit/dah như đèn tín hiệu, chữ cái dưới từng nhóm — đọc soát dễ
+        # hơn nhiều so với dãy `.` và `-` (chuỗi ASCII vẫn giữ bên dưới để sao chép).
+        self.tape = MorseTape(self)
         self.morse_view = QPlainTextEdit(self)
         self.morse_view.setReadOnly(True)
         # Chuỗi chấm gạch luôn dài gấp năm sáu lần văn bản gốc, nên ô của nó không thể thấp hơn
         # ô nhập nhiều đến thế; và font tỉ lệ làm dấu chấm với gạch khó phân biệt khi đọc soát.
-        self.morse_view.setMaximumHeight(200)
+        # Băng Morse ở trên đã là cách đọc chính; ô ASCII chỉ để sao chép nên không cần cao quá 150.
+        self.morse_view.setMinimumHeight(80)
+        self.morse_view.setMaximumHeight(150)
         morse_font = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
         morse_font.setPointSize(max(12, morse_font.pointSize() + 2))
         # `systemFont` trả đúng họ font nhưng không đặt styleHint, nên nếu họ đó thiếu trên máy
@@ -88,16 +100,20 @@ class EncodePage(QWidget):
         morse_font.setFixedPitch(True)
         self.morse_view.setFont(morse_font)
         self.auto_label = QLabel(self)
-        self.auto_label.setStyleSheet("color:#2c5d2f;")
+        self.auto_label.setProperty("role", "hint")
         self.auto_label.hide()
         self.warn_label = QLabel(self)
-        self.warn_label.setStyleSheet("color:#7a1414; background:#ffd9d9; padding:3px;")
+        self.warn_label.setStyleSheet(
+            "color:#FFD2CC; background:#4E2323; border:1px solid #7A3530; border-radius:6px; padding:5px 8px;")
         self.warn_label.hide()
         left = QVBoxLayout()
+        left.setSpacing(8)
         left.addWidget(self.text_label)
-        left.addWidget(self.text_edit, 1)
+        left.addWidget(self.text_edit, 2)
         left.addWidget(self.charmap)
+        left.addSpacing(6)
         left.addWidget(self.morse_label)
+        left.addWidget(self.tape)
         left.addWidget(self.morse_view)
         left.addWidget(self.auto_label)
         left.addWidget(self.warn_label)
@@ -132,7 +148,6 @@ class EncodePage(QWidget):
         self.format_combo = QComboBox(self)
         for name, ext in FORMATS:
             self.format_combo.addItem(name, ext)
-        self.form = QFormLayout()
         self.form_labels = [QLabel(self) for _ in range(7)]
         rows = (
             self.profile_combo,
@@ -143,25 +158,52 @@ class EncodePage(QWidget):
             self._pair(self.snr_check, self.snr_spin),
             self.format_combo,
         )
-        for label, w in zip(self.form_labels, rows, strict=True):
-            self.form.addRow(label, w)
+        # Bốn nhóm thông số, mỗi nhóm một tiêu đề nhỏ: Bảng mã | Nhịp | Âm thanh | File.
+        self.section_labels = [QLabel(self) for _ in range(4)]
+        groups = ((0,), (1, 2, 3), (4, 5), (6,))
+        panel = QFrame(self)
+        panel.setProperty("panel", True)
+        pl = QVBoxLayout(panel)
+        pl.setContentsMargins(16, 14, 16, 16)
+        pl.setSpacing(6)
+        self.forms: list[QFormLayout] = []
+        for caption, idx in zip(self.section_labels, groups, strict=True):
+            caption.setProperty("role", "caption")
+            form = QFormLayout()
+            form.setHorizontalSpacing(12)
+            form.setVerticalSpacing(8)
+            for i in idx:
+                form.addRow(self.form_labels[i], rows[i])
+            if self.forms:
+                pl.addSpacing(8)
+            pl.addWidget(caption)
+            pl.addLayout(form)
+            self.forms.append(form)
+        self.form = self.forms[1]
+        self.length_label = QLabel(self)
+        self.length_label.setProperty("role", "hint")
         self.play_button = QPushButton(self)
+        mark_primary(self.play_button)
         self.stop_button = QPushButton(self)
         self.save_button = QPushButton(self)
         buttons = QHBoxLayout()
-        buttons.addWidget(self.play_button)
-        buttons.addWidget(self.stop_button)
-        buttons.addWidget(self.save_button)
+        buttons.addWidget(self.play_button, 2)
+        buttons.addWidget(self.stop_button, 1)
+        buttons.addWidget(self.save_button, 1)
+        pl.addSpacing(10)
+        pl.addWidget(self.length_label)
+        pl.addLayout(buttons)
         right = QVBoxLayout()
-        right.addLayout(self.form)
-        right.addLayout(buttons)
+        right.addWidget(panel)
         right.addStretch(1)
 
         self.banner = Banner(self)
         body = QHBoxLayout()
+        body.setSpacing(18)
         body.addLayout(left, 3)
         body.addLayout(right, 2)
         lay = QVBoxLayout(self)
+        lay.setContentsMargins(16, 14, 16, 12)
         lay.addWidget(self.banner)
         lay.addLayout(body, 1)
 
@@ -245,6 +287,8 @@ class EncodePage(QWidget):
         self._show_auto_choice(pid)
         morse = self._encoder().to_morse_string(text, strict=False) if text.strip() else ""
         self.morse_view.setPlainText(morse)
+        self.tape.set_words(self._tape_words(text, profile) if morse else [])
+        self._show_length(bool(morse))
         bad = unsupported_chars(text, profile)
         self._unsupported = list(bad)
         if bad:
@@ -262,6 +306,35 @@ class EncodePage(QWidget):
         ready = has and not over and not bad
         self.play_button.setEnabled(ready)
         self.save_button.setEnabled(ready)
+
+    @staticmethod
+    def _tape_words(text: str, profile: Profile) -> list[list[tuple[str, str]]]:
+        """Từng từ của văn bản thành cặp (chữ, mẫu) cho băng Morse; prosign `<AR>` là một nhóm."""
+        words = []
+        for w in normalize(text, profile).split():
+            pairs, i = [], 0
+            while i < len(w):
+                j = w.find(">", i) if w[i] == "<" else -1
+                if j > i and w[i:j + 1] in profile.prosign_to_pattern:
+                    pairs.append((w[i:j + 1], profile.prosign_to_pattern[w[i:j + 1]]))
+                    i = j + 1
+                    continue
+                pairs.append((w[i], profile.letter_to_pattern.get(w[i], "")))
+                i += 1
+            words.append(pairs)
+        return words
+
+    def _show_length(self, has_text: bool) -> None:
+        if not has_text:
+            self.length_label.setText("")
+            return
+        try:
+            seconds = self.estimate_seconds()
+        except ValueError:
+            self.length_label.setText("")
+            return
+        m, sec = divmod(int(round(seconds)), 60)
+        self.length_label.setText(self.tr("Length ≈ {t}").format(t=f"{m}:{sec:02d}"))
 
     def _over_limit_seconds(self) -> float | None:
         """Thời lượng ước tính nếu vượt `MAX_SECONDS` (và hiện banner), ngược lại `None`.
@@ -407,6 +480,10 @@ class EncodePage(QWidget):
     def retranslate(self) -> None:
         self.text_label.setText(self.tr("Text to encode"))
         self.morse_label.setText(self.tr("Morse code:"))
+        self.tape.placeholder = self.tr("The message appears here as signal-lamp marks.")
+        for label, text in zip(self.section_labels, (self.tr("Alphabet"), self.tr("Timing"),
+                                                     self.tr("Sound"), self.tr("File")), strict=True):
+            label.setText(text)
         self.text_edit.setPlaceholderText(self.tr("Type text to see its Morse code."))
         names = {AUTO_PROFILE: self.tr("Auto"), "en": self.tr("English"),
                  "ru": self.tr("Russian"), "kk-cyrl-ru": self.tr("Kazakh")}

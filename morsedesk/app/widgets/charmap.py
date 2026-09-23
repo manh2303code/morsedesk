@@ -35,7 +35,9 @@ class CharMap(QWidget):
 
     def _button(self, ch: str, parent: QWidget, layout: FlowLayout) -> QPushButton:
         b = QPushButton(ch, parent)
-        b.setFixedSize(34, 30)
+        b.setFixedSize(36, 32)
+        # Phím nhỏ: phần đệm 14 px của nút thường (theme) cắt mất nửa chữ Kirin — đã thấy trên ảnh chụp.
+        b.setStyleSheet("QPushButton { padding: 0px; font-size: 11pt; font-weight: 600; }")
         b.clicked.connect(lambda _=False, c=ch: self.char_clicked.emit(c))
         layout.addWidget(b)
         return b

@@ -14,8 +14,9 @@ from pathlib import Path
 
 FONT_DIR = Path(__file__).resolve().parent / "fonts"
 KAZAKH_LETTERS = "ӘҒҚҢӨҰҮҺІ"
-# Thứ tự ưu tiên khi đặt font ứng dụng: DejaVu phủ Cyrillic mở rộng rộng nhất trong hai bộ.
-PREFERRED_FAMILIES = ("DejaVu Sans", "Noto Sans")
+# Thứ tự ưu tiên khi đặt font ứng dụng. Noto Sans (có đủ Regular/SemiBold/Bold trong gói và phủ đủ
+# 9 chữ Kazakh) là font của giao diện "thiết bị đo"; DejaVu là dự phòng rộng nhất.
+PREFERRED_FAMILIES = ("Noto Sans", "DejaVu Sans")
 
 
 def bundled_fonts() -> list[Path]:

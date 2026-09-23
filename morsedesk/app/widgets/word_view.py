@@ -9,13 +9,15 @@ from morsedesk.api import FALLBACK_CONFIDENCE, Word
 from morsedesk.app.widgets.flow_layout import FlowLayout
 
 WORD_GOOD = 0.8
-COLOR_GOOD, COLOR_MID, COLOR_LOW = "#c8f0c8", "#fff2b3", "#f7c6c6"
-# Ba màu nền trên đều nhạt, nên phải ghim màu chữ tối thay vì để widget lấy màu chữ của
-# bảng màu hệ thống: ở giao diện tối của Windows/KDE màu đó là trắng, cho tương phản
-# 1,25:1 (đo trên ảnh chụp thật) tức là không đọc được.
-TEXT_COLOR = "#1a1a1a"
-# Viền của từ đang phát: đủ đậm để thấy trên cả ba màu nền độ tin cậy.
-ACTIVE_BORDER = "#1f6feb"
+# Nền tối (giao diện "thiết bị đo"): nền chip là màu độ tin cậy pha đậm vào nền đêm, chữ sáng,
+# và một gạch chân màu tươi mang thông tin chính — đọc được cả khi liếc nhanh.
+COLOR_GOOD, COLOR_MID, COLOR_LOW = "#1E4634", "#4A3E17", "#4E2323"
+UNDERLINE = {COLOR_GOOD: "#46C47A", COLOR_MID: "#E0B341", COLOR_LOW: "#F26B5B"}
+# Ghim màu chữ thay vì để widget lấy màu chữ của bảng màu hệ thống: bản đầu từng ra chữ trắng
+# trên nền nhạt (1,25:1, đo trên ảnh chụp thật). Test kiểm từng cặp nền/chữ đạt 4,5:1.
+TEXT_COLOR = "#E6ECF7"
+# Viền của từ đang phát: màu đèn tín hiệu, đủ nổi trên cả ba nền.
+ACTIVE_BORDER = "#F5A524"
 
 
 def confidence_color(c: float) -> str:
@@ -43,10 +45,12 @@ class WordLabel(QLabel):
     def _apply_style(self) -> None:
         # Từ đang nghe được đánh dấu bằng VIỀN chứ không bằng màu nền: nền đã mang thông tin độ
         # tin cậy, đổi nó đi là xóa mất thông tin đó ngay lúc người dùng cần soi nhất.
-        border = (f"2px solid {ACTIVE_BORDER}" if self._active else "2px solid transparent")
+        bg = confidence_color(self.word.confidence)
+        border = ACTIVE_BORDER if self._active else "transparent"
         self.setStyleSheet(
-            f"QLabel {{ background:{confidence_color(self.word.confidence)}; color:{TEXT_COLOR}; "
-            f"padding:1px 4px; border-radius:4px; border:{border}; font-size:16pt; }}"
+            f"QLabel {{ background:{bg}; color:{TEXT_COLOR}; padding:3px 8px 1px 8px; "
+            f"border-radius:6px; border:2px solid {border}; border-bottom:3px solid {UNDERLINE[bg]}; "
+            f"font-size:17pt; font-weight:600; }}"
         )
 
     def set_active(self, flag: bool) -> None:
@@ -73,12 +77,13 @@ class WordView(QWidget):
 
     word_clicked = Signal(float)
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, live: bool = False) -> None:
         super().__init__(parent)
+        self._live = live               # trang Nghe có câu gợi ý riêng, không phải "mở file"
         self._layout = FlowLayout(self, margin=6, spacing=6)
         self._labels: list[WordLabel] = []
         self._placeholder = QLabel(self)
-        self._placeholder.setStyleSheet("color: gray;")
+        self._placeholder.setProperty("role", "hint")
         self._layout.addWidget(self._placeholder)
         self.retranslate()
 
@@ -129,7 +134,8 @@ class WordView(QWidget):
         return list(self._labels)
 
     def retranslate(self) -> None:
-        self._placeholder.setText(self.tr("Open an audio file to decode."))
+        self._placeholder.setText(self.tr("Words appear here as they are heard.") if self._live
+                                  else self.tr("Open an audio file to decode."))
         for lb in self._labels:
             lb.retranslate()
 

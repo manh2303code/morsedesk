@@ -1,4 +1,7 @@
-"""Spectrogram 0–2 kHz bằng pyqtgraph, vạch tone, vạch đầu từ, con trỏ thời gian."""
+"""Spectrogram 0–2 kHz bằng pyqtgraph, vạch tone, vạch đầu từ, con trỏ thời gian.
+
+Dùng bảng màu phổ chung của giao diện (`theme.spectrum_lut`) — cùng bảng với thác nước và cảnh 3D.
+"""
 
 from __future__ import annotations
 
@@ -6,14 +9,17 @@ import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import QEvent, QRectF
 
+from morsedesk.app.theme import LAMP, LINE, MUTED, NIGHT, spectrum_lut
 from morsedesk.app.worker import DB_FLOOR, MAX_FREQ_HZ, Spectrogram
+
+EMPTY_SPAN_S = 10.0     # trục thời gian khi chưa có file
 
 
 class SpectrogramView(pg.PlotWidget):
     """Ảnh spectrogram (viridis, dB tương đối) cộng ba lớp vạch: tone, đầu từ, con trỏ."""
 
     def __init__(self, parent=None) -> None:
-        super().__init__(parent, background="k")
+        super().__init__(parent, background=NIGHT)
         # PlotWidget.__init__ gán self.clear = plotItem.clear làm thuộc tính instance
         # (che mất phương thức clear() của lớp con này); bỏ nó để clear() bên dưới có hiệu lực.
         self.__dict__.pop("clear", None)
@@ -22,10 +28,17 @@ class SpectrogramView(pg.PlotWidget):
         # mất nửa — thấy rõ trên ảnh chụp GUI chạy thật.
         self.setYRange(0, MAX_FREQ_HZ * 1.04, padding=0)
         self.setMouseEnabled(x=True, y=False)
+        for name in ("bottom", "left"):
+            axis = self.getAxis(name)
+            axis.setPen(pg.mkPen(LINE))
+            axis.setTextPen(pg.mkPen(MUTED))
+            # Tắt tiền tố SI tự động: với trục rỗng pyqtgraph từng hiện "−400…400 s (x0.001)".
+            axis.enableAutoSIPrefix(False)
+        self.setXRange(0.0, EMPTY_SPAN_S, padding=0)
         self.image = pg.ImageItem()
-        self.image.setLookupTable(pg.colormap.get("viridis").getLookupTable())
+        self.image.setLookupTable(spectrum_lut())
         self.addItem(self.image)
-        self.tone_line = pg.InfiniteLine(angle=0, pen=pg.mkPen("#ff5555", width=2))
+        self.tone_line = pg.InfiniteLine(angle=0, pen=pg.mkPen(LAMP, width=1, style=pg.QtCore.Qt.PenStyle.DashLine))
         self.tone_line.setVisible(False)
         self.addItem(self.tone_line)
         self.cursor_line = pg.InfiniteLine(angle=90, pen=pg.mkPen("#ffffff", width=1))
@@ -85,3 +98,4 @@ class SpectrogramView(pg.PlotWidget):
         self.set_tone(None)
         self.set_word_marks([])
         self.set_cursor(None)
+        self.setXRange(0.0, EMPTY_SPAN_S, padding=0)

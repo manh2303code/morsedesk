@@ -12,6 +12,7 @@ from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QGuiApplication, QTextCursor
 from PySide6.QtWidgets import (
     QComboBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QProgressBar,
@@ -23,16 +24,20 @@ from PySide6.QtWidgets import (
 )
 
 from morsedesk.app.live_worker import LiveWorker, input_devices
+from morsedesk.app.theme import mark_primary
 from morsedesk.app.widgets.banner import Banner
-from morsedesk.app.widgets.waterfall import WaterfallView
+from morsedesk.app.widgets.ridge3d import Ridge3DView
+from morsedesk.app.widgets.stats_bar import Readout
+from morsedesk.app.widgets.waterfall import MAX_HZ, WaterfallView
 from morsedesk.app.widgets.word_view import WordView
 
 # Cùng danh sách với trang Giải mã. `auto` đứng đầu và là mặc định: bắt người dùng chọn bảng mã
 # trước khi nghe là bắt họ đoán thứ mà chính bản tin sẽ nói ra.
 PROFILE_CHOICES = ("auto", "en", "ru", "kk-cyrl-ru")
 
-# Xám đủ nhạt để thấy ngay là "chưa chắc", vẫn đủ đậm để đọc trên cả nền sáng lẫn nền tối.
-TENTATIVE_COLOR = "#8a8a8a"
+# Xám đủ nhạt để thấy ngay là "chưa chắc", vẫn đủ đậm để đọc trên nền đêm (5,1:1).
+TENTATIVE_COLOR = "#7F8BA6"
+RIDGE_EVERY = 2         # cột thác nước / hàng cảnh 3D: ~7,8 hàng/s, 48 hàng = ~6 s lịch sử
 LEVEL_SCALE = 3000      # RMS 0..~0,33 trải hết vạch: tín hiệu Morse điển hình rất nhỏ
 
 
@@ -55,31 +60,62 @@ class LivePage(QWidget):
         self.refresh_button = QPushButton(self)
         self.listen_button = QPushButton(self)
         self.listen_button.setCheckable(True)
+        mark_primary(self.listen_button)
+        self.level_label = QLabel(self)
         self.level_bar = QProgressBar(self)
         self.level_bar.setRange(0, 100)
         self.level_bar.setTextVisible(False)
-        self.level_bar.setMaximumWidth(120)
+        self.level_bar.setFixedWidth(110)
+        for lb in (self.device_label, self.profile_label, self.level_label):
+            lb.setProperty("role", "caption")
 
         top = QHBoxLayout()
+        top.setSpacing(10)
         top.addWidget(self.device_label)
         top.addWidget(self.device_combo, 1)
+        top.addWidget(self.refresh_button)
+        top.addSpacing(8)
         top.addWidget(self.profile_label)
         top.addWidget(self.profile_combo)
-        top.addWidget(self.refresh_button)
+        top.addSpacing(8)
+        top.addWidget(self.level_label)
         top.addWidget(self.level_bar)
+        top.addSpacing(6)
         top.addWidget(self.listen_button)
 
         self.banner = Banner(self)
+        # Dải số đo trực tiếp, cùng kiểu với trang Giải mã.
+        self.alphabet_cell = Readout(self, accent=True)
+        self.tone_cell = Readout(self)
+        self.speed_cell = Readout(self)
+        self.snr_cell = Readout(self)
+        self.heard_cell = Readout(self)
+        self.readouts = QFrame(self)
+        self.readouts.setProperty("panel", True)
+        rl = QHBoxLayout(self.readouts)
+        rl.setContentsMargins(6, 0, 12, 0)
+        for i, cell in enumerate(self.live_cells()):
+            if i:
+                sep = QFrame(self)
+                sep.setFrameShape(QFrame.Shape.VLine)
+                sep.setStyleSheet("color: #2A3B60;")
+                rl.addWidget(sep)
+            rl.addWidget(cell, 1)
+        rl.addStretch(1)
+        # Tín hiệu như máy thu SDR: thác nước 3D cuộn (hàng mới ở trước) trên thác nước phẳng.
+        self.ridge = Ridge3DView(rows=48, cols=160, parent=self)
+        self.ridge.front_ticks = [(hz / MAX_HZ, f"{hz}") for hz in (0, 500, 1000, 1500, 2000)]
         self.waterfall = WaterfallView(parent=self)
         # Chip từng từ, nền theo độ tin cậy — đúng widget trang Giải mã dùng, nên hai trang đọc
         # giống nhau và người dùng không phải học hai cách nhìn.
-        self.word_view = WordView(self)
+        self.word_view = WordView(self, live=True)
         self.word_view.setMinimumHeight(56)
         self.view = QTextEdit(self)
         self.view.setReadOnly(True)
-        self.view.setStyleSheet("QTextEdit { font-size: 16pt; }")
+        self.view.setStyleSheet("QTextEdit { font-size: 17pt; }")
+        # Chuỗi số đo một dòng: giữ cho sao chép/nhật ký, không hiện (dải ô ở trên thay nó).
         self.stats_label = QLabel(self)
-        self.stats_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.stats_label.hide()
         self.legend = QLabel(self)
         self.legend.setStyleSheet(f"color: {TENTATIVE_COLOR};")
         self.copy_button = QPushButton(self)
@@ -89,15 +125,23 @@ class LivePage(QWidget):
         bottom.addWidget(self.copy_button)
         bottom.addWidget(self.clear_button)
 
+        self.signal = QSplitter(Qt.Orientation.Vertical, self)
+        self.signal.addWidget(self.ridge)
+        self.signal.addWidget(self.waterfall)
+        self.signal.setSizes([230, 150])
         self.split = QSplitter(Qt.Orientation.Vertical, self)
-        self.split.addWidget(self.waterfall)
+        self.split.addWidget(self.signal)
         self.split.addWidget(self.word_view)
         self.split.addWidget(self.view)
-        self.split.setSizes([260, 90, 200])
+        self.split.setSizes([380, 80, 160])
+        self.split.setChildrenCollapsible(False)
 
         lay = QVBoxLayout(self)
+        lay.setContentsMargins(16, 14, 16, 12)
+        lay.setSpacing(10)
         lay.addLayout(top)
         lay.addWidget(self.banner)
+        lay.addWidget(self.readouts)
         lay.addWidget(self.split, 1)
         lay.addWidget(self.stats_label)
         lay.addLayout(bottom)
@@ -108,7 +152,7 @@ class LivePage(QWidget):
         self.clear_button.clicked.connect(self.clear)
         worker.text_ready.connect(self.on_text)
         worker.stats_ready.connect(self.on_stats)
-        worker.block_ready.connect(self.waterfall.push)
+        worker.block_ready.connect(self._on_block)
         worker.level.connect(self.on_level)
         worker.listening.connect(self.on_listening)
         worker.failed.connect(self.on_failed)
@@ -140,11 +184,32 @@ class LivePage(QWidget):
         self._committed, self._tentative = committed, tentative
         self._render()
 
+    def live_cells(self) -> list[Readout]:
+        return [self.alphabet_cell, self.tone_cell, self.speed_cell, self.snr_cell, self.heard_cell]
+
+    def _on_block(self, block) -> None:
+        """Một khối audio: thác nước phẳng tính phổ, cảnh 3D dùng lại chính các cột đó."""
+        cols = self.waterfall.push(block)
+        for i in range(0, cols.shape[1], RIDGE_EVERY):
+            self.ridge.push_row(cols[:, i])
+
     def on_stats(self, update) -> None:
         """Thông số của lần giải mã gần nhất: chip từ, WPM, tone, SNR, ngôn ngữ nhận ra."""
         self.word_view.set_words(list(getattr(update, "words", []) or []))
         self.waterfall.set_tone(getattr(update, "tone_hz", None))
         self.stats_label.setText(self._stats_text(update))
+        wpm = getattr(update, "wpm", None)
+        tone = getattr(update, "tone_hz", None)
+        snr = getattr(update, "snr_db", None)
+        hz, db, wpm_u, sec = self.tr("Hz"), self.tr("dB"), self.tr("WPM"), self.tr("s")
+        self.tone_cell.value.setText(f"{tone:.0f} {hz}" if tone else "–")
+        self.speed_cell.value.setText(f"{wpm:.1f} {wpm_u}" if wpm else "–")
+        self.snr_cell.value.setText(f"{snr:.1f} {db}" if snr is not None else "–")
+        lang = getattr(update, "language", "") or ""
+        names = {"en": self.tr("English"), "ru": self.tr("Russian"), "kk-cyrl-ru": self.tr("Kazakh")}
+        self.alphabet_cell.value.setText(names.get(lang, lang) or "–")
+        heard = float(getattr(update, "audio_s", 0.0) or 0.0)
+        self.heard_cell.value.setText(f"{heard:.0f} {sec}")
 
     def _stats_text(self, u) -> str:
         parts = []
@@ -181,6 +246,7 @@ class LivePage(QWidget):
         if self.listen_button.isChecked():
             self.banner.hide()
             self.waterfall.clear()
+            self.ridge.clear()
             self.word_view.clear()
             self.worker.start_listening(self.device_combo.currentData(),
                                         self.profile_combo.currentData())
@@ -191,7 +257,10 @@ class LivePage(QWidget):
         self._committed = self._tentative = ""
         self.word_view.clear()
         self.waterfall.clear()
+        self.ridge.clear()
         self.stats_label.clear()
+        for c in self.live_cells():
+            c.value.setText("–")
         self._render()
 
     def _copy(self) -> None:
@@ -224,9 +293,21 @@ class LivePage(QWidget):
         self.profile_combo.setToolTip(
             self.tr("Auto detects the alphabet from the message itself"))
         self.refresh_button.setText(self.tr("Refresh"))
+        names = {"auto": self.tr("Auto"), "en": self.tr("English"), "ru": self.tr("Russian"),
+                 "kk-cyrl-ru": self.tr("Kazakh")}
+        for i in range(self.profile_combo.count()):
+            self.profile_combo.setItemText(i, names[self.profile_combo.itemData(i)])
         self.refresh_button.setToolTip(self.tr("Look for newly plugged devices"))
         self.listen_button.setText(self.tr("Stop") if listening else self.tr("Listen"))
         self.level_bar.setToolTip(self.tr("Input level"))
+        self.level_label.setText(self.tr("Level"))
+        self.alphabet_cell.caption.setText(self.tr("Alphabet"))
+        self.tone_cell.caption.setText(self.tr("Tone"))
+        self.speed_cell.caption.setText(self.tr("Speed"))
+        self.snr_cell.caption.setText(self.tr("SNR"))
+        self.heard_cell.caption.setText(self.tr("Heard"))
+        self.ridge.placeholder = self.tr("Press Listen to see the band live in 3D.")
+        self.ridge.depth_label = self.tr("0–2000 Hz, newest in front")
         self.view.setPlaceholderText(self.tr("Decoded text appears here as it is heard."))
         self.legend.setText(self.tr("Grey text may still change; plain text is final."))
         self.copy_button.setText(self.tr("Copy"))

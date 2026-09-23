@@ -140,6 +140,16 @@ mình**. Trong một phiên đã có hai kết luận research không sống só
   font (145 % ra gần gấp đôi), widget bề rộng cố định trong layout dọc khống chế bề rộng cả cột trừ khi
   thêm căn lề. Chụp `packaging/shots.py` rồi nhìn ảnh sau mỗi lần sửa.
 - Logo sinh bằng `packaging/make_icon.py`; test so từng byte PNG trong repo với bộ sinh.
+- **Stylesheet toàn ứng dụng không được đặt `font-family`/`font-size` cho `QWidget`**: nó đè mọi
+  `setFont` của mã (chuỗi Morse mất chữ đơn cách, số đo mất kiểu mặt đồng hồ). Font đặt bằng
+  `QApplication.setFont`. Nút nhỏ kích thước cố định (bàn phím chữ Kirin) phải tự đặt `padding: 0`
+  — phần đệm 14 px của nút thường cắt mất nửa chữ.
+- Hình học logo nằm ở `branding.LOGO_LARGE/LOGO_SMALL`, dùng chung cho biểu tượng (SDF), màn hình
+  chờ và trang Giới thiệu (QPainter). Ở 16–24 px ba dấu phải tách rời — có test đếm khối.
+- Tiến trình giải mã là thang 1000 chia theo tầng (`progress.STAGE_*`); beam/LM báo mỗi 100
+  khung. Đổi tỉ trọng thời gian (vd. beam nhanh lên) thì đo lại và chỉnh các mốc.
+- Heredoc bash rất dài có dấu nháy đơn trong mã Python có lúc làm công cụ Bash báo lỗi cú pháp:
+  ghi script ra file tạm rồi chạy.
 - **Ảnh chụp bắt lỗi mà test không bắt.** Ba lần trong một phiên: nút phát bị khóa vĩnh viễn, thác
   nước thành mảng vàng đặc, rồi thác nước phẳng lì. Sau mỗi thay đổi giao diện, chạy
   `packaging/shots.py` và **nhìn ảnh**.

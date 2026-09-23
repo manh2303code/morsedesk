@@ -39,6 +39,41 @@ LAYER_COLORS = {
 }
 
 
+# Hình học logo, trong hệ tọa độ đơn vị [0, 1] của ô vuông (y hướng xuống). Dùng chung cho biểu
+# tượng (`packaging/make_icon.py`, vẽ bằng SDF), màn hình chờ và trang Giới thiệu (vẽ bằng
+# QPainter), để ba nơi luôn là CÙNG một hình. Phím Morse thẳng vẽ nét, cảm hứng từ GGMorse; phía
+# trên là `· · –` — chữ U, dấu hiệu nhận diện giữ lại từ logo đầu tiên.
+#   capsule: (x0, y0, x1, y1, nửa độ dày); circle: (cx, cy, r); round_box: (cx, cy, nửa rộng,
+#   nửa cao, bán kính góc, nửa độ dày nét).
+LOGO_LARGE = {
+    "marks": [("circle", 0.300, 0.275, 0.052), ("circle", 0.440, 0.275, 0.052),
+              ("capsule", 0.578, 0.275, 0.735, 0.275, 0.052)],
+    "key": [("round_box", 0.50, 0.800, 0.360, 0.052, 0.045, 0.027),  # đế: tấm mỏng, rộng
+            ("capsule", 0.300, 0.600, 0.300, 0.748, 0.027),          # trụ trục xoay
+            ("capsule", 0.600, 0.660, 0.600, 0.748, 0.027),          # vít tiếp điểm
+            ("capsule", 0.160, 0.600, 0.715, 0.572, 0.031),          # cần gõ, gần nằm ngang
+            ("circle", 0.765, 0.548, 0.070)],                        # núm
+    "pivot": (0.300, 0.600),
+}
+# Ở 16–24 px nét 0,03 chỉ còn nửa điểm ảnh: bỏ trụ và tiếp điểm, làm dày mọi thứ.
+LOGO_SMALL = {
+    # Khe 0,10 giữa các dấu = 1,6 px ở cỡ 16: khe hẹp hơn thì ba dấu dính thành một khối (test).
+    "marks": [("circle", 0.215, 0.28, 0.075), ("circle", 0.465, 0.28, 0.075),
+              ("capsule", 0.715, 0.28, 0.805, 0.28, 0.075)],
+    "key": [("capsule", 0.14, 0.83, 0.86, 0.83, 0.070),
+            ("capsule", 0.16, 0.64, 0.66, 0.60, 0.070),
+            ("circle", 0.74, 0.56, 0.130)],
+    "pivot": (0.16, 0.64),
+}
+KEY_INK = "#EEF2FA"          # nét phím trên nền logo
+TILE_TOP = "#25396A"         # nền ô logo: dải màu nhẹ từ trên xuống để nổi trên thanh tác vụ tối
+TILE_BOTTOM = "#16223D"
+
+
+def logo_geometry(size_px: int) -> dict:
+    return LOGO_SMALL if size_px <= 24 else LOGO_LARGE
+
+
 def icon_paths() -> list[Path]:
     return [ICON_DIR / f"morsedesk-{s}.png" for s in ICON_SIZES if (ICON_DIR / f"morsedesk-{s}.png").exists()]
 

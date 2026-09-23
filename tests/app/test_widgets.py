@@ -37,9 +37,10 @@ def test_banner_levels_and_close(qtbot):
 
 def test_confidence_colors_thresholds():
     assert WORD_GOOD == 0.8
-    assert confidence_color(0.95) == "#c8f0c8" and confidence_color(0.8) == "#c8f0c8"
-    assert confidence_color(0.6) == "#fff2b3" and confidence_color(0.5) == "#fff2b3"
-    assert confidence_color(0.49) == "#f7c6c6"
+    assert confidence_color(0.95) == COLOR_GOOD and confidence_color(0.8) == COLOR_GOOD
+    assert confidence_color(0.6) == COLOR_MID and confidence_color(0.5) == COLOR_MID
+    assert confidence_color(0.49) == COLOR_LOW
+    assert len({COLOR_GOOD, COLOR_MID, COLOR_LOW}) == 3
 
 
 def test_word_view_labels_tooltips_and_click(qtbot):
@@ -50,7 +51,7 @@ def test_word_view_labels_tooltips_and_click(qtbot):
     v.set_words(words)
     labels = v.labels()
     assert [lb.text() for lb in labels] == ["CQ", "DE", "K"]
-    assert "#c8f0c8" in labels[0].styleSheet() and "#fff2b3" in labels[1].styleSheet() and "#f7c6c6" in labels[2].styleSheet()
+    assert COLOR_GOOD in labels[0].styleSheet() and COLOR_MID in labels[1].styleSheet() and COLOR_LOW in labels[2].styleSheet()
     assert "0.90" in labels[0].toolTip() and "0.60" in labels[1].toolTip() and "1.00" in labels[1].toolTip()
     got = []
     v.word_clicked.connect(got.append)

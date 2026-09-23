@@ -70,6 +70,29 @@ a {{ color: {LAYER_COLORS["signal"][0]}; }}
 """
 
 
+# Bản nền đêm cho trang Giới thiệu (cùng tông với ứng dụng). Tài liệu kỹ thuật giữ nền giấy: đó là
+# tài liệu đọc dài và in ra PDF.
+_DARK = {
+    "#1B2233": "#E6ECF7",      # chữ
+    "#56627A": "#95A3BF",      # chữ phụ
+    "#D5DCE8": "#2A3B60",      # viền bảng
+    "#DDE3EE": "#2A3B60",
+    "#E6EBF3": "#1B2946",      # nền tiêu đề bảng
+    "#1E7A3E": "#46C47A",      # độ tin cậy cao
+    "#946200": "#E0B341",
+    "#B3261E": "#F26B5B",
+}
+
+
+def doc_css(dark: bool = False) -> str:
+    css = DOC_CSS
+    if dark:
+        for light, night in _DARK.items():
+            css = css.replace(light, night)
+        css = css.replace(f"a {{ color: {LAYER_COLORS['signal'][0]}; }}", "a { color: #F5A524; }")
+    return css
+
+
 def doc_path(kind: str, language: str) -> Path:
     """File tài liệu theo ngôn ngữ giao diện; thiếu bản dịch thì rơi về tiếng Anh."""
     path = DOCS_DIR / f"{kind}_{language}.html"
@@ -83,14 +106,15 @@ def load_doc(kind: str, language: str) -> str:
 class ReadingView(QTextBrowser):
     """QTextBrowser nền giấy, dòng dài cố định và nằm GIỮA vùng hiển thị khi cửa sổ rộng."""
 
-    def __init__(self, parent=None, measure: int = MEASURE_PX) -> None:
+    def __init__(self, parent=None, measure: int = MEASURE_PX, dark: bool = False) -> None:
         super().__init__(parent)
         self._measure = measure
+        self._css = doc_css(dark)
         self.setOpenLinks(False)              # bên dùng tự xử lý liên kết (mở tài liệu, cuộn tới mục)
         self.setFrameShape(QTextBrowser.Shape.NoFrame)
         self.setLineWrapMode(QTextEdit.LineWrapMode.FixedPixelWidth)
         self.setLineWrapColumnOrWidth(measure)
-        self.document().setDefaultStyleSheet(DOC_CSS)
+        self.document().setDefaultStyleSheet(self._css)
         self.document().setDocumentMargin(28)
         pal = self.palette()
         # Màu cố định chứ không theo hệ thống: tài liệu có màu theo tầng, phải đọc được như nhau
@@ -98,10 +122,11 @@ class ReadingView(QTextBrowser):
         pal.setColor(QPalette.ColorRole.Base, Qt.GlobalColor.transparent)
         pal.setColor(QPalette.ColorRole.Text, Qt.GlobalColor.black)
         self.setPalette(pal)
-        self.setStyleSheet(f"QTextBrowser {{ background: {PAPER}; color: {INK}; border: none; }}")
+        bg, fg = ("#0E1627", "#E6ECF7") if dark else (PAPER, INK)
+        self.setStyleSheet(f"QTextBrowser {{ background: {bg}; color: {fg}; border: none; }}")
 
     def set_html(self, html: str) -> None:
-        self.document().setDefaultStyleSheet(DOC_CSS)
+        self.document().setDefaultStyleSheet(self._css)
         self.setHtml(html)
 
     def resizeEvent(self, event) -> None:

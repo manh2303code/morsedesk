@@ -1,13 +1,12 @@
-"""Sinh biểu tượng MorseDesk: một khuôn mặt cười ghép từ hai dấu chấm và một dấu gạch Morse.
+"""Sinh biểu tượng MorseDesk: phím Morse vẽ nét, phía trên là `· · –` màu đèn tín hiệu.
 
-Hai mắt là hai `dit`, miệng là một `dah` uốn cong. Đọc từ trên xuống: `· · –`, tức chữ U trong
-Morse. Nền là ô vuông bo góc màu "hoàng hôn" #1F2B4D, nét màu "đèn tín hiệu" #F5A524 — Morse
-cũng là ánh sáng (đèn Aldis) chứ không chỉ là âm thanh.
+Hình học nằm ở `morsedesk/app/branding.py` (LOGO_LARGE / LOGO_SMALL) và dùng chung với màn hình
+chờ động và trang Giới thiệu. Cảm hứng từ logo GGMorse (ô bo góc, phím Morse nét đơn) nhưng là hình
+riêng; hàng `· · –` (chữ U) là dấu hiệu nhận diện giữ lại từ logo đầu tiên.
 
-Vẽ bằng hàm khoảng cách có dấu (SDF) trên numpy, lấy mẫu dày rồi gộp lại để khử răng cưa, và ghi
-PNG thủ công — không thêm phụ thuộc chỉ vì một biểu tượng. Ở cỡ 16–24 px, mắt và nét miệng được
-làm DÀY hơn theo tỉ lệ (optical sizing): cùng hình học ở 16 px sẽ cho nét 1,9 px, nhòe trên thanh
-tác vụ.
+Vẽ bằng hàm khoảng cách có dấu (SDF) trên numpy, lấy mẫu dày rồi gộp để khử răng cưa, ghi PNG thủ
+công — không thêm phụ thuộc chỉ vì một biểu tượng. Ở 16–24 px dùng bản rút gọn (LOGO_SMALL): nét
+0,03 của bản lớn chỉ còn nửa điểm ảnh ở cỡ thanh tác vụ.
 
     uv run python packaging/make_icon.py            # ghi morsedesk/app/icons/ + packaging/appimage/
 """
@@ -22,12 +21,30 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from morsedesk.app.branding import (  # noqa: E402  (cần ROOT trên sys.path trước)
+    KEY_INK,
+    LAMP,
+    TILE_BOTTOM,
+    TILE_TOP,
+    logo_geometry,
+)
+
 ICON_DIR = ROOT / "morsedesk" / "app" / "icons"
 APPIMAGE_ICON = ROOT / "packaging" / "appimage" / "morsedesk.png"
 SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)
 
-DUSK = (0x1F, 0x2B, 0x4D)
-LAMP = (0xF5, 0xA5, 0x24)
+
+def _rgb(hex_color: str) -> tuple[int, int, int]:
+    h = hex_color.lstrip("#")
+    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+
+LAMP_RGB = _rgb(LAMP)
+INK_RGB = _rgb(KEY_INK)
+TOP_RGB, BOTTOM_RGB = _rgb(TILE_TOP), _rgb(TILE_BOTTOM)
 
 
 def png_bytes(rgba: np.ndarray) -> bytes:
@@ -43,22 +60,6 @@ def png_bytes(rgba: np.ndarray) -> bytes:
             + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
 
 
-def geometry(size: int) -> dict[str, float]:
-    """Kích thước tương đối theo cỡ đích: nhỏ thì nét dày hơn và mắt đặt cao hơn để còn khe hở.
-
-    Miệng là cung của một đường tròn LỚN có tâm đặt cao (arc_cy), lấy đoạn ±half độ quanh đáy:
-    nụ cười thoải và hai đầu miệng không chạm mắt. Tâm đặt ngang mắt thì khe hở chỉ còn ~0,005.
-    """
-    if size <= 24:
-        return {"eye_r": 0.105, "eye_dx": 0.175, "eye_y": 0.35, "stroke": 0.080,
-                "arc_cy": 0.22, "arc_r": 0.42, "half": 30.0}
-    if size <= 48:
-        return {"eye_r": 0.088, "eye_dx": 0.165, "eye_y": 0.37, "stroke": 0.066,
-                "arc_cy": 0.21, "arc_r": 0.43, "half": 29.0}
-    return {"eye_r": 0.076, "eye_dx": 0.160, "eye_y": 0.38, "stroke": 0.058,
-            "arc_cy": 0.20, "arc_r": 0.44, "half": 28.0}
-
-
 def _sdf_round_box(px: np.ndarray, py: np.ndarray, half: float, radius: float) -> np.ndarray:
     qx = np.abs(px - 0.5) - (half - radius)
     qy = np.abs(py - 0.5) - (half - radius)
@@ -67,39 +68,58 @@ def _sdf_round_box(px: np.ndarray, py: np.ndarray, half: float, radius: float) -
     return outside + inside - radius
 
 
-def _sdf_arc(px, py, cx, cy, r, a0, a1, half_width) -> np.ndarray:
-    """Cung tròn tâm (cx, cy) bán kính r từ góc a0 tới a1 (radian, trục y hướng xuống), đầu tròn."""
-    dx, dy = px - cx, py - cy
-    ang = np.arctan2(dy, dx)
-    on_arc = np.abs(np.hypot(dx, dy) - r)
-    ends = np.minimum(np.hypot(px - (cx + r * np.cos(a0)), py - (cy + r * np.sin(a0))),
-                      np.hypot(px - (cx + r * np.cos(a1)), py - (cy + r * np.sin(a1))))
-    return np.where((ang >= a0) & (ang <= a1), on_arc, ends) - half_width
+def _sdf_capsule(px, py, x0, y0, x1, y1, half_width) -> np.ndarray:
+    dx, dy = x1 - x0, y1 - y0
+    t = np.clip(((px - x0) * dx + (py - y0) * dy) / max(dx * dx + dy * dy, 1e-12), 0.0, 1.0)
+    return np.hypot(px - (x0 + t * dx), py - (y0 + t * dy)) - half_width
+
+
+def _sdf_shape(px, py, shape) -> np.ndarray:
+    kind, *a = shape
+    if kind == "circle":
+        cx, cy, r = a
+        return np.hypot(px - cx, py - cy) - r
+    if kind == "capsule":
+        return _sdf_capsule(px, py, *a)
+    if kind == "round_box":                     # khung rỗng: |sdf| - nửa độ dày nét
+        cx, cy, hx, hy, r, w = a
+        qx = np.abs(px - cx) - (hx - r)
+        qy = np.abs(py - cy) - (hy - r)
+        d = np.hypot(np.maximum(qx, 0.0), np.maximum(qy, 0.0)) + np.minimum(np.maximum(qx, qy), 0.0) - r
+        return np.abs(d) - w
+    raise ValueError(kind)
 
 
 def render(size: int, supersample: int = 8) -> np.ndarray:
     """Ảnh RGBA [size, size, 4]."""
-    g = geometry(size)
+    geo = logo_geometry(size)
     n = size * supersample
     c = (np.arange(n) + 0.5) / n
     px, py = np.meshgrid(c, c)
     # Chừa 1/32 lề trong suốt: một số thanh tác vụ cắt sát mép, và góc bo cần chỗ để mềm.
     bg = _sdf_round_box(px, py, half=0.5 - 1 / 32, radius=0.22) <= 0.0
-    eyes = ((np.hypot(px - (0.5 - g["eye_dx"]), py - g["eye_y"]) <= g["eye_r"])
-            | (np.hypot(px - (0.5 + g["eye_dx"]), py - g["eye_y"]) <= g["eye_r"]))
-    mouth = _sdf_arc(px, py, 0.5, g["arc_cy"], g["arc_r"], np.radians(90 - g["half"]),
-                     np.radians(90 + g["half"]), g["stroke"]) <= 0.0
-    ink = (eyes | mouth) & bg
+    marks = np.zeros_like(bg)
+    for shp in geo["marks"]:
+        marks |= _sdf_shape(px, py, shp) <= 0.0
+    key = np.zeros_like(bg)
+    for shp in geo["key"]:
+        key |= _sdf_shape(px, py, shp) <= 0.0
+    marks &= bg
+    key &= bg & ~marks
 
     def pool(mask: np.ndarray) -> np.ndarray:
         return mask.reshape(size, supersample, size, supersample).mean(axis=(1, 3))
 
-    a_bg, a_ink = pool(bg), pool(ink)
+    a_bg, a_marks, a_key = pool(bg), pool(marks), pool(key)
+    t_row = (np.arange(size) + 0.5) / size
+    tile = np.empty((size, size, 3))
+    for i in range(3):
+        tile[..., i] = (TOP_RGB[i] * (1 - t_row) + BOTTOM_RGB[i] * t_row)[:, None]
+    safe = np.where(a_bg > 0, a_bg, 1.0)
+    fm, fk = a_marks / safe, a_key / safe            # tỉ lệ phủ trong phần nền
     rgb = np.empty((size, size, 3))
     for i in range(3):
-        # Nét nằm TRÊN nền: pha màu theo tỉ lệ phủ của nét trong phần nền.
-        t = np.divide(a_ink, a_bg, out=np.zeros_like(a_ink), where=a_bg > 0)
-        rgb[..., i] = DUSK[i] * (1 - t) + LAMP[i] * t
+        rgb[..., i] = tile[..., i] * (1 - fm - fk) + LAMP_RGB[i] * fm + INK_RGB[i] * fk
     rgba = np.dstack([rgb, a_bg * 255.0])
     return np.clip(np.rint(rgba), 0, 255).astype(np.uint8)
 

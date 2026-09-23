@@ -57,6 +57,7 @@ datas = (
     + tree("morsedesk/app/fonts", "morsedesk/app/fonts")
     + tree("morsedesk/app/icons", "morsedesk/app/icons")      # logo cửa sổ và thanh tác vụ
     + tree("morsedesk/app/docs", "morsedesk/app/docs")        # trang Giới thiệu, tài liệu kỹ thuật
+    + tree("morsedesk/app/samples", "morsedesk/app/samples")  # "Xin chào" nạp sẵn theo ngôn ngữ
     # Chỉ hai file này: glob `acoustic.*` còn bắt cả `acoustic.golden.npz` (2,6 MB fixture so
     # sánh bit-exact của bộ kiểm thử), thứ người dùng cuối không bao giờ đọc tới.
     + [(str(ROOT / "models" / n), "models") for n in ("acoustic.onnx", "acoustic.json")
@@ -80,14 +81,17 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 ICON_PNG = ICON_DIR / "morsedesk-256.png"
+# Khung đầu của màn hình chờ động (packaging/make_splash.py); chưa sinh thì dùng tạm biểu tượng.
+SPLASH_PNG = ROOT / "packaging" / "splash.png"
 
 if options.onefile:
     icon = build_ico(Path(workpath) / "morsedesk.ico")
     # Bootloader vẽ ảnh chờ bằng Tcl/Tk riêng của nó (không cần module tkinter trong gói) và cập
     # nhật dòng chữ theo tên file đang bung — đó là dấu hiệu "đang chạy" trong lúc chờ Defender.
-    splash = Splash(str(ICON_PNG), binaries=a.binaries, datas=a.datas,
-                    text_pos=(12, 244), text_size=9, text_color="#9aa0a6",
-                    minify_script=True, always_on_top=True)
+    # Không vẽ chữ của bootloader: tên và dòng bản quyền đã nằm trong ảnh, và Qt vẽ lại đúng
+    # khung này ngay khi Python lên, rồi mới bắt đầu hoạt cảnh gõ phím.
+    splash = Splash(str(SPLASH_PNG if SPLASH_PNG.exists() else ICON_PNG), binaries=a.binaries,
+                    datas=a.datas, text_pos=None, minify_script=True, always_on_top=True)
     exe = EXE(pyz, a.scripts, splash, splash.binaries, a.binaries, a.datas, name="MorseDesk",
               icon=str(icon), console=False, strip=False, upx=False)
 else:

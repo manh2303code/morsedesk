@@ -18,6 +18,7 @@ from morsedesk.app.main_window import MainWindow
 from morsedesk.app.paths import log_directory
 from morsedesk.app.settings import AppSettings, default_language
 from morsedesk.app.startup import check_models, missing_models_message
+from morsedesk.app.theme import apply_theme
 from morsedesk.app.worker import DecoderWorker, Player
 from morsedesk.textio import force_utf8_streams
 
@@ -45,6 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--lm-dir", type=Path, default=None, help="language model directory (default models/lm)")
     p.add_argument("--engine", choices=["onnx", "baseline"], default="onnx")
     p.add_argument("--lang", choices=["en", "ru", "kk"], default=None, help="UI language override")
+    p.add_argument("--no-splash", action="store_true", help="skip the animated start screen")
     return p
 
 
@@ -101,6 +103,7 @@ def create_app(args: argparse.Namespace) -> tuple[QApplication, MainWindow]:
     family = apply_application_font()
     if family:
         log.info("font ứng dụng: %s", family)
+    apply_theme(app)                # giao diện "thiết bị đo" nền đêm, sau khi đã nạp font
     settings = load_settings()
     worker = DecoderWorker(engine=args.engine, model_path=args.model, lm_dir=args.lm_dir)
     worker.start()
@@ -113,6 +116,7 @@ def create_app(args: argparse.Namespace) -> tuple[QApplication, MainWindow]:
     live.start()
     app.aboutToQuit.connect(live.shutdown)
     window = MainWindow(worker, Player(), settings, I18N_DIR, live=live)
+    window.decode_page.enable_samples()     # mở lên là có sẵn "Xin chào" đúng ngôn ngữ giao diện
     window.set_language(default_language(args.lang, settings.ui_language, QLocale.system().name()))
     return app, window
 
@@ -139,9 +143,31 @@ def main(argv: list[str] | None = None) -> int:
         sys.__excepthook__(exc_type, exc, tb)
 
     sys.excepthook = excepthook
+    if args.no_splash:
+        app, window = create_app(args)
+        window.show()
+        close_splash()
+        return int(app.exec())
+    # Màn hình chờ động (phím Morse gõ ra logo): hiện NGAY, trước khi dựng cửa sổ chính. Khung đầu
+    # của nó trùng ảnh tĩnh của màn hình chờ PyInstaller, nên chỗ nối giữa hai màn hình không giật.
+    from morsedesk.app.splash import SplashScreen
+
+    app = QApplication.instance() or QApplication(sys.argv[:1])
+    install_app_identity(app)
+    apply_application_font()
+    splash = SplashScreen()
+    splash.center_on_screen()
+    splash.show()
+    app.processEvents()
+    close_splash()                          # tắt ảnh tĩnh của bản .exe một file
     app, window = create_app(args)
-    window.show()
-    close_splash()
+
+    def reveal() -> None:
+        window.show()
+        splash.close()
+
+    splash.finished.connect(reveal)
+    splash.play()
     return int(app.exec())
 
 
