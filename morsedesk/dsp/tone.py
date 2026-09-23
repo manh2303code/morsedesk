@@ -55,6 +55,11 @@ def fallback_tone_hz(x: np.ndarray, sample_rate: int = SAMPLE_RATE) -> float | N
     if not band.any():
         return None
     p90 = np.percentile(power, 90, axis=1)
+    # Không có năng lượng trong dải thì không có gì để đoán. Thiếu dòng này, phổ toàn 0 của im lặng
+    # số làm `argmax` trả bin ĐẦU của dải (312,5 Hz), và engine onnx giải im lặng ra chữ `T` — vi
+    # phạm spec §7 "không dò được tone -> rỗng, không bịa chữ".
+    if not np.any(p90[band] > 0.0):
+        return None
     idx = np.flatnonzero(band)
     return float(freqs[idx[int(np.argmax(p90[band]))]])
 

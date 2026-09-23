@@ -38,6 +38,15 @@ from morsedesk.warnings import DecodeWarning, WarningCode, warn
 
 LOW_CONFIDENCE = 0.6
 FALLBACK_CONFIDENCE = 0.5
+# Dưới mức này thì coi như không có Morse (spec §7). Chọn trên bộ DEV (seed 500000), xác nhận trên
+# T1, đo 23/09 với E9 + cửa sổ 12 s:
+# - 120 lần chạy đầu vào KHÔNG có Morse (nhiễu trắng/xung/lọc dải, sóng mang, 5-60 s): độ tin cậy
+#   trung bình cả clip tối đa 0,113 -> ở 0,15 không lần nào lọt;
+# - dev: không clip thật nào dưới 0,15 (CER +0,00); T1: 3 clip, đều `qsb` 0-3 dB vốn đã sai
+#   86-92 % (CER +0,09). Ở 0,20 bắt đầu cắt clip thật trên cả hai bộ.
+# Giới hạn đã biết: tín hiệu đánh phím TUẦN HOÀN hoàn hảo (vd. nhiễu điều biên đều 4 Hz) ra
+# "EEEE..." với độ tin cậy ~0,99 — về mặt đường bao nó chính là Morse chữ E, không cổng nào tách được.
+MIN_CLIP_CONFIDENCE = 0.15
 DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[1] / "models" / "acoustic.onnx"
 DEEPCW_PROFILE = "en"
 # Beam ký tự + LM `en` trên hậu nghiệm DeepCW. Task 3 đo trước/sau và chốt giá trị này.
@@ -508,6 +517,17 @@ class Decoder:
                     lang, scores, [w.vi() for w in warnings], "onnx",
                     " ".join(w.text for w in words), warning_codes=list(warnings),
                     decoded_by="dsp")
+        # Spec §7: không có Morse thì kết quả rỗng, không bịa chữ. Nhiễu trắng, sóng mang không
+        # đánh phím, nhiễu xung đều ra "chữ" — mô hình ngôn ngữ còn gọt chúng thành thứ trông rất
+        # thật (`SEE`, `73`, `CAR`) — nhưng với độ tin cậy rất thấp. Chỉ áp cho đường MÔ HÌNH:
+        # đường DSP phía trên đã chỉ được chọn khi timing khớp gần hoàn hảo. Giữ tone và SNR đo
+        # được: "nghe thấy một tone ở 700 Hz nhưng không đọc ra Morse" khác hẳn "không có gì".
+        if confidence < MIN_CLIP_CONFIDENCE:
+            warnings.append(warn(WarningCode.NO_SIGNAL))
+            lang = profile.id if (not self.auto or scores) else ""
+            return DecodeResult("", [], None, tone_hz, snr_db, lang, scores,
+                                [w.vi() for w in warnings], "onnx", None,
+                                warning_codes=list(warnings))
         fallback_text = None
         if confidence < FALLBACK_CONFIDENCE:
             warnings.append(warn(WarningCode.LOW_CONFIDENCE_WITH_DSP))

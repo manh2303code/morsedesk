@@ -190,7 +190,7 @@ Model E9 v0.3.0, cửa sổ 12 s, beam `alpha` 0,3 / `char_bonus` 1,25. Hai bộ
 
 | | tổng | clean | mp3 | qrm | qrn | qsb |
 |---|---|---|---|---|---|---|
-| T1 (seed 1000) | **9,70 %** | 1,97 | 1,78 | 1,39 | 2,31 | 41,05 |
+| T1 (seed 1000) | **9,79 %** | 1,97 | 1,78 | 1,39 | 2,31 | 41,05 |
 | dev (seed 500000) | **12,25 %** | 2,72 | 4,41 | 4,19 | 2,95 | 46,95 |
 
 T2 bản ghi thật **3,93 %**. **Không kênh nào qua cổng 2 % một cách chắc chắn** — trên T1 ba kênh
@@ -220,10 +220,15 @@ T1 dùng fade đúng 20 dB chu kỳ 4 s. Ở SNR 20 dB đáy fade chỉ xuống 
 −14…−20 dB, dưới nền nhiễu thật: cổng 2 % trên toàn ô `qsb` gần như chắc chắn **không bộ giải mã nào
 đạt** (DeepCW 47 %). Spec tuần 5–6 §1.2: khi đó giao bảng số theo ô để người dùng quyết.
 
-**Vi phạm spec đang mở:** §7 *"không dò được tone → kết quả rỗng, không bịa chữ"*. `fallback_tone_hz`
-(commit 7722bc8, 22/09) đoán tone theo đỉnh phổ và biến 30 giây nhiễu trắng thuần thành `DE K`, dù
-độ tin cậy từng chữ chỉ 0,04 và có cảnh báo `guessed_tone`. Có thể chặn bằng sàn độ tin cậy trên
-đường đoán tone — nhưng phải đo xem 29 clip T1 mà đường này cứu có tin cậy cao hơn sàn đó không.
+**Spec §7 "không bịa chữ" — đã đóng phần lớn (23/09).** Trước đó 81/81 đầu vào KHÔNG có Morse đều ra
+chữ, kể cả im lặng số (`T`), sóng mang (`73`), nhiễu trắng (`SEE`). Hai bản sửa: (1) `fallback_tone_hz`
+không đoán tone khi dải không có năng lượng; (2) `MIN_CLIP_CONFIDENCE = 0.15` ở `api.py` — độ tin cậy
+trung bình cả clip dưới mức đó thì trả rỗng + `NO_SIGNAL`, vẫn giữ tone/SNR đã đo. Chọn trên dev, xác
+nhận trên T1: T1 9,70 → 9,79 %, dev và T2 không đổi, 120/120 lần chạy nhiễu hết bịa chữ.
+**Đừng tắt đường đoán tone** để "đúng chữ spec": nó cứu 39 clip `qsb` mỗi bộ, đáng 3,5 điểm CER.
+**Giới hạn còn lại:** tín hiệu đánh phím TUẦN HOÀN hoàn hảo (nhiễu điều biên đều) ra `EEEE` với độ tin
+cậy ~0,99 — về đường bao nó chính là Morse chữ E. Test cũ kiểm §7 bằng `engine="baseline"` nên không bắt
+được việc engine `onnx` bịa chữ; test mới chạy trên `onnx`.
 
 **Bản đóng gói cũ:** `dist/MorseDesk-x86_64.AppImage` dựng 22/09 23:24 với model **v0.2.0** và cửa
 sổ 4 s, trước 16 commit. Phải dựng lại trước khi đưa ai dùng.

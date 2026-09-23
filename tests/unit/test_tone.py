@@ -68,3 +68,10 @@ def test_too_short_input():
     est = estimate_tone(np.zeros(100, dtype=np.float32))
     assert not est.has_signal and est.snr_db == 0.0
     assert MIN_PEAK_DB == 6.0
+
+
+def test_fallback_tone_refuses_silence():
+    """Phổ toàn 0 thì `argmax` trả bin ĐẦU của dải (312,5 Hz) — một tone bịa ra từ hư không."""
+    from morsedesk.dsp.tone import fallback_tone_hz
+
+    assert fallback_tone_hz(np.zeros(8000 * 5, dtype=np.float32)) is None

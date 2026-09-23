@@ -983,3 +983,33 @@ nhiều quyết định đã chọn trên nó, nhưng chưa đủ để khẳng 
 qsb@20 dB trên dev là **42,0 ± 7,4 %** (T1 14,2 ± 5,2), trong khi clean@0 dB lặp lại ở ~3 % trên cả
 hai bộ. Kết luận "lỗi xử lý ở SNR cao" đứng vững và còn mạnh hơn; con số 14,2 % của T1 là một lần
 rút thăm may (20 clip mỗi ô).
+
+---
+
+## Spec §7 "không bịa chữ": cổng độ tin cậy theo clip (2026-09-23)
+
+**Trước:** 81/81 đầu vào KHÔNG có Morse (9 loại × 3 độ dài × 3 seed) đều ra chữ: im lặng số `T`,
+nhiễu trắng `AND`/`SEE`, sóng mang liên tục `73`/`CAR`, nhiễu xung `SEE`. Mô hình ngôn ngữ còn gọt
+nhiễu thành chữ trông thật. Sóng mang dò được tone nên KHÔNG đi đường đoán tone — chặn riêng đường
+đó là không đủ.
+
+**Tắt hẳn đường đoán tone thì không được:** với E9 + cửa sổ 12 s nó cứu 39 clip mỗi bộ (gần hết là
+`qsb`), giải đúng ~46 % ký tự của chúng; tắt đi T1 9,70 → 13,28 %, dev 12,25 → 15,77 %.
+
+**Cổng theo từ thì quá đắt** (ngưỡng 0,15: T1 +0,43) vì cắt cả từ thật độ tin cậy thấp trong clip
+đúng. **Cổng theo clip** (độ tin cậy trung bình cả clip) tách sạch:
+
+| ngưỡng | dev: clip cắt / CER | T1: clip cắt / CER | nhiễu còn bịa (trừ tuần hoàn) |
+|---|---|---|---|
+| 0,12 | 0 / +0,00 | 2 / +0,06 | 0 / 120 |
+| **0,15** | **0 / +0,00** | **3 / +0,09** | **0 / 120** |
+| 0,20 | 3 / +0,13 | 8 / +0,29 | 0 / 120 |
+
+Clip nhiễu cao nhất 0,113. Mọi clip thật dưới 0,20 đều là `qsb` 0–3 dB vốn đã sai 72–92 %.
+Chọn 0,15 trên dev, xác nhận bằng mã thật: T1 **9,79 %** (+0,09, đúng như mô phỏng), dev **12,25 %**,
+T2 **3,93 %** không đổi; 120/120 lần chạy nhiễu nay rỗng; Morse thật đặt giữa bản ghi nhiễu dài 14/14
+vị trí vẫn giải đúng nguyên văn.
+
+**Giới hạn:** nhiễu dải điều biên hình sin đều 3–6 Hz ra `EEEE...` với độ tin cậy 0,99, qua đường
+đoán tone. Về đường bao nó là một chuỗi Morse chữ E đánh phím hoàn hảo; không cổng độ tin cậy nào
+tách được. Tiếng nói thật không tuần hoàn như vậy, nhưng chưa có bản ghi tiếng nói để đo.
