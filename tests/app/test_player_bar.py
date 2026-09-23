@@ -121,3 +121,12 @@ def test_arm_enables_button_for_lazy_load(qtbot, fake_sounddevice):
     bar.ensure_loaded = lambda: None
     bar.arm()
     assert bar.play_button.isEnabled() and bar.slider.isEnabled()
+
+
+def test_arm_shows_the_file_length_before_audio_is_loaded(qtbot, fake_sounddevice):
+    """Đầu trang ghi 0:04 thì đồng hồ thanh phát cũng phải ghi 0:04, không phải 0:00 / 0:00."""
+    bar = PlayerBar()
+    qtbot.addWidget(bar)
+    bar.ensure_loaded = lambda: None
+    bar.arm(4.2)
+    assert bar.time_label.text() == "0:00 / 0:04"

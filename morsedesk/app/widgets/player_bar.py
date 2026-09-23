@@ -125,8 +125,12 @@ class PlayerBar(QWidget):
         self._update_labels()
         self.position_changed.emit(0.0)
 
-    def arm(self) -> None:
+    def arm(self, duration_s: float | None = None) -> None:
         """Bật nút phát khi CHƯA có audio nhưng có nguồn để nạp lười.
+
+        `duration_s` (đọc từ đầu file, không cần giải mã) cho đồng hồ hiện `0:00 / 0:04` ngay,
+        thay vì `0:00 / 0:00` lệch với thời lượng ghi ở đầu trang cho tới lần bấm phát đầu tiên.
+        Audio nạp rồi thì đồng hồ theo audio thật.
 
         Thiếu bước này thì nạp lười tự khóa mình: nút chỉ bật trong `load()`, mà `load()` chỉ
         chạy khi người dùng bấm nút. Ảnh chụp giao diện mới lộ ra (nút xám, đồng hồ 0:00/0:00) —
@@ -135,6 +139,8 @@ class PlayerBar(QWidget):
         if self.ensure_loaded is not None:
             self.play_button.setEnabled(True)
             self.slider.setEnabled(True)
+        if duration_s and self.playback.duration_s <= 0:
+            self.time_label.setText(f"{format_time(0.0)} / {format_time(duration_s)}")
 
     def clear(self) -> None:
         self.playback.stop()

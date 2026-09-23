@@ -382,7 +382,8 @@ class DecodePage(QWidget):
         self._update_read_as(result)
         self.player.clear()
         self.player.setEnabled(True)
-        self.player.arm()           # có file để nạp -> bật nút ngay, audio nạp khi bấm
+        # có file để nạp -> bật nút ngay, audio nạp khi bấm; đồng hồ hiện luôn thời lượng file
+        self.player.arm(audio_duration_s(self._path) if self._path is not None else None)
         self.word_view.set_words(result.words)
         self.text_view.setPlainText(result.text)
         self.spectrogram.set_spectrogram(spec)
