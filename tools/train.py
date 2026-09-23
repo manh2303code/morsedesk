@@ -186,6 +186,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-mp3", action="store_true")
     ap.add_argument("--qsb-hard", action="store_true",
                     help="lấy mẫu QSB đúng độ khó ô qsb của T1 (E6): 60 %% clip, sâu 10–24 dB, chu kỳ 2–8 s")
+    ap.add_argument("--min-seconds", type=float, default=4.0,
+                    help="độ dài clip huấn luyện tối thiểu (mặc định 4 s như E3)")
+    ap.add_argument("--max-seconds", type=float, default=12.0,
+                    help="độ dài clip huấn luyện tối đa (mặc định 12 s như E3)")
     ap.add_argument("--agc-tau", type=float, default=1.0,
                     help="hằng số thời gian AGC (giây) dùng cả khi huấn luyện lẫn suy luận (E7)")
     ap.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto",
@@ -232,7 +236,11 @@ def main(argv: list[str] | None = None) -> int:
     name = torch.cuda.get_device_name(0) if dev.type == "cuda" else f"CPU {torch.get_num_threads()} luồng"
     print(f"tham số: {count_params(model):,} (hidden {a.hidden}, feature_mode {a.feature_mode}) | thiết bị: {name}")
 
-    gen = SynthGenerator(SynthConfig(mp3_enabled=not a.no_mp3, channel_sampling=sampling_for(a.qsb_hard)))
+    # Độ dài clip huấn luyện phải so được với cửa sổ lúc suy luận: đo ngày 23/09 cho thấy
+    # cửa sổ 4 s (ngắn hơn CẢ clip ngắn nhất từng thấy) là cấu hình tệ, và nới lên 8 s lấy
+    # lại 6,44 điểm CER mà không cần huấn luyện lại. Hai cờ này để quét chiều ngược lại.
+    gen = SynthGenerator(SynthConfig(mp3_enabled=not a.no_mp3, channel_sampling=sampling_for(a.qsb_hard),
+                                     min_seconds=a.min_seconds, max_seconds=a.max_seconds))
     val_items = []
     for i in range(a.val_clips):
         ex = gen.generate(VAL_SEED_BASE + i)

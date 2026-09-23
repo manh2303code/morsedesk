@@ -35,7 +35,7 @@ class PassThroughModel:
 
 
 def test_chunker_reexports_windowing():
-    assert chunker.WINDOW_FRAMES == WINDOW_FRAMES == 1600 and chunker.STEP_FRAMES == STEP_FRAMES == 400
+    assert chunker.WINDOW_FRAMES == WINDOW_FRAMES == 2400 and chunker.STEP_FRAMES == STEP_FRAMES == 400
     assert chunker.frame_windows is frame_windows
     assert WINDOW_CFG == FrontendConfig(agc_init_s=0.5) and FrontendConfig().agc_init_s == 1.0
 
@@ -73,8 +73,23 @@ def test_windowed_shapes_tone_and_carry_over():
     assert compute_features_windowed(np.zeros(10, np.float32)) == []
 
 
+def _morse_over(frames: int, text: str = "PARIS", wpm: float = 20.0):
+    """Bản tin dài hơn `frames` khung, dựng bằng cách lặp `text`.
+
+    Các test dưới đây kiểm hành vi CHIA cửa sổ nên cần clip dài hơn một cửa sổ. Ghim số lần lặp
+    thì mỗi lần đổi WINDOW_FRAMES lại có test đỏ dù mã đúng (đã xảy ra khi đi từ 4 s lên 8 s rồi
+    12 s), nên lặp tới khi đủ dài thay vì đoán.
+    """
+    n = 1
+    while True:
+        x, _ = make_morse(" ".join([text] * n), wpm=wpm, pad_s=0.0)
+        if len(x) // HOP > frames:
+            return x
+        n += 1
+
+
 def test_stitch_windows_nearest_center_and_shape():
-    x, _ = make_morse("PARIS PARIS PARIS PARIS", wpm=20, pad_s=0.0)
+    x = _morse_over(WINDOW_FRAMES + STEP_FRAMES)          # đủ dài để có ít nhất hai cửa sổ
     n_frames = len(x) // HOP
     wins = compute_features_windowed(x)
     st = stitch_windows(wins, n_frames)
@@ -89,7 +104,9 @@ def test_stitch_windows_nearest_center_and_shape():
 
 def test_windowed_renormalizes_deep_fade():
     loud, _ = make_morse("PARIS PARIS PARIS", wpm=20, pad_s=0.0)      # ~7,4 s
-    quiet = 0.01 * loud                                                # QSB sâu -40 dB ở nửa sau
+    # Đuôi yên phải dài hơn MỘT cửa sổ, nếu không cửa sổ cuối vẫn còn trùm lên phần to và không
+    # có cửa sổ nào "hoàn toàn yên" để kiểm việc chuẩn hoá lại.
+    quiet = 0.01 * _morse_over(WINDOW_FRAMES + STEP_FRAMES)            # QSB sâu -40 dB ở phần sau
     x = np.concatenate([loud, quiet]).astype(np.float32)
     n_frames = len(x) // HOP
     clip = compute_features(x, 700.0)

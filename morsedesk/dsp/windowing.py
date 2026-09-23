@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
-# 8 s / 2 s chứ không phải 4 s / 3 s: đo trên toàn T1 (500 clip) cho CER 11,52 % so với
-# 17,96 %, mọi kênh và mọi profile đều tốt lên, và mỗi clip còn nhanh hơn (0,368 s so với
-# 0,492 s). T2 bản ghi thật cũng nhích từ 4,69 % xuống 4,47 % mà không ô nào xấu đi.
-# Cửa sổ dài cho BiGRU nhiều ngữ cảnh hai chiều hơn; chồng lấn 6 s làm mỗi khung được
-# nhiều cửa sổ bỏ phiếu, và `stitch_windows` luôn lấy cửa sổ có tâm gần khung nhất.
-WINDOW_FRAMES = 1600      # 8 s ở 200 khung/s (chế độ file)
-STEP_FRAMES = 400         # 2 s, chồng 6 s
+# 12 s / 2 s, đi từ 4 s / 3 s qua hai lần đo trên toàn T1 (500 clip): 4 s/3 s cho 17,96 %,
+# 8 s/2 s cho 11,52 %, 12 s/2 s cho 10,87 %. Cửa sổ 10, 12 và 16 s cho KẾT QUẢ GIỐNG HỆT nhau
+# vì clip T1 dài 4-12 s nên lọt trọn vào một cửa sổ — tức phần thắng cuối không đến từ "cửa sổ
+# dài hơn" mà từ việc THÔI CHIA NHỎ những clip vốn đã đủ ngắn. Đó cũng là ca dùng thật hay gặp
+# nhất: một bản tin vài giây.
+#
+# Trên T2 bản ghi thật (7-37 phút) thì 8 s và 12 s ra từng chữ số giống nhau (4,47 %), nên con
+# số này KHÔNG chọn theo clip dài; nó chỉ phải không làm hại clip dài, và đã đo: bản ghi 37 phút
+# hết 183,9 giây thay vì 169,4 và đỉnh bộ nhớ 643 MB thay vì 603 MB.
+#
+# Vì sao cửa sổ dài giúp: BiGRU đọc hai chiều nên mỗi khung được quyết định bằng cả quá khứ lẫn
+# tương lai TRONG CÙNG cửa sổ; cắt ngắn là cắt mất ngữ cảnh đó.
+WINDOW_FRAMES = 2400      # 12 s ở 200 khung/s (chế độ file)
+STEP_FRAMES = 400         # 2 s, chồng 10 s
 LIVE_WINDOW_FRAMES = 400  # 2 s (chế độ live)
 LIVE_STEP_FRAMES = 200    # 1 s
 

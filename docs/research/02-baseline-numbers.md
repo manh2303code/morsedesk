@@ -752,3 +752,27 @@ luôn chọn cửa sổ có tâm gần khung nhất, tức là chọn lần dự
 
 `qsb` 45,55 % vẫn là toàn bộ phần thiệt hại: bốn kênh kia đều dưới 3,3 %, tức là đã ở ngay sát
 cổng 2 %. Việc tiếp theo có tỉ lệ lợi ích/công sức cao nhất là fading, không phải chỗ nào khác.
+
+### Quét tiếp: 10, 12 và 16 giây ra giống hệt nhau
+
+| Cửa sổ / bước | CER greedy | CER beam+LM |
+|---|---|---|
+| 4 s / 3 s | 23,18 % | 17,96 % |
+| 8 s / 2 s | 13,10 % | 11,52 % |
+| 8 s / 1 s | 13,08 % | 11,52 % |
+| **10 s / 2 s** | 11,92 % | **10,87 %** |
+| **12 s / 2 s** | 11,92 % | **10,87 %** |
+| **16 s / 2 s** | 11,92 % | **10,87 %** |
+
+Ba dòng cuối giống nhau tới từng chữ số vì clip T1 dài 4–12 s: từ cửa sổ 10 s trở lên không clip
+nào còn bị chia nữa. Nói cách khác phần thắng cuối **không** đến từ "cửa sổ dài hơn" mà từ việc
+thôi cắt nhỏ những clip vốn đã đủ ngắn. Bước 1 s thay vì 2 s không đổi gì (11,52 % cả hai), nên
+phần được cũng không đến từ chồng lấn dày hơn.
+
+Trên T2 bản ghi thật, 8 s và 12 s ra **giống hệt** (4,47 %, WER 16,90 %): phần lớn bản ghi thật
+đủ sạch để `dsp/selection.py` lấy đường DSP, nên T2 không phân biệt được hai cấu hình này. Đó là
+lý do con số 12 s được chọn theo T1, và với T2 chỉ cần chứng minh không làm hại — đã đo trên bản
+ghi 37 phút: 183,9 giây thay vì 169,4 (+8,6 %), đỉnh bộ nhớ 643 MB thay vì 603 MB (+6,6 %), văn
+bản ra không đổi một ký tự.
+
+Chốt **12 s / 2 s**. Không lấy 16 s vì không hơn gì mà đắt hơn trên bản ghi dài.
