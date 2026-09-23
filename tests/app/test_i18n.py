@@ -58,10 +58,10 @@ def test_set_language_switches_ui_text(qtbot, tiny_lm_dir, tmp_path):
         assert w.decode_page.lm_check.text() == "Использовать языковую модель"
         assert w.encode_page.play_button.text() == "Воспроизвести"
         assert w.set_language("kk") and w.tabs.tabText(0) == "Декодтау"
-        assert w.language_combo.currentData() == "kk"
+        assert w.language_bar.buttons["kk"].isChecked()
         assert w.set_language("en") and w.tabs.tabText(0) == "Decode"
         assert not w.set_language("xx")
-        w.language_combo.setCurrentIndex(w.language_combo.findData("ru"))
+        w.language_bar.buttons["ru"].click()        # bấm lá cờ như người dùng
         assert w.current_language == "ru" and w.tabs.tabText(1) == "Кодирование"
     finally:
         w.set_language("en")

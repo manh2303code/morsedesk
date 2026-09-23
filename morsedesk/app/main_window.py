@@ -6,7 +6,6 @@ from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication, QEvent, QTranslator
 from PySide6.QtWidgets import (
-    QComboBox,
     QLabel,
     QMainWindow,
     QTabWidget,
@@ -20,6 +19,7 @@ from morsedesk.app.encode_page import EncodePage
 from morsedesk.app.settings import UI_LANGUAGES, AppSettings
 from morsedesk.app.settings_page import SettingsPage
 from morsedesk.app.widgets.banner import Banner
+from morsedesk.app.widgets.flags import LanguageBar
 from morsedesk.app.worker import DecoderWorker, Player
 
 # Tên hiển thị ngôn ngữ giao diện. Bản dịch Kazakh chưa được người bản ngữ soát (CP-12) nên có
@@ -50,11 +50,13 @@ class MainWindow(QMainWindow):
         self.addToolBar(bar)
         self.language_label = QLabel(self)
         bar.addWidget(self.language_label)
-        self.language_combo = QComboBox(self)
-        for code in UI_LANGUAGES:
-            self.language_combo.addItem(LANGUAGE_NAMES[code], code)
-        bar.addWidget(self.language_combo)
-        self.language_combo.currentIndexChanged.connect(self._on_language_combo)
+        # Ba lá cờ thay hộp chọn: nhận ra ngôn ngữ mình cần mà không phải đọc, kể cả khi giao
+        # diện đang ở thứ tiếng mình không biết — đúng tình huống người dùng mở app lần đầu và
+        # nó đang hiện tiếng Kazakh.
+        self.language_bar = LanguageBar(UI_LANGUAGES, LANGUAGE_NAMES, self)
+        bar.addWidget(self.language_bar)
+        for code, btn in self.language_bar.buttons.items():
+            btn.clicked.connect(lambda _checked=False, c=code: self.set_language(c))
 
         self.banner = Banner(self)      # thông báo mức cửa sổ (vd. đang chờ worker để đóng)
         self.tabs = QTabWidget(self)
@@ -95,20 +97,14 @@ class MainWindow(QMainWindow):
                 self._translator = tr
         self.current_language = code
         self.settings.ui_language = code
-        idx = self.language_combo.findData(code)
-        if idx >= 0 and self.language_combo.currentIndex() != idx:
-            self.language_combo.blockSignals(True)
-            self.language_combo.setCurrentIndex(idx)
-            self.language_combo.blockSignals(False)
+        self.language_bar.set_current(code)
         self.retranslate()
         return ok
-
-    def _on_language_combo(self, index: int) -> None:
-        self.set_language(str(self.language_combo.itemData(index)))
 
     def retranslate(self) -> None:
         self.setWindowTitle(self.tr("MorseDesk"))
         self.language_label.setText(self.tr("UI language:"))
+        self.language_bar.set_names(LANGUAGE_NAMES)
         self.tabs.setTabText(0, self.tr("Decode"))
         self.tabs.setTabText(1, self.tr("Encode"))
         self.tabs.setTabText(2, self.tr("Settings"))
