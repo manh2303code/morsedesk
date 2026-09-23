@@ -91,15 +91,25 @@ def detect_tokens(tokens: list[str], profiles: dict[str, Profile], lms: dict[str
 
 def detect(log_probs: np.ndarray, profiles: dict[str, Profile], lms: dict[str, CharNGramLM],
            params: BeamParams | None = None, min_margin: float = MIN_MARGIN,
-           silence_frames: int = SILENCE_FRAMES, max_frames: int = MAX_FRAMES) -> LangIdResult:
+           silence_frames: int = SILENCE_FRAMES, max_frames: int = MAX_FRAMES,
+           progress=None) -> LangIdResult:
+    """`progress`: StageProgress (có `sub`) chia đều theo số khung x số profile phải chạy beam."""
     missing = [pid for pid in profiles if pid not in lms]
     if missing:
         raise KeyError(f"thiếu mô hình ngôn ngữ cho profile: {', '.join(missing)}")
     params = params or BeamParams()
     segments: list[Segment] = []
     prev: str | None = None
-    for s, e in split_segments(log_probs, silence_frames, max_frames, params.blank_id):
-        best = {pid: beam_search(log_probs[s:e], prof, lms[pid], params)[0] for pid, prof in profiles.items()}
+    bounds = split_segments(log_probs, silence_frames, max_frames, params.blank_id)
+    work = sum(e - s for s, e in bounds) * len(profiles)
+    done = 0
+    for s, e in bounds:
+        best = {}
+        for pid, prof in profiles.items():
+            part = (progress.sub(done, done + (e - s), work)
+                    if progress is not None and hasattr(progress, "sub") else None)
+            best[pid] = beam_search(log_probs[s:e], prof, lms[pid], params, progress=part)[0]
+            done += e - s
         scores = {pid: h.lm_logp / h.n_chars for pid, h in best.items() if h.n_chars > 0}
         if not scores:
             segments.append(Segment(s, e, None, {}, 0, best))

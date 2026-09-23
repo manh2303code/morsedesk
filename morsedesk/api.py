@@ -33,7 +33,7 @@ from morsedesk.lm.store import LMStore
 from morsedesk.model.ctc import greedy_decode_with_frames
 from morsedesk.model.protocol import AcousticModel
 from morsedesk.model.vocab import SPACE, UNK, VOCAB
-from morsedesk.progress import DecodeProgress
+from morsedesk.progress import STAGE_ACOUSTIC, STAGE_LANGUAGE, DecodeProgress, StageProgress
 from morsedesk.warnings import DecodeWarning, WarningCode, warn
 
 LOW_CONFIDENCE = 0.6
@@ -352,10 +352,16 @@ class Decoder:
             if self.engine == "baseline":
                 return self._decode_baseline(x, tone_hz, snr_db, warnings)
             return self._decode_deepcw(x, tone_hz, snr_db, warnings)
+        # Tiến trình theo tầng, đúng tỉ trọng thời gian đo được (xem morsedesk/progress.py).
+        acoustic = StageProgress(progress, *STAGE_ACOUSTIC) if progress is not None else None
+        language = StageProgress(progress, *STAGE_LANGUAGE) if progress is not None else None
         # chế độ 'clip' gọi đúng hai đối số: test thay `_log_probs` bằng hàm hai tham số
-        logp, n_in = (self._log_probs(x_model, tone_hz, progress=progress) if windows is None
-                      else self._log_probs(x_model, tone_hz, windows, progress=progress))
-        return self._decode_onnx(x, logp, n_in, tone_hz, snr_db, warnings)
+        logp, n_in = (self._log_probs(x_model, tone_hz, progress=acoustic) if windows is None
+                      else self._log_probs(x_model, tone_hz, windows, progress=acoustic))
+        result = self._decode_onnx(x, logp, n_in, tone_hz, snr_db, warnings, progress=language)
+        if language is not None:
+            language.finish()                   # 100 % chỉ khi KẾT QUẢ CUỐI đã sẵn sàng
+        return result
 
     @staticmethod
     def _tone_warnings(est: ToneEstimate) -> list[DecodeWarning]:
@@ -399,12 +405,13 @@ class Decoder:
         feats = compute_features(x, f0_hz)
         return run_chunked(self._model, feats, progress=progress), len(feats)
 
-    def _beam_words(self, logp: np.ndarray, stride: int, n_in: int):
+    def _beam_words(self, logp: np.ndarray, stride: int, n_in: int, progress=None):
         if not self.auto:
-            hyp = beam_search(logp, self.profile, self._lms[self.profile.id], self.beam_params)[0]
+            hyp = beam_search(logp, self.profile, self._lms[self.profile.id], self.beam_params,
+                              progress=progress)[0]
             emissions = _strip_spaces([(tok, f * stride, p) for tok, f, p in hyp.emissions])
             return hypothesis_to_words(hyp, FRAME_RATE, stride, n_in), emissions, self.profile, {}
-        res = detect(logp, self._profiles, self._lms, self.beam_params)
+        res = detect(logp, self._profiles, self._lms, self.beam_params, progress=progress)
         words: list[Word] = []
         emissions: list[tuple[str, int, float]] = []
         for seg in res.segments:
@@ -481,10 +488,10 @@ class Decoder:
         return beam_letters(tokens, profile.id, det)
 
     def _decode_onnx(self, x, logp: np.ndarray, n_in: int, tone_hz: float, snr_db: float | None,
-                     warnings: list[DecodeWarning]) -> DecodeResult:
+                     warnings: list[DecodeWarning], progress=None) -> DecodeResult:
         stride = int(self._model.time_stride)
         if self.lm_enabled:
-            words, emissions, profile, scores = self._beam_words(logp, stride, n_in)
+            words, emissions, profile, scores = self._beam_words(logp, stride, n_in, progress)
         else:
             profile, scores = self.profile, {}
             emissions = _strip_spaces([(VOCAB.token(i), f * stride, p)

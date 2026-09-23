@@ -216,6 +216,9 @@ class _Prefix:
         return c
 
 
+REPORT_EVERY = 100     # khung đầu ra (1 s âm thanh) giữa hai lần báo tiến trình của beam
+
+
 class BeamState:
     """Trạng thái beam search nối tiếp qua nhiều khối `log_probs`.
 
@@ -345,13 +348,19 @@ class BeamState:
         ranked = sorted(nxt.values(), key=lambda h: h.total(p.alpha), reverse=True)[: p.beam]
         self.beams = {h.chars.uid: h for h in ranked}
 
-    def step(self, log_probs: np.ndarray) -> BeamState:
+    def step(self, log_probs: np.ndarray, progress=None) -> BeamState:
+        """`progress`: đối tượng có `step(done, total)` (DecodeProgress/StageProgress), gọi mỗi
+        REPORT_EVERY khung. Beam là phần chiếm ~91 % thời gian giải mã, nên nếu không báo từ đây
+        thì thanh tiến trình đứng im gần hết thời gian — và nút Hủy cũng không có tác dụng."""
         lp = np.asarray(log_probs, dtype=np.float32)
         if lp.ndim != 2 or lp.shape[1] != len(VOCAB):
             raise ValueError(f"log_probs phải có dạng [T, {len(VOCAB)}], nhận {lp.shape}")
-        for row in lp:
+        n = len(lp)
+        for i, row in enumerate(lp, 1):
             self._advance(row)
             self.t += 1
+            if progress is not None and (i % REPORT_EVERY == 0 or i == n):
+                progress.step(i, n)
         return self
 
     def hypotheses(self) -> list[Hypothesis]:
@@ -377,5 +386,5 @@ class BeamState:
 
 
 def beam_search(log_probs: np.ndarray, profile: Profile, lm: CharNGramLM | None = None,
-                params: BeamParams | None = None) -> list[Hypothesis]:
-    return BeamState(profile, lm, params).step(log_probs).hypotheses()
+                params: BeamParams | None = None, progress=None) -> list[Hypothesis]:
+    return BeamState(profile, lm, params).step(log_probs, progress).hypotheses()
