@@ -301,3 +301,34 @@ Giống E9, E11 thắng ở mọi mốc validation rồi thua rõ trên T1. Lầ
 hơn: tập validation của E11 **cũng có 20 % clip sạch**, tức chính vùng dễ mà nó vừa được dạy.
 TER thấp không phải vì mô hình khá hơn mà vì đề thi dễ hơn. Quy tắc rút ra vẫn thế, và nay có
 hai bằng chứng: **chỉ CER trên T1 và T2 mới dùng để quyết định**.
+
+## E9 KHÔNG bị loại — tôi đã chấm nó bằng pipeline sai (2026-09-23)
+
+Hôm qua E9 (hidden 256) bị ghi là "BỊ LOẠI: CER T1 28,44 % so với E3 20,21 %". Hôm nay, sau khi
+cửa sổ suy luận đổi từ 4 s sang 12 s, đo lại đúng checkpoint đó:
+
+| | hidden | bước | val TER | CER T1 | en / ru / kk | CER T2 |
+|---|---|---|---|---|---|---|
+| E3 (mốc cũ) | 128 | 21 500 | 22,29 % | 10,87 % | 11,64 / 13,24 / 10,87 | 4,47 % |
+| E13 (cửa sổ train khớp 12 s) | 128 | 27 000 | 22,55 % | 11,46 % | 12,42 / 13,94 / 10,65 | – |
+| E15 (clip train 8–20 s) | 128 | 30 000 | 20,55 % | 11,01 % | 11,48 / 13,78 / 10,78 | – |
+| E14 (hidden 256, seed 13) | 256 | 27 000 | 20,74 % | 10,37 % | 10,86 / 12,15 / 9,74 | **3,82 %** |
+| **E9 đo lại** | 256 | 40 000 | 19,67 % | **9,70 %** | **10,10 / 11,58 / 8,91** | 3,93 % |
+
+E9 đi từ *thua tám điểm* sang *thắng 1,17 điểm* mà không đổi một trọng số nào. Bài học phương
+pháp, và nó đắt hơn bài học về TER hôm qua:
+
+**Một model chỉ đo được tốt bằng pipeline dùng để chấm nó.** Khi khâu suy luận còn một lỗi lớn
+chưa biết, mọi so sánh giữa các model đều mang lỗi đó, và kết luận có thể đảo chiều hoàn toàn.
+Cụ thể hơn: cửa sổ 4 s bóp nghẹt ngữ cảnh của BiGRU, và model có nhiều tham số hơn chịu thiệt
+NẶNG hơn model nhỏ vì nó có nhiều năng lực ngữ cảnh để mất.
+
+Hệ quả thực tế: sau E6, E9, E11 âm liên tiếp, kết luận "model lớn hơn không giúp" đã thành niềm
+tin của dự án và suýt chặn hẳn một hướng đúng. Hai thí nghiệm hôm nay (E13, E15) âm rõ ràng, còn
+đúng thứ từng bị loại mới là thứ thắng.
+
+E13 và E15 cũng đóng lại hai giả thuyết: khớp cửa sổ lúc huấn luyện **hại** 0,59 điểm, và clip
+huấn luyện dài hơn **hại** 0,14 điểm. Toàn bộ phần thắng đến từ hidden 256.
+
+**Đã chọn E9 làm `models/acoustic.onnx` v0.3.0** (2,2 MB thay vì 778 KB): thắng rõ trên T1 (bộ
+500 clip) và chỉ kém E14 0,11 điểm trên T2 (bộ 40 mục).

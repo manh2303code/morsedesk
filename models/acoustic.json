@@ -1,5 +1,5 @@
 {
-  "version": "0.2.0",
+  "version": "0.3.0",
   "sample_rate": 8000,
   "hop": 40,
   "frame_rate": 200,
@@ -78,13 +78,15 @@
   "output_name": "log_probs",
   "time_stride": 2,
   "opset": 17,
-  "train_step": 21500,
-  "val_ter": 0.2228503421600714,
+  "train_step": 40000,
+  "val_ter": 0.1966676584349896,
   "config": {
     "feat_dim": 11,
     "n_classes": 65,
-    "hidden": 128,
-    "feature_mode": "window"
+    "hidden": 256,
+    "feature_mode": "window",
+    "qsb_hard": false,
+    "agc_tau_s": 1.0
   },
   "feature_mode": "window"
 }
