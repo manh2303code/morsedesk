@@ -12,7 +12,7 @@ from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QToolButton
 
 INK = "#E6ECF7"             # = theme.TEXT
-INK_DISABLED = "#5E6B86"    # = màu chữ nút bị khóa trong theme
+INK_DISABLED = "#7482A0"    # = theme.DISABLED_TEXT
 KINDS = ("open", "copy", "export", "clear", "stop", "chevron-down", "chevron-up")
 
 

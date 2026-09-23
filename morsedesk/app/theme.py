@@ -30,6 +30,8 @@ MUTED = "#95A3BF"        # chữ phụ (6,4:1 trên NIGHT)
 LAMP_HOVER = "#FFB846"
 LAMP_TEXT = "#1A1206"    # chữ trên nền LAMP (9,6:1)
 DANGER = "#F26B5B"
+# Chữ trên nút/ô bị khóa: vẫn đọc được (>= 3:1 trên nền nút khóa), chỉ mờ hơn chữ thường.
+DISABLED_TEXT = "#7482A0"
 
 # Độ tin cậy trên nền tối: màu cho viền dưới và chữ số, nền chip là màu đó pha loãng.
 CONF_GOOD = "#46C47A"
@@ -91,11 +93,11 @@ QPushButton {{ background: {RAISED}; color: {TEXT}; border: 1px solid {LINE}; bo
                padding: 6px 14px; }}
 QPushButton:hover {{ border-color: {MUTED}; }}
 QPushButton:focus {{ border-color: {LAMP}; }}
-QPushButton:disabled {{ color: #5E6B86; border-color: #22304F; background: #172238; }}
+QPushButton:disabled {{ color: {DISABLED_TEXT}; border-color: #22304F; background: #172238; }}
 QPushButton[primary="true"] {{ background: {LAMP}; color: {LAMP_TEXT}; border: 1px solid {LAMP};
                                font-weight: 700; padding: 7px 20px; }}
 QPushButton[primary="true"]:hover {{ background: {LAMP_HOVER}; }}
-QPushButton[primary="true"]:disabled {{ background: #4A3D22; color: #8F7C55; border-color: #4A3D22; }}
+QPushButton[primary="true"]:disabled {{ background: #4A3D22; color: #B39C6A; border-color: #4A3D22; }}
 QPushButton:checked {{ background: {LAMP}; color: {LAMP_TEXT}; border-color: {LAMP}; }}
 QToolButton {{ background: {RAISED}; color: {TEXT}; border: 1px solid {LINE}; border-radius: 8px;
                padding: 0px; }}
@@ -113,7 +115,7 @@ QMenu::item:selected {{ background: {LINE}; }}
 QComboBox, QSpinBox, QDoubleSpinBox {{ background: {RAISED}; color: {TEXT}; border: 1px solid {LINE};
                                        border-radius: 6px; padding: 4px 8px; min-height: 22px; }}
 QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover {{ border-color: {MUTED}; }}
-QComboBox:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {{ color: #5E6B86; }}
+QComboBox:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {{ color: {DISABLED_TEXT}; }}
 QComboBox QAbstractItemView {{ background: {RAISED}; color: {TEXT}; border: 1px solid {LINE};
                                selection-background-color: {LINE}; }}
 QPlainTextEdit, QTextEdit {{ background: {PANEL}; color: {TEXT}; border: 1px solid {LINE};
@@ -122,7 +124,7 @@ QCheckBox {{ background: transparent; spacing: 6px; }}
 QCheckBox::indicator {{ width: 16px; height: 16px; border: 1px solid {MUTED}; border-radius: 4px;
                         background: {RAISED}; }}
 QCheckBox::indicator:checked {{ background: {LAMP}; border-color: {LAMP}; }}
-QCheckBox:disabled {{ color: #5E6B86; }}
+QCheckBox:disabled {{ color: {DISABLED_TEXT}; }}
 QProgressBar {{ background: {RAISED}; border: none; border-radius: 3px; max-height: 6px; }}
 QProgressBar::chunk {{ background: {LAMP}; border-radius: 3px; }}
 QSlider::groove:horizontal {{ height: 4px; background: {LINE}; border-radius: 2px; }}

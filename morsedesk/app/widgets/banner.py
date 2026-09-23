@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QToolButton
 
-_STYLE = {
-    "error": "background:#f7c6c6; border:1px solid #c0392b; color:#5a0000;",
-    "warning": "background:#fff2b3; border:1px solid #b7950b; color:#4a3b00;",
+# (nền, viền nhấn, chữ) cho nền đêm. Bản cũ là nền pastel sáng của giao diện sáng và chỉ đặt `color`
+# cho KHUNG: nhãn con ăn luật `QWidget { color: TEXT }` của theme nên ra chữ trắng trên nền vàng
+# nhạt, 1,05:1 — gần như vô hình (ảnh chụp người dùng 24/09). Nay màu chữ đặt thẳng cho nhãn và
+# nút, và tools/contrast_audit.py đo lại trên ảnh chụp thật.
+COLORS = {
+    "error": ("#3B1D24", "#F26B5B", "#FFD6D0"),       # chữ/nền 12,6:1
+    "warning": ("#372C12", "#E0B341", "#FFE6A3"),     # chữ/nền 13,1:1
 }
 
 
@@ -22,7 +26,7 @@ class Banner(QFrame):
         self.close_button.setText("×")
         self.close_button.clicked.connect(self.clear)
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(8, 4, 4, 4)
+        lay.setContentsMargins(12, 6, 6, 6)
         lay.addWidget(self._label, 1)
         lay.addWidget(self.close_button, 0)
         self.hide()
@@ -31,7 +35,14 @@ class Banner(QFrame):
         self.level = level
         self._label.setText(text)
         self.setToolTip("")     # người gọi tự đặt tooltip sau; không để sót tooltip của lần trước
-        self.setStyleSheet(f"Banner {{ {_STYLE[level]} }}")
+        bg, accent, fg = COLORS[level]
+        self.setStyleSheet(
+            f"Banner {{ background: {bg}; border: 1px solid {accent}; border-left: 4px solid {accent};"
+            f" border-radius: 6px; }}"
+            f"Banner QLabel {{ color: {fg}; background: transparent; }}"
+            f"Banner QToolButton {{ color: {fg}; background: transparent; border: none;"
+            f" font-size: 13pt; padding: 0px 6px; }}"
+            f"Banner QToolButton:hover {{ color: #FFFFFF; }}")
         self.show()
 
     def show_error(self, text: str) -> None:
