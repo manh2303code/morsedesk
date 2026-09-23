@@ -122,7 +122,9 @@ class AboutPage(QWidget):
         self.title.setStyleSheet(f"color: {PAPER};")
         self.tagline = QLabel(self.hero)
         self.tagline.setWordWrap(True)
-        self.tagline.setMaximumWidth(620)       # ~70 ký tự mỗi dòng ở 11 pt
+        # Bề rộng CỐ ĐỊNH ~70 ký tự ở 11 pt, để chiều cao tính được đúng: QLabel xuống dòng trong layout
+        # không tự báo chiều cao theo bề rộng, và bản Kazakh (ba dòng) từng bị cắt mất dòng cuối.
+        self.tagline.setFixedWidth(620)
         gf = QFont(BODY_FONT)
         gf.setPointSizeF(11)
         self.tagline.setFont(gf)
@@ -183,6 +185,7 @@ class AboutPage(QWidget):
         self.tagline.setText(self.tr(
             "Turns Morse code audio into text in English, Russian and Kazakh, and text back "
             "into Morse. Nothing leaves this computer."))
+        self.tagline.setMinimumHeight(self.tagline.heightForWidth(self.tagline.width()))
         self.docs_button.setText(self.tr("Technical documentation"))
         self.version.setText(self.tr("Version {app}, acoustic model {model}").format(
             app=__version__, model=model_version()))

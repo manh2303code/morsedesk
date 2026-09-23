@@ -182,3 +182,24 @@ def test_toc_jumps_and_pdf_export(qtbot, tmp_path):
     out = tmp_path / "ref.pdf"
     assert doc.save_pdf(str(out))
     assert out.read_bytes()[:5] == b"%PDF-" and out.stat().st_size > 20_000
+
+
+@pytest.mark.parametrize("lang", ["en", "ru", "kk"])
+def test_hero_tagline_is_never_clipped(qtbot, tiny_lm_dir, tmp_path, lang):
+    """Bản Kazakh dài ba dòng từng bị cắt mất dòng cuối và bị dải đèn Morse đè lên."""
+    worker = DecoderWorker(engine="baseline", model_path=None, lm_dir=tiny_lm_dir)
+    settings = AppSettings(settings=QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+    win = MainWindow(worker, Player(), settings, I18N_DIR)
+    qtbot.addWidget(win)
+    try:
+        win.set_language(lang)
+        win.tabs.setCurrentWidget(win.about_page)
+        win.show()
+        qtbot.waitExposed(win)
+        tag = win.about_page.tagline
+        assert tag.height() >= tag.heightForWidth(tag.width())
+        assert win.about_page.strip.geometry().top() >= tag.geometry().bottom()
+    finally:
+        win.set_language("en")
+        QCoreApplication.processEvents()
+        win.close()
