@@ -156,6 +156,7 @@ mình**. Trong một phiên đã có hai kết luận research không sống só
   khung. Đổi tỉ trọng thời gian (vd. beam nhanh lên) thì đo lại và chỉnh các mốc.
 - Heredoc bash rất dài có dấu nháy đơn trong mã Python có lúc làm công cụ Bash báo lỗi cú pháp:
   ghi script ra file tạm rồi chạy.
+- **Ứng dụng LUÔN TỐI** (người dùng chốt 24/09): không làm giao diện sáng hay "theo hệ thống".
 - **Màu chữ đặt cho KHUNG không tới nhãn con**: luật `QWidget { color: TEXT }` của theme khớp
   thẳng vào QLabel nên thắng. Banner từng ra chữ trắng trên nền vàng nhạt (1,05:1). Đặt màu cho
   chính `Khung QLabel`, và sau mọi thay đổi màu chạy `uv run python tools/contrast_audit.py` (đo

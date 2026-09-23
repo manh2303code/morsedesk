@@ -21,6 +21,23 @@ from morsedesk.constants import SAMPLE_RATE
 log = logging.getLogger(__name__)
 
 BLOCK_FRAMES = 1024     # ~128 ms ở 8 kHz: đủ nhỏ để con trỏ mượt, đủ lớn để không vỡ tiếng
+# Co giãn thời gian (WSOLA) cho tốc độ khác 1×. Chỉ ảnh hưởng tiếng NGHE LẠI, không dính gì tới
+# giải mã. Khung 30 ms chồng 50 % (cửa sổ Hann), mỗi khung được dời tối đa ±4 ms — hơn một chu kỳ
+# của tone thấp nhất (300 Hz = 3,3 ms) — tới chỗ khớp pha nhất với phần nối tiếp tự nhiên của
+# khung trước, nên tone Morse giữ đúng cao độ và không vỡ tiếng ở chỗ nối.
+WSOLA_FRAME_S = 0.030
+WSOLA_TOLERANCE_S = 0.004
+
+
+_HANN: dict[int, np.ndarray] = {}
+
+
+def _hann(n: int) -> np.ndarray:
+    """Hann tuần hoàn: hai khung chồng 50 % cộng lại đúng bằng 1, nên biên độ không phập phồng."""
+    w = _HANN.get(n)
+    if w is None:
+        w = _HANN[n] = (0.5 - 0.5 * np.cos(2 * np.pi * np.arange(n) / n)).astype(np.float32)
+    return w
 
 
 class PlaybackError(RuntimeError):
@@ -43,7 +60,10 @@ class AudioPlayback:
         self.sample_rate = int(sample_rate)
         self.block = int(block)
         self._x: np.ndarray = np.zeros(0, dtype=np.float32)
-        self._pos = 0                       # khung kế tiếp sẽ đẩy ra
+        self._pos = 0                       # khung NGUỒN kế tiếp sẽ đẩy ra (kể cả khi phát nhanh/chậm)
+        self._gain = 1.0
+        self._speed = 1.0
+        self._reset_stretch()
         self._stream = None
         self._lock = threading.Lock()       # callback chạy ở thread thời gian thực của PortAudio
         self._finished = False
@@ -60,6 +80,27 @@ class AudioPlayback:
     def position_s(self) -> float:
         with self._lock:
             return self._pos / self.sample_rate if self.sample_rate else 0.0
+
+    @property
+    def speed(self) -> float:
+        return self._speed
+
+    @property
+    def volume(self) -> float:
+        return self._gain
+
+    def set_volume(self, gain: float) -> None:
+        """Hệ số âm lượng 0..1, có hiệu lực ngay cả khi đang phát."""
+        with self._lock:
+            self._gain = max(0.0, min(1.0, float(gain)))
+
+    def set_speed(self, rate: float) -> None:
+        """Tốc độ nghe lại 0,5..2 (1 = nguyên bản). Giữ cao độ; đổi được khi đang phát."""
+        rate = max(0.5, min(2.0, float(rate)))
+        with self._lock:
+            if rate != self._speed:
+                self._speed = rate
+                self._reset_stretch()
 
     @property
     def playing(self) -> bool:
@@ -79,16 +120,73 @@ class AudioPlayback:
         self._x = np.asarray(x, dtype=np.float32).reshape(-1)
         with self._lock:
             self._pos = 0
+            self._reset_stretch()
         self._finished = False
+
+    # ---- co giãn thời gian (WSOLA, theo khối) ----
+    def _reset_stretch(self) -> None:
+        """Bỏ trạng thái nối khung: sau seek/đổi tốc độ, khung kế tiếp bắt đầu lại từ `_pos`."""
+        self._ana: float | None = None      # vị trí phân tích (khung nguồn) của khung kế tiếp
+        self._prev_start: int | None = None
+        self._ola = np.zeros(0, dtype=np.float32)
+        self._queue = np.zeros(0, dtype=np.float32)
+
+    def _stretch_frame(self) -> bool:
+        """Sinh thêm một bước nhảy (nửa khung) tiếng đã co giãn vào `_queue`. False khi hết nguồn."""
+        x, sr = self._x, self.sample_rate
+        n = max(16, int(WSOLA_FRAME_S * sr) // 2 * 2)
+        hop = n // 2
+        tol = max(1, int(WSOLA_TOLERANCE_S * sr))
+        if self._ana is None:
+            self._ana = float(self._pos)
+            self._ola = np.zeros(hop, dtype=np.float32)
+        a = int(round(self._ana))
+        if a >= len(x):
+            return False
+        if self._prev_start is None:
+            start = a
+        else:
+            # Phần nối tiếp TỰ NHIÊN của khung trước; chọn trong [a-tol, a+tol] đoạn giống nó nhất.
+            nat = self._prev_start + hop
+            target = x[nat: nat + n]
+            lo = max(0, a - tol)
+            region = x[lo: a + tol + n]
+            if len(target) == n and len(region) >= n:
+                corr = np.correlate(region, target, mode="valid")
+                start = lo + int(np.argmax(corr))
+            else:
+                start = a
+        frame = x[start: start + n]
+        if len(frame) < n:
+            frame = np.concatenate([frame, np.zeros(n - len(frame), dtype=np.float32)])
+        frame = frame * _hann(n)
+        out = self._ola + frame[:hop]
+        self._ola = frame[hop:].astype(np.float32)
+        self._queue = np.concatenate([self._queue, out.astype(np.float32)])
+        self._prev_start = start
+        self._pos = min(start, len(x))
+        self._ana += hop * self._speed
+        return True
 
     def _callback(self, outdata, frames, time_info, status) -> None:
         with self._lock:
-            start = self._pos
-            end = min(start + frames, len(self._x))
-            chunk = self._x[start:end]
-            self._pos = end
+            gain = self._gain
+            if self._speed == 1.0:
+                start = self._pos
+                end = min(start + frames, len(self._x))
+                chunk = self._x[start:end]
+                self._pos = end
+            else:
+                while len(self._queue) < frames and self._stretch_frame():
+                    pass
+                chunk, self._queue = self._queue[:frames], self._queue[frames:]
+                end = self._pos
+                if len(chunk) < frames:             # nguồn đã cạn: đẩy nốt phần chồng khung
+                    chunk = np.concatenate([chunk, self._ola])[:frames]
+                    self._ola = np.zeros(0, dtype=np.float32)
+                    self._pos = end = len(self._x)
         n = len(chunk)
-        outdata[:n, 0] = chunk
+        outdata[:n, 0] = chunk * gain if gain != 1.0 else chunk
         if n < frames:
             outdata[n:, 0] = 0.0        # đuôi im lặng, nếu không PortAudio phát lại rác của buffer
         if end >= len(self._x):
@@ -139,6 +237,7 @@ class AudioPlayback:
         self.pause()
         with self._lock:
             self._pos = 0
+            self._reset_stretch()
         self._finished = False
 
     def seek(self, seconds: float) -> None:
@@ -146,6 +245,7 @@ class AudioPlayback:
         frame = int(max(0.0, float(seconds)) * self.sample_rate)
         with self._lock:
             self._pos = min(frame, len(self._x))
+            self._reset_stretch()
         if self._pos < len(self._x):
             self._finished = False
 

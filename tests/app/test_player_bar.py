@@ -129,3 +129,22 @@ def test_arm_shows_the_file_length_before_audio_is_loaded(qtbot, fake_sounddevic
     bar.ensure_loaded = lambda: None
     bar.arm(4.2)
     assert bar.time_label.text() == "0:00 / 0:04"
+
+
+def test_speed_menu_and_volume_controls(qtbot):
+    from morsedesk.app.widgets.player_bar import SPEEDS
+
+    bar = PlayerBar()
+    qtbot.addWidget(bar)
+    assert list(bar.speed_actions) == list(SPEEDS) and bar.speed_button.text() == "1×"
+    with qtbot.waitSignal(bar.speed_changed) as sig:
+        bar.speed_actions[0.75].trigger()
+    assert sig.args == [0.75] and bar.playback.speed == 0.75 and bar.speed_button.text() == "0.75×"
+    assert bar.speed_actions[0.75].isChecked() and not bar.speed_actions[1.0].isChecked()
+    bar.set_volume(30)
+    assert abs(bar.playback.volume - 0.30) < 1e-9
+    bar.toggle_mute()
+    assert bar.volume() == 0 and bar.playback.volume == 0.0
+    bar.toggle_mute()
+    assert bar.volume() == 30                       # bật lại đúng mức cũ
+    assert bar.volume_button.toolTip() and bar.speed_button.toolTip()

@@ -11,9 +11,10 @@ tiếng, đúng kiểu các máy thu Morse trên thị trường.
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap, QPolygonF
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSlider, QWidget
+from PySide6.QtGui import QActionGroup, QColor, QIcon, QPainter, QPixmap, QPolygonF
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QMenu, QPushButton, QSlider, QToolButton, QWidget
 
+from morsedesk.app.widgets.icons import icon_button, line_icon
 from morsedesk.audio.playback import AudioPlayback, PlaybackError
 
 TICK_MS = 50            # 20 lần/giây: con trỏ mượt mà không ngốn CPU đáng kể
@@ -50,6 +51,14 @@ def media_icon(kind: str, px: int = 18) -> QIcon:
     return icon
 
 
+SPEEDS = (0.5, 0.75, 1.0, 1.25, 1.5, 2.0)
+
+
+def speed_text(rate: float) -> str:
+    """0.5× 0.75× 1× 1.25× 1.5× 2× — gọn như trình phát nhạc quen thuộc."""
+    return f"{rate:g}×"
+
+
 def format_time(seconds: float) -> str:
     """`m:ss`, hoặc `h:mm:ss` khi quá một giờ (trần thời lượng của app là 1 giờ)."""
     s = max(0, int(seconds))
@@ -63,6 +72,8 @@ class PlayerBar(QWidget):
 
     position_changed = Signal(float)        # giây, phát ~20 lần/giây khi đang chạy
     error = Signal(str)                     # thông điệp lỗi thiết bị, để trang hiện banner
+    speed_changed = Signal(float)           # người dùng chọn tốc độ khác (để trang lưu lại)
+    volume_changed = Signal(int)            # 0-100
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -103,11 +114,45 @@ class PlayerBar(QWidget):
         self.time_label.setStyleSheet('font-family: "DejaVu Sans Mono"; color: #95A3BF;')
         self.time_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
+        # Tốc độ nghe lại: chậm lại để chép tay bằng tai, nhanh lên để lướt bản tin dài. Giữ nguyên
+        # CAO ĐỘ (co giãn thời gian, xem audio/playback.py), nên tone Morse không bị méo.
+        self.speed_button = QToolButton(self)
+        self.speed_button.setFixedHeight(34)
+        self.speed_button.setMinimumWidth(56)
+        self.speed_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.speed_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.speed_menu = QMenu(self.speed_button)
+        self._speed_group = QActionGroup(self)
+        self.speed_actions: dict[float, object] = {}
+        for r in SPEEDS:
+            act = self.speed_menu.addAction(speed_text(r))
+            act.setCheckable(True)
+            act.triggered.connect(lambda _c=False, r=r: self.set_speed(r, user=True))
+            self._speed_group.addAction(act)
+            self.speed_actions[r] = act
+        self.speed_button.setMenu(self.speed_menu)
+        # Âm lượng: bấm loa để tắt/bật tiếng, kéo thanh để chỉnh.
+        self.volume_button = icon_button("volume", self, px=18, size=34)
+        self.volume_button.clicked.connect(self.toggle_mute)
+        self.volume_slider = QSlider(Qt.Orientation.Horizontal, self)
+        self.volume_slider.setRange(0, 100)
+        self.volume_slider.setFixedWidth(96)
+        self.volume_slider.valueChanged.connect(self._on_volume)
+        self._icons_volume = {"on": line_icon("volume", 18), "off": line_icon("volume-off", 18)}
+        self._restore_volume = 100
+
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.addWidget(self.play_button)
         lay.addWidget(self.slider, 1)
         lay.addWidget(self.time_label)
+        lay.addSpacing(10)
+        lay.addWidget(self.speed_button)
+        lay.addSpacing(4)
+        lay.addWidget(self.volume_button)
+        lay.addWidget(self.volume_slider)
+        self.set_speed(1.0)
+        self.volume_slider.setValue(100)
 
         self._timer = QTimer(self)
         self._timer.setInterval(TICK_MS)
@@ -185,6 +230,44 @@ class PlayerBar(QWidget):
         self._update_labels()
         self.position_changed.emit(self.playback.position_s)
 
+    # ---- tốc độ và âm lượng ----
+    def set_speed(self, rate: float, user: bool = False) -> None:
+        rate = min(SPEEDS, key=lambda r: abs(r - float(rate)))
+        self.playback.set_speed(rate)
+        self.speed_actions[rate].setChecked(True)
+        self.speed_button.setText(speed_text(rate))
+        if user:
+            self.speed_changed.emit(rate)
+
+    def speed(self) -> float:
+        return self.playback.speed
+
+    def set_volume(self, value: int) -> None:
+        self.volume_slider.setValue(max(0, min(100, int(value))))
+
+    def volume(self) -> int:
+        return self.volume_slider.value()
+
+    def toggle_mute(self) -> None:
+        if self.volume_slider.value() > 0:
+            self._restore_volume = self.volume_slider.value()
+            self.volume_slider.setValue(0)
+        else:
+            self.volume_slider.setValue(self._restore_volume or 100)
+
+    def _on_volume(self, value: int) -> None:
+        self.playback.set_volume(value / 100.0)
+        self.volume_button.setIcon(self._icons_volume["off" if value == 0 else "on"])
+        self._retranslate_volume()
+        self.volume_changed.emit(value)
+
+    def _retranslate_volume(self) -> None:
+        muted = self.volume_slider.value() == 0
+        self.volume_button.setToolTip(self.tr("Unmute") if muted else self.tr("Mute"))
+        self.volume_button.setAccessibleName(self.tr("Unmute") if muted else self.tr("Mute"))
+        self.volume_slider.setToolTip(self.tr("Volume: {v} %").format(v=self.volume_slider.value()))
+        self.volume_slider.setAccessibleName(self.tr("Volume"))
+
     # ---- nội bộ ----
     def _on_press(self) -> None:
         self._seeking = True
@@ -222,4 +305,7 @@ class PlayerBar(QWidget):
         self.play_button.setToolTip(
             self.tr("Pause playback") if playing else self.tr("Listen to the decoded audio"))
         self.slider.setToolTip(self.tr("Drag to jump to a moment"))
+        self.speed_button.setToolTip(self.tr("Playback speed (the pitch stays the same)"))
+        self.speed_button.setAccessibleName(self.tr("Playback speed"))
+        self._retranslate_volume()
         self._update_labels()

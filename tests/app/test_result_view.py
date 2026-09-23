@@ -92,15 +92,39 @@ def _decode_page(qtbot, settings):
 
 
 def test_plain_text_panel_hides_and_the_choice_is_remembered(qtbot, tmp_path):
+    """Nút ẩn/hiện nằm ở tiêu đề CHÍNH khung văn bản thuần; ẩn thì còn dải tiêu đề để mở lại."""
     settings = _settings(tmp_path)
     page = _decode_page(qtbot, settings)
-    assert page.details.isVisible() and page.details_button.isChecked()
+    assert page.details.isAncestorOf(page.details_button)
+    assert page.details_body.isVisible() and page.details_button.isChecked()
     page.details_button.click()
-    assert not page.details.isVisible() and settings.show_text_details is False
+    assert not page.details_body.isVisible() and settings.show_text_details is False
+    assert page.details.isVisible() and page.details_button.isVisible()
     again = _decode_page(qtbot, settings)
-    assert not again.details.isVisible() and not again.details_button.isChecked()
+    assert not again.details_body.isVisible() and not again.details_button.isChecked()
     again.details_button.click()
-    assert again.details.isVisible() and settings.show_text_details is True
+    assert again.details_body.isVisible() and settings.show_text_details is True
+
+
+def test_copy_and_export_sit_on_the_decoded_text_and_read_as_is_gone(qtbot, tmp_path):
+    """Sao chép/xuất thao tác trên văn bản nên nằm ở khung kết quả; hàng "Đọc theo…" trùng với ô
+    chọn ngôn ngữ bản tin nên đã bỏ."""
+    page = _decode_page(qtbot, _settings(tmp_path))
+    for b in (page.copy_button, page.export_button):
+        assert page.result_box.isAncestorOf(b)
+        assert not page.player.isAncestorOf(b)
+    assert not hasattr(page, "read_as_row") and not hasattr(page, "read_as")
+
+
+def test_playback_speed_and_volume_are_remembered(qtbot, tmp_path):
+    settings = _settings(tmp_path)
+    page = _decode_page(qtbot, settings)
+    page.player.speed_actions[1.5].trigger()
+    page.player.volume_slider.setValue(40)
+    assert settings.playback_speed == 1.5 and settings.playback_volume == 40
+    again = _decode_page(qtbot, settings)
+    assert again.player.speed() == 1.5 and again.player.volume() == 40
+    assert again.player.speed_button.text() == "1.5×"
 
 
 def test_one_export_button_offers_text_and_json(qtbot, tmp_path):

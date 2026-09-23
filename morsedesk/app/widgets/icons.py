@@ -13,7 +13,8 @@ from PySide6.QtWidgets import QToolButton
 
 INK = "#E6ECF7"             # = theme.TEXT
 INK_DISABLED = "#7482A0"    # = theme.DISABLED_TEXT
-KINDS = ("open", "copy", "export", "clear", "stop", "chevron-down", "chevron-up")
+KINDS = ("open", "copy", "export", "clear", "stop", "chevron-down", "chevron-up", "volume",
+         "volume-off")
 
 
 def _path(kind: str) -> tuple[QPainterPath, bool]:
@@ -82,6 +83,25 @@ def _path(kind: str) -> tuple[QPainterPath, bool]:
     if kind == "stop":
         p.addRoundedRect(QRectF(5.5, 5.5, 13, 13), 2.2, 2.2)
         return p, True
+    if kind in ("volume", "volume-off"):                    # loa; tắt tiếng thì sóng thành dấu ×
+        p.moveTo(3.5, 9.5)
+        p.lineTo(7.5, 9.5)
+        p.lineTo(12, 5)
+        p.lineTo(12, 19)
+        p.lineTo(7.5, 14.5)
+        p.lineTo(3.5, 14.5)
+        p.closeSubpath()
+        if kind == "volume":
+            p.moveTo(15.5, 9)
+            p.quadTo(17.5, 12, 15.5, 15)
+            p.moveTo(18.2, 6.5)
+            p.quadTo(22, 12, 18.2, 17.5)
+        else:
+            p.moveTo(16, 9.5)
+            p.lineTo(21, 14.5)
+            p.moveTo(21, 9.5)
+            p.lineTo(16, 14.5)
+        return p, False
     if kind in ("chevron-down", "chevron-up"):
         y0, y1 = (9, 15) if kind == "chevron-down" else (15, 9)
         p.moveTo(6, y0)

@@ -58,6 +58,33 @@ class AppSettings:
         self._s.setValue("ui/show_text_details", bool(flag))
         self._s.sync()
 
+    @property
+    def playback_volume(self) -> int:
+        """Âm lượng nghe lại, 0-100 (mặc định 100 = đúng mức của file)."""
+        try:
+            return max(0, min(100, int(self._s.value("playback/volume", 100))))
+        except (TypeError, ValueError):
+            return 100
+
+    @playback_volume.setter
+    def playback_volume(self, v: int) -> None:
+        self._s.setValue("playback/volume", int(v))
+        self._s.sync()
+
+    @property
+    def playback_speed(self) -> float:
+        """Tốc độ nghe lại (0,5-2,0; mặc định 1,0)."""
+        try:
+            v = float(self._s.value("playback/speed", 1.0))
+        except (TypeError, ValueError):
+            return 1.0
+        return v if 0.5 <= v <= 2.0 else 1.0
+
+    @playback_speed.setter
+    def playback_speed(self, v: float) -> None:
+        self._s.setValue("playback/speed", float(v))
+        self._s.sync()
+
     def clear(self) -> None:
         self._s.clear()
         self._s.sync()

@@ -164,7 +164,16 @@
     "Export to a file: text or JSON with timings": "Экспорт в файл: текст или JSON с временными метками",
     "Text file (.txt)…": "Текстовый файл (.txt)…",
     "JSON with word timings (.json)…": "JSON с временем каждого слова (.json)…",
-    "Clear the text and start over": "Очистить текст и начать заново"
+    "Clear the text and start over": "Очистить текст и начать заново",
+    "Hide": "Скрыть",
+    "Show": "Показать",
+    "Plain text": "Простой текст",
+    "Playback speed (the pitch stays the same)": "Скорость воспроизведения (высота тона не меняется)",
+    "Playback speed": "Скорость воспроизведения",
+    "Mute": "Выключить звук",
+    "Unmute": "Включить звук",
+    "Volume: {v} %": "Громкость: {v} %",
+    "Volume": "Громкость"
   },
   "kk": {
     "MorseDesk": "MorseDesk",
@@ -331,6 +340,15 @@
     "Export to a file: text or JSON with timings": "Файлға экспорттау: мәтін немесе уақыт белгілері бар JSON",
     "Text file (.txt)…": "Мәтіндік файл (.txt)…",
     "JSON with word timings (.json)…": "Әр сөздің уақыты бар JSON (.json)…",
-    "Clear the text and start over": "Мәтінді тазалап, қайта бастау"
+    "Clear the text and start over": "Мәтінді тазалап, қайта бастау",
+    "Hide": "Жасыру",
+    "Show": "Көрсету",
+    "Plain text": "Қарапайым мәтін",
+    "Playback speed (the pitch stays the same)": "Ойнату жылдамдығы (дыбыс биіктігі өзгермейді)",
+    "Playback speed": "Ойнату жылдамдығы",
+    "Mute": "Дыбысты өшіру",
+    "Unmute": "Дыбысты қосу",
+    "Volume: {v} %": "Дыбыс деңгейі: {v} %",
+    "Volume": "Дыбыс деңгейі"
   }
 }
