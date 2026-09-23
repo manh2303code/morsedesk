@@ -114,3 +114,47 @@ def test_dsp_output_with_patterns_outside_the_table_is_rejected():
     assert not dsp_result_usable([".-", ".--..", SPACE], profile)
     assert not dsp_result_usable(["..-.-"], profile)
     assert dsp_result_usable([], profile)
+
+
+# --- Chi phí timing thấp KHÔNG có nghĩa là bộ DSP đã đọc HẾT tín hiệu (23/09) ---------------------
+# Trên tín hiệu fading, bộ DSP (ngưỡng cố định) đọc hoàn hảo đoạn mạnh và bỏ trống đoạn chìm; chi
+# phí timing chỉ tính trên phần nó đọc được nên vẫn < 0,02. Đo trên dev: qsb@20 dB đi đường DSP
+# 10 clip CER 72,5 %, đường model 10 clip CER 11,5 %.
+
+from morsedesk.dsp.selection import DSP_MIN_LENGTH_RATIO, dsp_is_complete  # noqa: E402
+
+
+def test_dsp_that_drops_a_chunk_is_not_complete():
+    assert dsp_is_complete("CQ DE R1ABC K", "CQ DE R1ABC K")
+    assert not dsp_is_complete("R1ABC K", "CQ DE R1ABC K")          # mất cả đoạn đầu
+    assert dsp_is_complete("CQ DE R1ABC", "CQ DE R1ABC K")          # thiếu 1/11 ký tự: vẫn tin
+    assert dsp_is_complete("CQDER1ABCK", "CQ DE R1ABC K")           # dấu cách không tính
+    assert dsp_is_complete("CQ", "")                                # không có gì để so
+
+
+def test_length_ratio_is_the_measured_one():
+    """0,7 / 0,8 cho cùng kết quả trên dev, 0,9 / 0,95 tốt hơn một chút và y hệt nhau."""
+    assert 0.85 <= DSP_MIN_LENGTH_RATIO <= 0.95
+
+
+def test_decoder_ignores_a_confident_but_truncated_dsp_reading(monkeypatch):
+    """Tất định: bộ DSP trả chi phí rất thấp nhưng thiếu cả đoạn đầu -> phải lấy kết quả model."""
+    from pathlib import Path
+
+    import pytest
+
+    if not Path("models/acoustic.onnx").exists() or not Path("models/lm/en.bin").exists():
+        pytest.skip("cần model đã huấn luyện và models/lm/en.bin")
+    from morsedesk.api import Decoder, Encoder
+    from morsedesk.dsp.baseline import BaselineResult, Symbol
+
+    text = "CQ CQ DE R1ABC K"
+    x = Encoder("en").to_audio(text, wpm=20, snr_db=12.0, seed=2)
+    d = Decoder("en", engine="onnx")
+    truncated = BaselineResult(
+        symbols=[Symbol(t, 0, 1) for t in (".-.", ".----", ".-", "-...", "-.-.", " ", "-.-")],
+        unit_frames=12.0, threshold=0.5, cost=0.001)                 # "R1ABC K", timing hoàn hảo
+    monkeypatch.setattr(d, "_baseline_tokens", lambda *a, **k: truncated)
+    r = d.decode_array(x)
+    assert r.decoded_by == "model", r.text
+    assert r.text.startswith("CQ"), r.text

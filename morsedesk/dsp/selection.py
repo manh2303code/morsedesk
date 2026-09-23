@@ -75,3 +75,24 @@ def dsp_result_usable(tokens, profile) -> bool:
     from morsedesk.model.vocab import SPACE
 
     return all(tok == SPACE or tok in profile.map for tok in tokens)
+
+
+# Chi phí timing thấp nói rằng những đoạn bộ DSP ĐÃ đọc khớp lưới 1/3/7 dit — KHÔNG nói rằng nó đã
+# đọc HẾT tín hiệu. Trên tín hiệu fading, bộ DSP (ngưỡng cố định) đọc hoàn hảo đoạn mạnh và bỏ trống
+# đoạn chìm dưới ngưỡng, nên chi phí vẫn < 0,02 trong khi cả đoạn bản tin biến mất. Đo 23/09 với E9,
+# cửa sổ 12 s: qsb@20 dB đi đường DSP 10 clip CER 72,5 %, đường mô hình 10 clip CER 11,5 % (dev).
+# Kiểu hỏng là XÓA, nên văn bản của DSP ngắn hẳn văn bản của mô hình — dấu hiệu đó rẻ và đúng chỗ.
+# Chọn trên bộ dev: 0,7 và 0,8 cho cùng kết quả, 0,9 và 0,95 tốt hơn một chút và y hệt nhau.
+# Dev 12,25 -> 10,38 % [-2,94; -0,96], xác nhận T1 9,79 -> 8,99 % [-1,57; -0,18], T2 không đổi
+# (không bản ghi thật nào bị chuyển). Quy tắc "chỉ tin DSP khi SNR > 30" thắng nhiều hơn trên dữ
+# liệu tổng hợp nhưng làm T2 xấu từ 3,93 lên 12,64 % — lý do nhánh chi phí timing tồn tại.
+DSP_MIN_LENGTH_RATIO = 0.9
+
+
+def dsp_is_complete(dsp_text: str, model_text: str) -> bool:
+    """Bộ DSP có đọc được gần hết những gì mô hình nghe thấy không (không tính dấu cách).
+
+    Mô hình không có gì để so thì không có cơ sở nghi ngờ bộ DSP.
+    """
+    n_model = len(model_text.replace(" ", ""))
+    return n_model == 0 or len(dsp_text.replace(" ", "")) >= DSP_MIN_LENGTH_RATIO * n_model

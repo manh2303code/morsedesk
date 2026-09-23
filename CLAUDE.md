@@ -190,11 +190,11 @@ Model E9 v0.3.0, cửa sổ 12 s, beam `alpha` 0,3 / `char_bonus` 1,25. Hai bộ
 
 | | tổng | clean | mp3 | qrm | qrn | qsb |
 |---|---|---|---|---|---|---|
-| T1 (seed 1000) | **9,79 %** | 1,97 | 1,78 | 1,39 | 2,31 | 41,05 |
-| dev (seed 500000) | **12,25 %** | 2,72 | 4,41 | 4,19 | 2,95 | 46,95 |
+| T1 (seed 1000) | **8,99 %** | 1,97 | 1,78 | 1,39 | 1,56 | 38,26 |
+| dev (seed 500000) | **10,38 %** | 2,72 | 3,54 | 4,19 | 2,95 | 38,47 |
 
-T2 bản ghi thật **3,93 %**. **Không kênh nào qua cổng 2 % một cách chắc chắn** — trên T1 ba kênh
-chạm dưới 2 % nhưng dev độc lập cho 2,7–4,4 %.
+T2 bản ghi thật **3,93 %**. **Không kênh nào qua cổng 2 % một cách chắc chắn** — trên T1 bốn kênh
+chạm dưới 2 % nhưng dev độc lập cho 2,7–4,2 %.
 
 ### Nhiễu đo — đọc trước khi tin một con số
 
@@ -215,8 +215,13 @@ chạm dưới 2 % nhưng dev độc lập cho 2,7–4,4 %.
 ### `qsb` — vật lý chỉ ở SNR thấp
 
 T1 dùng fade đúng 20 dB chu kỳ 4 s. Ở SNR 20 dB đáy fade chỉ xuống 0 dB, mà clean@0 dB giải được
-**~3 %** (T1 3,3, dev 3,2 — lặp lại). Vậy mà qsb@20 dB là **14,2 % (T1) và 42,0 % (dev)** — lỗi
-**xử lý**, sửa được, và lớn hơn T1 cho thấy (20 clip mỗi ô, ±5–7 điểm). Ở 0–6 dB đáy fade xuống
+**~3 %** (T1 3,3, dev 3,2 — lặp lại). qsb@20 dB từng là **14,2 % (T1) và 42,0 % (dev)** — lỗi
+**xử lý**, và **đã sửa (23/09)**: nhánh "chi phí timing < 0,02" của `dsp/selection.py` tin bộ DSP
+khi bộ DSP đã XÓA cả đoạn chìm dưới ngưỡng — những gì nó đọc được thì khớp lưới hoàn hảo nên chi
+phí vẫn thấp. Quy tắc mới `dsp_is_complete`: chỉ lấy DSP khi văn bản DSP ≥ 0,9 độ dài văn bản mô
+hình. qsb@20 dB nay **5,3 % (T1), 6,8 % (dev)**; tổng T1 9,79 → 8,99, dev 12,25 → 10,38 (cả hai có
+ý nghĩa, so ghép cặp); T2 không đổi. **Đừng bỏ hẳn nhánh chi phí timing** ("chỉ tin DSP khi SNR >
+30"): thắng nhiều hơn trên dữ liệu tổng hợp nhưng T2 3,93 → 12,64 %. Ở 0–6 dB đáy fade xuống
 −14…−20 dB, dưới nền nhiễu thật: cổng 2 % trên toàn ô `qsb` gần như chắc chắn **không bộ giải mã nào
 đạt** (DeepCW 47 %). Spec tuần 5–6 §1.2: khi đó giao bảng số theo ô để người dùng quyết.
 
@@ -231,7 +236,7 @@ cậy ~0,99 — về đường bao nó chính là Morse chữ E. Test cũ kiểm
 được việc engine `onnx` bịa chữ; test mới chạy trên `onnx`.
 
 **Bản đóng gói cũ:** `dist/MorseDesk-x86_64.AppImage` dựng 22/09 23:24 với model **v0.2.0** và cửa
-sổ 4 s, trước 16 commit. Phải dựng lại trước khi đưa ai dùng.
+sổ 4 s, trước 19 commit. Phải dựng lại trước khi đưa ai dùng.
 
 Chưa làm: T3 live so với file lệch **3,1 điểm** (spec đòi dưới 1); trang Nghe chưa hiện bộ đếm khối
 bị bỏ (spec tuần 5–6 §7.6); người bản ngữ soát Kazakh (CP-12); đo chế độ nghe qua micro thật.

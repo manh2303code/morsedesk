@@ -49,7 +49,7 @@ Tùy chọn: cài `ffmpeg` (ví dụ `scoop install ffmpeg`) để bộ sinh d�
 ## Bản ghi thật và chất lượng đo được (tuần 5)
 
 - Bộ T2 gồm bản ghi thật: `uv run python tools/fetch_t2.py page --source arrl --profile en --index-url https://www.arrl.org/code-practice-files` rồi `uv run python tools/fetch_t2.py build`. Dữ liệu vào `testdata/private/t2/` (không commit). Các nguồn khác: `commons` (API Wikimedia), `local` (file tự thu), `synth` (bù tiếng Nga/Kazakh, đánh dấu `synthetic`).
-- Số đo ngày 23/09/2026 (model E9 v0.3.0, cửa sổ 12 s): T1 tổng hợp **9,70 %** CER, bộ dev cùng ma trận khác seed **12,25 %** (sai số mỗi bộ ±1 điểm) — gần như toàn bộ phần còn lại nằm ở kênh `qsb`; bản ghi thật ARRL **3,93 %**, riêng dải 18–40 WPM **1,52 %** (đo 22/09) (đạt yêu cầu A2 của spec); T0 roundtrip audio sạch **CER = 0 trên cả 21 ô** (đạt D2). Chi tiết và cách tái lập: `docs/research/02-baseline-numbers.md`.
+- Số đo ngày 23/09/2026 (model E9 v0.3.0, cửa sổ 12 s): T1 tổng hợp **8,99 %** CER, bộ dev cùng ma trận khác seed **10,38 %** (sai số mỗi bộ ±1 điểm) — gần như toàn bộ phần còn lại nằm ở kênh `qsb`; bản ghi thật ARRL **3,93 %**, riêng dải 18–40 WPM **1,52 %** (đo 22/09) (đạt yêu cầu A2 của spec); T0 roundtrip audio sạch **CER = 0 trên cả 21 ô** (đạt D2). Chi tiết và cách tái lập: `docs/research/02-baseline-numbers.md`.
 - Bộ giải mã được chọn theo bằng chứng đo từ chính clip: tín hiệu sạch hơn dải huấn luyện của model thì lấy kết quả bộ DSP, còn lại dùng model (`morsedesk/dsp/selection.py`). `DecodeResult.decoded_by` cho biết đường nào đã sinh ra văn bản.
 
 ## Đóng gói AppImage (tuần 6)

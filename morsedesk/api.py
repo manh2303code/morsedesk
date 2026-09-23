@@ -20,7 +20,7 @@ from morsedesk.dsp.frontend import (
     mix_envelope,
     window_cfg,
 )
-from morsedesk.dsp.selection import dsp_result_usable, prefer_dsp
+from morsedesk.dsp.selection import dsp_is_complete, dsp_result_usable, prefer_dsp
 from morsedesk.dsp.tone import ToneEstimate, estimate_tone, fallback_tone_hz
 from morsedesk.encode.synth import add_noise, elements_to_audio, tone_power
 from morsedesk.encode.text import text_to_tokens
@@ -511,6 +511,14 @@ class Decoder:
             if usable and prefer_dsp(snr_db, dsp.cost, ambiguous):
                 dsp_conf = float(np.exp(-dsp.cost)) if np.isfinite(dsp.cost) else 0.0
                 dsp_words = symbols_to_words(dsp.symbols, profile, FRAME_RATE, dsp_conf, dsp_letters)
+                model_text = " ".join(w.text for w in words)
+                # DSP ngắn hẳn mô hình = nó đã bỏ sót cả đoạn (fading). Chỉ đổi sang mô hình khi mô
+                # hình đủ tin cậy; nếu không, cổng bên dưới sẽ trả RỖNG — tệ hơn giữ kết quả DSP.
+                keep_dsp = (dsp_is_complete(" ".join(w.text for w in dsp_words), model_text)
+                            or confidence < MIN_CLIP_CONFIDENCE)
+            else:
+                keep_dsp = False
+            if keep_dsp:
                 lang = profile.id if (not self.auto or scores) else ""
                 return DecodeResult(
                     " ".join(w.text for w in dsp_words), dsp_words, dsp.wpm, tone_hz, snr_db,

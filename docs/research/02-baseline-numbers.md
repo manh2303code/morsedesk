@@ -1013,3 +1013,46 @@ vị trí vẫn giải đúng nguyên văn.
 **Giới hạn:** nhiễu dải điều biên hình sin đều 3–6 Hz ra `EEEE...` với độ tin cậy 0,99, qua đường
 đoán tone. Về đường bao nó là một chuỗi Morse chữ E đánh phím hoàn hảo; không cổng độ tin cậy nào
 tách được. Tiếng nói thật không tuần hoàn như vậy, nhưng chưa có bản ghi tiếng nói để đo.
+
+---
+
+## `qsb` ở SNR cao: bộ DSP xóa cả đoạn mà vẫn "tự tin" (2026-09-23)
+
+**Triệu chứng.** qsb@20 dB là 14,2 % (T1) và 42,0 % (dev), trong khi đáy fade ở ô đó chỉ xuống
+0 dB và clean@0 dB giải được ~3 %. Tách theo đường giải trên dev: 10 clip qsb@20 dB đi đường DSP
+cho CER **72,5 %**, 10 clip đi đường mô hình cho **11,5 %**.
+
+**Nguyên nhân.** Nhánh "chi phí timing < 0,02" (thêm ngày 22/09, độc lập với SNR) lấy kết quả bộ
+DSP khi mọi dấu nó đọc được khớp lưới 1/3/7 dit. Bộ DSP dùng ngưỡng Schmitt cố định theo mức cả
+clip, nên đoạn đang fade chìm dưới ngưỡng bị bỏ trống hoàn toàn — không sinh dấu sai nào, chỉ
+không sinh dấu. Chi phí timing đo độ khớp của những gì ĐÃ đọc, không đo độ phủ, nên vẫn thấp.
+Kiểu hỏng là XÓA, và xóa để lại dấu vết rẻ: văn bản DSP ngắn hẳn văn bản mô hình trên cùng clip.
+
+**Quy tắc** (`dsp_is_complete`, `dsp/selection.py`): chỉ lấy đường DSP khi số ký tự (không tính
+dấu cách) của văn bản DSP ≥ 0,9 lần của văn bản mô hình — hoặc khi mô hình dưới
+`MIN_CLIP_CONFIDENCE`, vì khi đó bỏ DSP nghĩa là trả rỗng. Chọn trên dev: tỉ lệ 0,7 và 0,8 cho
+cùng kết quả, 0,9 và 0,95 tốt hơn một chút và y hệt nhau; lấy 0,9 cho có biên.
+
+**Kết quả** (mô phỏng trên kết quả đã lưu, rồi xác nhận bằng mã thật — khớp tới hai chữ số):
+
+| | trước | sau | hiệu ghép cặp [khoảng 95 %] | clip đổi đường |
+|---|---|---|---|---|
+| dev | 12,25 % | **10,38 %** | −1,87 [−2,94; −0,96] | 14, cả 14 tốt lên |
+| T1 | 9,79 % | **8,99 %** | −0,80 [−1,57; −0,18] | 7 (6 tốt, 1 xấu) |
+| T2 | 3,93 % | **3,93 %** | 0 | 0 |
+
+`qsb` theo SNR (20 clip mỗi ô, ±5–7 điểm):
+
+| SNR | T1 trước → sau | dev trước → sau |
+|---|---|---|
+| 0 dB | 67,87 → 67,87 | 71,36 → 71,36 |
+| 3 dB | 58,26 → 55,14 | 44,99 → 44,99 |
+| 6 dB | 35,88 → 35,88 | 42,16 → 42,16 |
+| 10 dB | 31,25 → 27,08 | 34,24 → 27,07 |
+| 20 dB | 14,18 → **5,32** | 42,00 → **6,75** |
+
+Ô 0–6 dB gần như không đổi, đúng như chờ đợi: ở đó đáy fade −14…−20 dB nằm dưới nền nhiễu và
+phần lớn clip vốn đã đi đường mô hình. Phần còn lại của `qsb` là vật lý thật.
+
+**Phương án bị loại:** bỏ hẳn nhánh chi phí timing (chỉ tin DSP khi SNR > 30 dB) thắng nhiều hơn
+trên dữ liệu tổng hợp, nhưng T2 bản ghi thật 3,93 → **12,64 %** — các bản ARRL sạch cần nhánh đó.
