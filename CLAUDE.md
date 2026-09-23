@@ -193,7 +193,7 @@ Model E9 v0.3.0, cửa sổ 12 s, beam `alpha` 0,3 / `char_bonus` 1,25. Hai bộ
 | T1 (seed 1000) | **8,99 %** | 1,97 | 1,78 | 1,39 | 1,56 | 38,26 |
 | dev (seed 500000) | **10,38 %** | 2,72 | 3,54 | 4,19 | 2,95 | 38,47 |
 
-T2 bản ghi thật **3,93 %**. **Không kênh nào qua cổng 2 % một cách chắc chắn** — trên T1 bốn kênh
+T2 **1,84 %** (bản ghi ARRL thật 0,95 %, 18–40 WPM không sai ký tự nào; trước 23/09 báo 3,93 % vì đáp án Kazakh bị viết phẳng — xem 02-baseline-numbers). **Không kênh nào qua cổng 2 % một cách chắc chắn** — trên T1 bốn kênh
 chạm dưới 2 % nhưng dev độc lập cho 2,7–4,2 %.
 
 ### Nhiễu đo — đọc trước khi tin một con số

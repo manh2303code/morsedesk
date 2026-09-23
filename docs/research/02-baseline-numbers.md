@@ -1056,3 +1056,35 @@ phần lớn clip vốn đã đi đường mô hình. Phần còn lại của `q
 
 **Phương án bị loại:** bỏ hẳn nhánh chi phí timing (chỉ tin DSP khi SNR > 30 dB) thắng nhiều hơn
 trên dữ liệu tổng hợp, nhưng T2 bản ghi thật 3,93 → **12,64 %** — các bản ARRL sạch cần nhánh đó.
+
+---
+
+## T2 chấm sai các dòng Kazakh: đáp án bị viết phẳng (2026-09-23)
+
+**Triệu chứng.** Các dòng Kazakh tổng hợp của T2 (ebook2cw, tín hiệu sạch) cho CER 9,34 %, tới
+17 % ở một số dòng 12 WPM — quá cao cho tín hiệu sạch.
+
+**Nguyên nhân.** `tools/make_t2_manifest.py` chỉ ghi `text` = đáp án đi qua mẫu chấm gạch rồi
+render lại, nên mỗi chữ Kazakh bị thay bằng chữ Nga cùng mã: СӘЛЕМ thành САЛЕМ, ҚАЗАҚСТАН thành
+КАЗАКСТАН. `bench.reference_text` chấm model có LM theo `text_original` khi có, nhưng manifest
+T2 không có trường đó (chỉ có `raw_text`). Kết quả: model viết ĐÚNG chính tả Kazakh bị tính là
+sai. Đếm trên các dòng cùng độ dài: 102/102 chỗ lệch là đúng các cặp chữ dùng chung mã (И/І 33,
+К/Қ 15, Н/Ң 14, У/Ү 13, О/Ө 12, А/Ә 7, У/Ұ 4, Г/Ғ 3, Х/Һ 1), và bản giải mã là bản đúng.
+T1 không mắc lỗi này vì bộ sinh T1 luôn ghi `text_original`.
+
+**Sửa.** `original_reference()` giữ chữ gốc (chỉ khác `text` ở chữ dùng chung mã; prosign vẫn
+hiển thị như `text` để phần ARRL không đổi); manifest ghi thêm `text_original`. Manifest hiện có
+được bổ sung trường này (13/40 dòng khác `text`, không dòng tiếng Anh nào).
+
+**Chấm lại cùng kết quả giải mã E9 (không giải mã lại):**
+
+| Phần T2 | Trước | Sau |
+|---|---|---|
+| 10 bản ghi ARRL thật | 0,95 % | 0,95 % |
+| 15 dòng Nga (ebook2cw) | 0,49 % | **0,20 %** (Ъ khôi phục đúng) |
+| 15 dòng Kazakh (ebook2cw) | 9,34 % | **4,08 %** |
+| **T2 tổng** | 3,93 % | **1,84 %** |
+
+Trong 10 bản ARRL, sáu bản 18–40 WPM (9 498 ký tự) **không sai ký tự nào**; lỗi còn lại nằm ở
+5–15 WPM (1,5–3,5 %). Mọi con số T2 trước ngày này (kể cả 3,93 % ở các mục trên) chấm theo đáp án
+phẳng — phần Kazakh của chúng bi quan.

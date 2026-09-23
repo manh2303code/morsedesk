@@ -127,3 +127,27 @@ def test_exact_stem_still_wins_over_normalised_match():
     """
     pairs = fetch_t2.discover_pairs(html, "https://e.org/i")
     assert pairs[0][1] == "https://e.org/f/x_20WPM.txt"
+
+
+def test_kazakh_reference_keeps_the_letters_the_decoder_is_expected_to_restore():
+    """Đáp án Kazakh phải là СӘЛЕМ, không phải bản viết phẳng САЛЕМ.
+
+    Ә và А cùng mã `.-`, nên `text` (đi qua mẫu chấm gạch) luôn phẳng. Model có LM trả đúng СӘЛЕМ;
+    chấm theo bản phẳng từng làm CER Kazakh của T2 là 9,34 % thay vì 4,08 %.
+    """
+    from tools.make_t2_manifest import clean_reference, original_reference
+
+    raw = "Рахмет, сәлем! ҚАЗАҚСТАН <SK>"
+    assert clean_reference(raw, "kk-cyrl-ru") == "РАХМЕТ, САЛЕМ! КАЗАКСТАН <SK>"
+    assert original_reference(raw, "kk-cyrl-ru") == "РАХМЕТ, СӘЛЕМ! ҚАЗАҚСТАН <SK>"
+    # Tiếng Anh: hai bản phải trùng khít, kể cả prosign, để số ARRL không đổi.
+    en = "cq de w1aw <AR> test 5nn"
+    assert original_reference(en, "en") == clean_reference(en, "en")
+
+
+def test_manifest_rows_carry_text_original(tmp_path):
+    (tmp_path / "a_12WPM.wav").write_bytes(b"")
+    (tmp_path / "a_12WPM.txt").write_text("СӘЛЕМ ӘЛЕМ", encoding="utf-8")
+    row = build_manifest(tmp_path, "synth", "kk-cyrl-ru")[0]
+    assert row["text"] == "САЛЕМ АЛЕМ" and row["text_original"] == "СӘЛЕМ ӘЛЕМ"
+    assert bench.reference_text(row, "onnx", lm=True) == "СӘЛЕМ ӘЛЕМ"

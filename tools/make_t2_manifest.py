@@ -11,7 +11,7 @@ import json
 import re
 from pathlib import Path
 
-from morsedesk.encode.text import text_to_tokens
+from morsedesk.encode.text import _PROSIGN_RE, normalize, text_to_tokens
 from morsedesk.lm.profile import load_profile
 from morsedesk.textio import force_utf8_streams
 
@@ -29,6 +29,33 @@ def clean_reference(raw: str, profile_id: str) -> str:
     return profile.render(text_to_tokens(raw, profile, strict=False))
 
 
+def original_reference(raw: str, profile_id: str) -> str:
+    """Như `clean_reference` nhưng GIỮ chữ gốc thay vì chữ đầu tiên của mẫu.
+
+    Bảng Kazakh gửi Ә bằng mã của А, Қ bằng mã của К...; `clean_reference` đi qua mẫu chấm gạch
+    nên viết phẳng СӘЛЕМ thành САЛЕМ. Chấm model có LM theo bản phẳng đó là phạt nó vì viết ĐÚNG
+    chính tả: 23/09, 102/102 chỗ "sai" trên các dòng Kazakh của T2 là đúng 9 cặp chữ này, và CER
+    Kazakh là 4,08 % chứ không phải 9,34 %. Prosign vẫn hiển thị như `clean_reference` để phần
+    tiếng Anh (ARRL) không đổi.
+    """
+    profile = load_profile(profile_id)
+    words = []
+    for word in normalize(raw, profile).split():
+        out, i = [], 0
+        while i < len(word):
+            m = _PROSIGN_RE.match(word, i) if word[i] == "<" else None
+            if m and m.group(0) in profile.prosign_to_pattern:
+                out.append(profile.render([profile.prosign_to_pattern[m.group(0)]]))
+                i = m.end()
+                continue
+            if word[i] in profile.letter_to_pattern:
+                out.append(word[i])
+            i += 1
+        if out:
+            words.append("".join(out))
+    return " ".join(words)
+
+
 def build_manifest(audio_dir: Path, source: str, profile_id: str,
                    license_id: str = "unknown") -> list[dict]:
     rows = []
@@ -40,6 +67,7 @@ def build_manifest(audio_dir: Path, source: str, profile_id: str,
         rows.append({
             "path": str(audio.resolve()),
             "text": clean_reference(raw, profile_id),
+            "text_original": original_reference(raw, profile_id),
             "raw_text": raw.strip(),
             "source": source,
             "license": license_id,
