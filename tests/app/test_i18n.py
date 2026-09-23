@@ -115,8 +115,10 @@ def test_player_bar_follows_the_ui_language(qtbot, tiny_lm_dir, tmp_path):
     w = MainWindow(worker, Player(), settings, I18N_DIR)
     qtbot.addWidget(w)
     try:
-        assert w.set_language("kk") and w.decode_page.player.play_button.text() == "Ойнату"
-        assert w.set_language("ru") and w.decode_page.player.play_button.text() == "Воспроизвести"
+        # Nút là biểu tượng ▶; chữ nằm ở tên trợ năng và tooltip, và phải theo ngôn ngữ giao diện.
+        assert w.set_language("kk") and w.decode_page.player.play_button.accessibleName() == "Ойнату"
+        assert w.set_language("ru") and w.decode_page.player.play_button.accessibleName() == "Воспроизвести"
+        assert not w.decode_page.player.play_button.icon().isNull()
     finally:
         w.set_language("en")
         QCoreApplication.processEvents()

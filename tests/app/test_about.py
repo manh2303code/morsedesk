@@ -291,3 +291,28 @@ def test_sample_follows_ui_language_until_the_user_opens_a_file(qtbot, tiny_lm_d
         win.set_language("en")
         QCoreApplication.processEvents()
         win.close()
+
+
+def test_3d_sweep_raises_what_was_heard_and_sinks_the_rest(qtbot):
+    """Nghe lại: phần đã quét qua nổi đủ cao, phần phía trước con trỏ chìm; không phát = đủ cảnh."""
+    from morsedesk.app.widgets.ridge3d import SUBMERGED, Ridge3DView
+
+    w = Ridge3DView()
+    qtbot.addWidget(w)
+    z = np.ones((4, 100), np.float32)
+    w.set_surface(z)
+    assert np.array_equal(w.heights(z), z)                 # không phát
+    w.set_playhead(0.5)
+    h = w.heights(z)
+    assert np.allclose(h[:, :45], 1.0) and np.allclose(h[:, 60:], SUBMERGED)
+    w.set_playhead(None)
+    assert np.array_equal(w.heights(z), z)
+
+
+def test_play_button_is_an_icon_with_a_spoken_name(qtbot):
+    from morsedesk.app.widgets.player_bar import PlayerBar
+
+    bar = PlayerBar()
+    qtbot.addWidget(bar)
+    assert bar.play_button.text() == "" and not bar.play_button.icon().isNull()
+    assert bar.play_button.accessibleName() == "Play" and bar.play_button.toolTip()

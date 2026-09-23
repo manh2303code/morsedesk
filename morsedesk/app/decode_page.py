@@ -377,6 +377,7 @@ class DecodePage(QWidget):
         self._audio_loaded = False          # nạp lười: chỉ đọc lại file khi người dùng bấm Nghe
         self._samples = None
         self._window_t0 = 0.0
+        self.ridge.set_playhead(None)
         self._update_ridge()
         self._update_read_as(result)
         self.player.clear()
@@ -443,6 +444,7 @@ class DecodePage(QWidget):
         x, sr = samples
         total_s = len(x) / sr
         span = min(WINDOW_S, total_s)
+        self._window_span = span
         self.ridge.set_surface(band_window(x, sr, r.tone_hz, self._window_t0, window_s=span))
         step = 1 if span <= 6 else (2 if span <= 12 else 5)
         first = int(self._window_t0 // step + (1 if self._window_t0 % step else 0)) * step
@@ -472,9 +474,18 @@ class DecodePage(QWidget):
         self.word_view.set_playhead(t_s if self.player.playback.duration_s > 0 else None)
         self.spectrogram.set_cursor(t_s if self.player.playback.playing else None)
         # File dài hơn cửa sổ 3D: cảnh đi theo con trỏ phát, đoạn đang nghe luôn ở giữa.
-        if self.player.playback.playing and not (self._window_t0 <= t_s < self._window_t0 + WINDOW_S):
+        playing = self.player.playback.playing
+        if playing and not (self._window_t0 <= t_s < self._window_t0 + WINDOW_S):
             self._window_t0 = max(0.0, t_s - WINDOW_S / 2)
             self._update_ridge()
+        # Quét 3D theo tiếng: phần đã nghe nổi lên, phần chưa tới chìm, luồng sáng đi theo con trỏ.
+        # Tạm dừng thì giữ nguyên chỗ đã quét; về đầu hoặc nghe hết thì hiện đủ cả cảnh.
+        duration = self.player.playback.duration_s
+        span = getattr(self, "_window_span", 0.0)
+        if playing and span > 0:
+            self.ridge.set_playhead((t_s - self._window_t0) / span)
+        elif t_s <= 0.01 or (duration > 0 and t_s >= duration - 0.05):
+            self.ridge.set_playhead(None)
 
     def _fallback_caption(self, decoded_by: str, text: str) -> str:
         """Nhãn cho dòng dự phòng, nói đúng nguồn của nó.

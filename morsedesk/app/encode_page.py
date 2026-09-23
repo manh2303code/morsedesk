@@ -29,6 +29,7 @@ from morsedesk.app.theme import mark_primary
 from morsedesk.app.widgets.banner import Banner
 from morsedesk.app.widgets.charmap import CharMap
 from morsedesk.app.widgets.morse_tape import MorseTape
+from morsedesk.app.widgets.player_bar import media_icon
 from morsedesk.app.worker import MAX_SECONDS, Player
 from morsedesk.audio.io import SUPPORTED_EXT, save_audio
 from morsedesk.constants import SAMPLE_RATE
@@ -184,6 +185,7 @@ class EncodePage(QWidget):
         self.length_label.setProperty("role", "hint")
         self.play_button = QPushButton(self)
         mark_primary(self.play_button)
+        self.play_button.setIcon(media_icon("play", 14))     # cùng biểu tượng ▶ với thanh phát
         self.stop_button = QPushButton(self)
         self.save_button = QPushButton(self)
         buttons = QHBoxLayout()

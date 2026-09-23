@@ -17,6 +17,7 @@ Hai cách dùng:
 from __future__ import annotations
 
 import numpy as np
+from pyqtgraph.functions import arrayToQPath
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt
 from PySide6.QtGui import QBrush, QColor, QFont, QLinearGradient, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QSizePolicy, QWidget
@@ -24,6 +25,8 @@ from PySide6.QtWidgets import QSizePolicy, QWidget
 from morsedesk.app.theme import LINE, MUTED, NIGHT, PANEL, READOUT_FONT, spectrum_stops
 
 MAX_COLS = 240
+SUBMERGED = 0.12        # phần chưa nghe tới: còn 12 % chiều cao, đủ thấy hình, rõ là "chưa tới"
+RISE_WIDTH = 0.02       # dốc nổi lên ngay sau con trỏ phát (tỉ lệ bề ngang cảnh)
 
 
 def band_surface(power_db: np.ndarray, freqs_hz: np.ndarray, tone_hz: float,
@@ -61,6 +64,7 @@ class Ridge3DView(QWidget):
         self.depth_label = ""
         self.front_label = ""
         self.placeholder = ""
+        self._playhead: float | None = None     # 0..1 dọc mép trước; None = hiện đủ cả cảnh
         self.setMinimumHeight(160)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         stops = spectrum_stops()
@@ -73,6 +77,23 @@ class Ridge3DView(QWidget):
 
     def surface(self) -> np.ndarray:
         return self._z
+
+    def set_playhead(self, frac: float | None) -> None:
+        """Khi nghe lại: phần ĐÃ nghe nổi lên đủ cao, phần chưa quét tới chìm xuống, và một luồng
+        sáng từ trên chiếu xuống đi theo con trỏ phát. None = hiện đủ cả cảnh (không phát)."""
+        self._playhead = None if frac is None else max(0.0, min(1.0, float(frac)))
+        self.update()
+
+    def playhead(self) -> float | None:
+        return self._playhead
+
+    def heights(self, z: np.ndarray) -> np.ndarray:
+        """Chiều cao thực vẽ: z nhân hệ số theo vị trí so với con trỏ phát."""
+        if self._playhead is None or z.size == 0:
+            return z
+        xs = np.linspace(0.0, 1.0, z.shape[1])
+        ramp = np.clip((self._playhead - xs) / RISE_WIDTH, 0.0, 1.0)   # 1 = đã nghe, 0 = chưa
+        return z * (SUBMERGED + (1.0 - SUBMERGED) * ramp)[None, :]
 
     def clear(self) -> None:
         self._z = np.zeros((0, 0), np.float32)
@@ -128,25 +149,60 @@ class Ridge3DView(QWidget):
                 p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.placeholder)
             p.end()
             return
+        z = self.heights(z)
         n_rows, n_cols = z.shape
         xs = np.linspace(0.0, 1.0, n_cols)
         edge = QPen(QColor(230, 240, 255, 150))
-        edge.setWidthF(1.0)
+        edge.setCosmetic(True)       # bút 1 px không khử răng cưa: viền khử răng cưa tốn 92 ms/khung
+        # Đường dẫn dựng thẳng từ mảng numpy (arrayToQPath), và KHÔNG khử răng cưa: đo trên cảnh
+        # 16 x 360 ở tỉ lệ 150 %, viền khử răng cưa tốn 92 ms/khung còn phần tô gradient chỉ 17 ms.
+        # Bỏ khử răng cưa ở viền đưa một khung về mức đủ để quét theo thanh phát 20 lần/giây.
         for r in range(n_rows):
             t = r / (n_rows - 1)
             left, width, base, amp = self._row_geometry(t)
             px = left + width * xs
             py = base - z[r] * amp
-            ridge = [QPointF(float(a), float(b)) for a, b in zip(px, py, strict=True)]
-            poly = QPolygonF(ridge + [QPointF(left + width, base), QPointF(left, base)])
+            ridge = arrayToQPath(px, py)
+            fill = arrayToQPath(np.concatenate([px, [left + width, left]]),
+                                np.concatenate([py, [base, base]]))
+            fill.closeSubpath()
+            p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(QBrush(self._gradient(base, amp)))
-            p.drawPolygon(poly)
+            p.drawPath(fill)
             edge.setColor(QColor(230, 240, 255, int(60 + 120 * t)))
             p.setPen(edge)
-            p.drawPolyline(QPolygonF(ridge))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawPath(ridge)
+        if self._playhead is not None:
+            self._draw_beam(p, self._playhead)
         self._draw_labels(p)
         p.end()
+
+    def _draw_beam(self, p: QPainter, ph: float) -> None:
+        """Luồng sáng như đèn chiếu từ trên xuống, đi theo con trỏ phát, cộng vạch quét trên sàn."""
+        bl, bw, bb, _ = self._row_geometry(0.0)
+        fl, fw, fb, _ = self._row_geometry(1.0)
+        xb, xf = bl + bw * ph, fl + fw * ph
+        top_x = xb + (xb - xf) * 0.25              # nguồn sáng hơi lệch về phía sau, trên cao
+        cone = QPolygonF([QPointF(top_x - 4, 0.0), QPointF(top_x + 4, 0.0),
+                          QPointF(xf + 34, fb), QPointF(xb + 16, bb), QPointF(xb - 16, bb),
+                          QPointF(xf - 34, fb)])
+        g = QLinearGradient(0.0, 0.0, 0.0, fb)
+        g.setColorAt(0.0, QColor(255, 236, 190, 0))
+        g.setColorAt(1.0, QColor(255, 214, 140, 70))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(g))
+        p.drawPolygon(cone)
+        glow = QPen(QColor(245, 165, 36, 90))
+        glow.setWidthF(7.0)
+        glow.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(glow)
+        p.drawLine(QPointF(xb, bb), QPointF(xf, fb))
+        line = QPen(QColor(255, 214, 140, 230))
+        line.setWidthF(1.6)
+        p.setPen(line)
+        p.drawLine(QPointF(xb, bb), QPointF(xf, fb))
 
     def _draw_floor(self, p: QPainter) -> None:
         pen = QPen(QColor(LINE))

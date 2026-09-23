@@ -10,13 +10,44 @@ tiếng, đúng kiểu các máy thu Morse trên thị trường.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap, QPolygonF
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSlider, QWidget
 
 from morsedesk.audio.playback import AudioPlayback, PlaybackError
 
 TICK_MS = 50            # 20 lần/giây: con trỏ mượt mà không ngốn CPU đáng kể
 SLIDER_STEPS = 1000     # thanh trượt làm việc bằng số nguyên; 1000 nấc đủ mịn cho clip 1 giờ
+
+
+BUTTON_PX = 40
+ICON_INK = "#1A1206"        # hình trên nền vàng đèn tín hiệu (9,6:1)
+
+
+def media_icon(kind: str, px: int = 18) -> QIcon:
+    """Biểu tượng ▶ / ❚❚ vẽ bằng QPainter: sắc nét ở mọi tỉ lệ màn hình và không phụ thuộc font
+    có glyph ▶ hay không (Noto Sans không có; ký tự thay thế trông lệch cỡ)."""
+    icon = QIcon()
+    for scale in (1, 2):
+        size = px * scale
+        pm = QPixmap(size, size)
+        pm.fill(Qt.GlobalColor.transparent)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(ICON_INK))
+        if kind == "play":
+            # tam giác lệch phải một chút: về thị giác, tâm tam giác nằm ở trọng tâm, không ở giữa hộp
+            p.drawPolygon(QPolygonF([QPointF(size * 0.26, size * 0.12), QPointF(size * 0.90, size * 0.50),
+                                     QPointF(size * 0.26, size * 0.88)]))
+        else:
+            w = size * 0.26
+            p.drawRoundedRect(QRectF(size * 0.16, size * 0.12, w, size * 0.76), w * 0.3, w * 0.3)
+            p.drawRoundedRect(QRectF(size * 0.58, size * 0.12, w, size * 0.76), w * 0.3, w * 0.3)
+        p.end()
+        pm.setDevicePixelRatio(scale)
+        icon.addPixmap(pm)
+    return icon
 
 
 def format_time(seconds: float) -> str:
@@ -43,9 +74,21 @@ class PlayerBar(QWidget):
         # là nạp xong thì đã lỡ mất lần bấm.
         self.ensure_loaded = None
 
+        # Nút tròn có biểu tượng thay cho chữ "Play": nhận ra ngay mà không phải đọc, ở bất kỳ ngôn
+        # ngữ giao diện nào. Chữ vẫn có trong tooltip và tên trợ năng (trình đọc màn hình).
         self.play_button = QPushButton(self)
         self.play_button.setCheckable(False)
         self.play_button.setEnabled(False)
+        self.play_button.setFixedSize(BUTTON_PX, BUTTON_PX)
+        self.play_button.setIconSize(QSize(18, 18))
+        self.play_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.play_button.setStyleSheet(
+            f"QPushButton {{ background: #F5A524; border: none; border-radius: {BUTTON_PX // 2}px;"
+            f" padding: 0px; }}"
+            "QPushButton:hover { background: #FFB846; }"
+            "QPushButton:focus { border: 2px solid #E6ECF7; }"
+            "QPushButton:disabled { background: #3A3320; }")
+        self._icons = {"play": media_icon("play"), "pause": media_icon("pause")}
         self.play_button.clicked.connect(self.toggle)
 
         self.slider = QSlider(Qt.Orientation.Horizontal, self)
@@ -56,7 +99,8 @@ class PlayerBar(QWidget):
         self.slider.sliderMoved.connect(self._on_moved)
 
         self.time_label = QLabel("0:00 / 0:00", self)
-        self.time_label.setMinimumWidth(96)
+        self.time_label.setMinimumWidth(110)
+        self.time_label.setStyleSheet('font-family: "DejaVu Sans Mono"; color: #95A3BF;')
         self.time_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         lay = QHBoxLayout(self)
@@ -166,7 +210,9 @@ class PlayerBar(QWidget):
 
     def retranslate(self) -> None:
         playing = self.playback.playing
-        self.play_button.setText(self.tr("Pause") if playing else self.tr("Play"))
+        self.play_button.setText("")
+        self.play_button.setIcon(self._icons["pause" if playing else "play"])
+        self.play_button.setAccessibleName(self.tr("Pause") if playing else self.tr("Play"))
         self.play_button.setToolTip(
             self.tr("Pause playback") if playing else self.tr("Listen to the decoded audio"))
         self.slider.setToolTip(self.tr("Drag to jump to a moment"))
