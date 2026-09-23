@@ -90,7 +90,7 @@ Mỗi dòng "bằng chứng" phải trỏ tới thứ kiểm lại được: đ�
 |---|---|---|---|---|
 | E1 | File không đọc được / định dạng lạ | thông báo kèm danh sách định dạng | **ĐẠT** | `audio/io.py:44`; banner đỏ (ảnh 04); QA đối kháng thử 17 input độc hại đều trả dưới 0,5 giây. |
 | E2 | Sample rate / số kênh bất kỳ | resample và trộn mono | **ĐẠT** | `load_audio`; QA thử file 8 kênh. |
-| E3 | Không dò được tone | kết quả rỗng, cảnh báo, không bịa chữ | **ĐẠT** | `api.py:264`. |
+| E3 | Không dò được tone | kết quả rỗng, cảnh báo, không bịa chữ | **CHƯA ĐẠT từ 22/09** | Đạt lúc rà soát 21/09 (`api.py:264`). Commit 7722bc8 (22/09) thêm `fallback_tone_hz` đoán tone theo đỉnh phổ để cứu 29 clip T1 (1,46 điểm CER) — lệch spec đã ghi ở ledger, nhưng không ai đo tác động lên tín hiệu KHÔNG có Morse. Đo 23/09: 30 giây nhiễu trắng thuần ra `DE K` ở tone đoán 1437,5 Hz, tin cậy từng chữ 0,04, kèm cảnh báo `guessed_tone` + `low_confidence_with_dsp`. Chế độ nghe đã chặn bằng `skip_silent_windows=True`; chế độ file thì chưa (bật cờ đó cho file làm T1 xấu 9,70 → 13,28 %). Hướng sửa cần đo: sàn độ tin cậy riêng cho đường đoán tone. |
 | E4 | Tone thứ hai đáng kể | cảnh báo nêu tần số đang bám | **ĐẠT** | `api.py:277`. |
 | E5 | Model/LM thiếu hoặc hỏng | fail ngay lúc khởi động, hộp thoại nêu đường dẫn | **ĐẠT** | `startup.check_models` + `main()` trả 2 (ảnh 10); test `test_main_exits_2_when_models_missing`. |
 | E6 | Thiết bị thu bận hoặc mất | liệt kê lại, nút thử lại | **HOÃN** | Tuần 5. |

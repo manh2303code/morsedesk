@@ -332,3 +332,34 @@ huấn luyện dài hơn **hại** 0,14 điểm. Toàn bộ phần thắng đế
 
 **Đã chọn E9 làm `models/acoustic.onnx` v0.3.0** (2,2 MB thay vì 778 KB): thắng rõ trên T1 (bộ
 500 clip) và chỉ kém E14 0,11 điểm trên T2 (bộ 40 mục).
+
+## Đo lại MỌI checkpoint ở cửa sổ 12 s (2026-09-23)
+
+Sau khi E9 đảo chiều, đo lại mọi checkpoint còn giữ, cùng lệnh `eval_run.py`, cùng ngày:
+
+| Lượt | hidden | bước thật | val TER | CER greedy | **CER beam+LM** | en / ru / kk | Kết luận cũ (4 s) |
+|---|---|---|---|---|---|---|---|
+| **E9** | 256 | 40 000 | 19,67 % | 10,20 % | **9,70 %** | 10,10 / 11,58 / 8,91 | "BỊ LOẠI" 28,44 % |
+| E3 | 128 | 21 500 | 22,29 % | 11,92 % | 10,87 % | 11,64 / 13,24 / 10,87 | mốc |
+| **E11** | 128 | 28 000 | 20,18 % | 11,93 % | **10,88 %** | 11,13 / 13,65 / 10,99 | "BỊ LOẠI" 26,80 % |
+| **E6** | 128 | 27 000 | 27,30 % | 12,57 % | **10,92 %** | 11,97 / 13,91 / 11,82 | "BỊ LOẠI" 35,67 % |
+| E4 | 128 | 21 000 | 23,15 % | 11,81 % | 10,96 % | 11,25 / 13,69 / 10,47 | 27,68 % |
+| E2 | 128 | 6 500 | 27,64 % | 15,01 % | 13,50 % | 14,89 / 16,07 / 14,07 | 28,40 % |
+| E1 | 96 | 8 000 | 31,15 % | 18,91 % | 16,08 % | 17,61 / 21,08 / 18,04 | – |
+| E10 | 256 | **2 000** | 40,80 % | 29,79 % | 20,92 % | 27,82 / 29,63 / 31,93 | "đã dừng" |
+| E12 | 128 | **2 000** | 46,36 % | 34,87 % | 25,48 % | 31,51 / 35,85 / 37,25 | "đã dừng" |
+
+"Bước thật" đọc từ checkpoint, không từ `args.json`: E10 đặt 40 000 và E12 đặt 60 000 nhưng cả hai
+bị dừng ở 2 000. Số của chúng chỉ nói một model học được 3–5 % chặng đường thì đọc kém.
+
+**Cả ba lượt từng bị tuyên "BỊ LOẠI" đều bị chấm sai**, sai lệch 15,9 đến 24,8 điểm. Nhưng kết cục
+khác nhau: E9 thật sự tốt hơn; **E6 và E11 chỉ ngang E3** (chênh 0,01–0,05 điểm, dưới mức nhiễu đo).
+Nên với E6/E11 kết luận đúng là *"không hại như đã tưởng"*, không phải *"tốt hơn"*.
+
+E6 vẫn đáng để ý: trên kênh `qsb` nó đạt 43,97 % so với 45,55 % của E3 ở cùng cấu hình. Kết hợp
+`--qsb-hard` với hidden 256 chưa ai thử. Lý do loại E6 hôm 22/09 — *"model 200 k tham số không đủ
+sức gánh cả điều kiện khó lẫn dễ"* — nói về hidden 128, và bản thân con số làm nền cho nó đã sai.
+
+**Trùng tên cần tránh:** `runs/E10` = hidden 256 + đuôi SNR sạch. "E10" trong spec tuần 5–6 §3.4 =
+dữ liệu thật gán nhãn giả bằng DeepCW. Cái sau chưa bao giờ được làm; E8 (nhiễu thật HamNoise) cũng
+chưa. Thang thí nghiệm E6–E10 của spec **chưa chạy hết**.

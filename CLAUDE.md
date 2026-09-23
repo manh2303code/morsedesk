@@ -28,22 +28,35 @@ rồi khi cửa sổ suy luận sửa từ 4 s sang 12 s, đúng checkpoint đó
 model tốt nhất dự án. Khi khâu suy luận còn một lỗi lớn chưa biết, mọi so sánh giữa các model
 đều mang lỗi đó và có thể đảo chiều hoàn toàn.
 
-## Đã thử và BỊ SỐ ĐO BÁC BỎ — đừng làm lại
+## Đã thử và BỊ SỐ ĐO BÁC BỎ
 
-| Hướng | Kết quả |
-|---|---|
-| E6 tăng cường QSB mạnh hơn | 35,67 % so với 23,85 % |
-| E11 đuôi SNR sạch trong dữ liệu huấn luyện | 26,80 % so với 20,21 % |
-| E13 cửa sổ lúc huấn luyện khớp cửa sổ suy luận | 11,46 % so với 10,87 % |
-| E15 clip huấn luyện dài 8–20 s | 11,01 % so với 10,87 % |
-| Nội suy ranh giới dưới khung | T1 35,12 % → 40,73 % |
-| Lexicon rộng hơn (1000/5000 từ) | 18,13 % / 18,23 % so với 18,19 % |
-| Nới `min_prob` 1e-3 → 1e-4 | 0,15 điểm, gấp đôi thời gian |
-| Huấn luyện khớp tone ước lượng | 0,36 điểm |
-| **LocalAgreement-2** cho chế độ live | 38,41 % so với 17,31 % khi chốt ngay |
-| `skip_silent_windows` ở **chế độ file** | 13,28 % so với 9,70 % |
+**Cột "cửa sổ" là bắt buộc đọc.** Mọi kết luận đo ở cửa sổ suy luận **4 s** (trước 23/09) đều
+đáng ngờ: ba model từng bị tuyên "BỊ LOẠI" ở 4 s đã được đo lại ở 12 s và kết luận đảo chiều
+(bảng dưới). Chỉ những dòng đo ở **12 s** mới là bác bỏ chắc chắn.
 
-**E9 (hidden 256) thì NGƯỢC LẠI: nó thắng.** Đừng đọc bảng trên thành "model lớn hơn không giúp".
+| Hướng | Kết quả | Cửa sổ | Còn đứng? |
+|---|---|---|---|
+| E13 cửa sổ lúc huấn luyện khớp cửa sổ suy luận | 11,46 % so với 10,87 % | 12 s | **có** |
+| E15 clip huấn luyện dài 8–20 s | 11,01 % so với 10,87 % | 12 s | **có** |
+| **LocalAgreement-2** cho chế độ live | 38,41 % so với 17,31 % khi chốt ngay | 12 s | **có** |
+| `skip_silent_windows` ở **chế độ file** | 13,28 % so với 9,70 % | 12 s | **có** |
+| Nội suy ranh giới dưới khung | T1 35,12 % → 40,73 % (bộ DSP) | không dùng cửa sổ | **có** |
+| Lexicon rộng hơn (1000/5000 từ) | 18,13 % / 18,23 % so với 18,19 % | 4 s | chưa đo lại |
+| Nới `min_prob` 1e-3 → 1e-4 | 0,15 điểm, gấp đôi thời gian | 4 s | chưa đo lại |
+| Huấn luyện khớp tone ước lượng | 0,36 điểm | 4 s | chưa đo lại |
+
+### Từng bị loại oan — đo lại ở cửa sổ 12 s (23/09)
+
+| Lượt | Kết luận cũ (4 s) | **Đo lại (12 s)** | Ý nghĩa |
+|---|---|---|---|
+| **E9** hidden 256 | "BỊ LOẠI", 28,44 % | **9,70 %** | model đang dùng, tốt nhất dự án |
+| **E6** `--qsb-hard` | "BỊ LOẠI", 35,67 % | **10,92 %**, qsb 43,97 % | ngang E3; hướng `qsb` CHƯA bị bác bỏ |
+| **E11** đuôi SNR sạch | "BỊ LOẠI", 26,80 % | **10,88 %** | ngang E3 |
+| E10, E12 | "đã dừng" | chỉ chạy **2 000** bước | **chưa từng được trả lời**, không phải bị bác bỏ |
+
+`runs/E10` (hidden 256 + đuôi SNR sạch) **khác** "E10" trong spec tuần 5–6 §3.4 (dữ liệu thật gán
+nhãn giả). Cái sau chưa bao giờ được làm — `tools/pseudo_label.py` không tồn tại. E8 (nhiễu thật
+HamNoise) cũng chưa chạy.
 
 ## Lệnh hay dùng
 
@@ -171,10 +184,31 @@ mình**. Trong một phiên đã có hai kết luận research không sống só
 
 ## Hiện trạng
 
-CER T1 **9,70 %**, T2 **3,93 %**. Bốn kênh sạch/mp3/qrm/qrn đều **dưới 3,3 %**, tức sát cổng 2 %
-của spec; **toàn bộ khoảng cách còn lại nằm ở `qsb` (fading) 45,55 %** — đó là mục tiêu tiếp theo,
-không phải chỗ nào khác.
+Model E9 v0.3.0, cửa sổ 12 s. CER T1 **9,70 %**, T2 **3,93 %**. Theo kênh (beam + LM / greedy):
 
-Chưa làm: cổng 2 % (CP-01), người bản ngữ soát Kazakh (CP-12), benchmark LM thay thế (n-gram bậc 6
-chưa bao giờ được so với lựa chọn khác), và đo chất lượng chế độ nghe qua micro thật — mọi số hiện
-có đều từ tín hiệu tổng hợp sạch.
+| kênh | clean | mp3 | qrm | qrn | qsb |
+|---|---|---|---|---|---|
+| beam + LM | 1,97 % | 1,78 % | 1,39 % | 2,31 % | **41,05 %** |
+| greedy | **1,65 %** | **1,14 %** | **1,03 %** | 2,49 % | 44,67 % |
+
+**Ba kênh đã qua cổng 2 %.** Toàn bộ khoảng cách nằm ở `qsb` (~8,2 trong 9,7 điểm). Hai điều rút ra:
+
+- **LM làm XẤU ba kênh** (clean/mp3/qrm): `alpha` 0,3 và `char_bonus` 1,25 được chỉnh cho E3 ở cửa
+  sổ 4 s; model âm thanh mạnh hơn thường cần ít trọng số LM hơn. Chỉnh lại là việc rẻ, chưa làm.
+  Test `test_t1_lm_not_worse_than_greedy` chỉ so trung bình tổng nên không bắt được.
+- **`qsb` vật lý chỉ một phần.** T1 dùng fade đúng 20 dB chu kỳ 4 s. qsb theo SNR: 0 dB 66,4 % /
+  3 dB 57,6 / 6 dB 35,9 / 10 dB 31,3 / **20 dB 14,2 %**. Ở 20 dB đáy fade là 0 dB — mà clean ở 0 dB
+  chỉ 3,25 % — nên 14,2 % là lỗi **xử lý**, sửa được. Ở 0–6 dB đáy fade là −14…−20 dB, dưới nền
+  nhiễu thật: cổng 2 % trên toàn ô `qsb` gần như chắc chắn **không bộ giải mã nào đạt**. Spec tuần
+  5–6 §1.2: khi đó giao bảng số theo ô để người dùng quyết, không tự hạ ngưỡng.
+
+**Vi phạm spec đang mở:** §7 *"không dò được tone → kết quả rỗng, không bịa chữ"*. `fallback_tone_hz`
+(commit 7722bc8, 22/09) đoán tone theo đỉnh phổ và biến 30 giây nhiễu trắng thuần thành `DE K`, dù
+độ tin cậy từng chữ chỉ 0,04 và có cảnh báo `guessed_tone`. Có thể chặn bằng sàn độ tin cậy trên
+đường đoán tone — nhưng phải đo xem 29 clip T1 mà đường này cứu có tin cậy cao hơn sàn đó không.
+
+**Bản đóng gói cũ:** `dist/MorseDesk-x86_64.AppImage` dựng 22/09 23:24 với model **v0.2.0** và cửa
+sổ 4 s, trước 16 commit. Phải dựng lại trước khi đưa ai dùng.
+
+Chưa làm: T3 live so với file lệch **3,1 điểm** (spec đòi dưới 1); trang Nghe chưa hiện bộ đếm khối
+bị bỏ (spec tuần 5–6 §7.6); người bản ngữ soát Kazakh (CP-12); đo chế độ nghe qua micro thật.

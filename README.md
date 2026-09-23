@@ -9,7 +9,7 @@ Spec: `docs/superpowers/specs/2026-09-18-morsedesk-design.md`.
 |---|---|
 | Windows | bấm đúp `MorseDesk.cmd` ở gốc kho — tự cài phụ thuộc lần đầu rồi mở giao diện |
 | Windows (dòng lệnh) | `uv run morsedesk-gui` |
-| Linux | `chmod +x dist/MorseDesk-x86_64.AppImage` rồi bấm đúp |
+| Linux | `bash scripts/install_linux.sh dist/MorseDesk-x86_64.AppImage` một lần, rồi mở từ menu ứng dụng. Chép file rồi bấm đúp **không chạy**: file từ USB/Windows mất bit thực thi và trình quản lý file im lặng bỏ qua |
 
 Model và ba mô hình ngôn ngữ nằm sẵn trong `models/` nên giao diện mở thẳng. Thiếu chúng thì
 hộp thoại nêu đúng đường dẫn còn thiếu; muốn chạy không cần model nơ-ron thì thêm
@@ -39,7 +39,9 @@ Tùy chọn: cài `ffmpeg` (ví dụ `scoop install ffmpeg`) để bộ sinh d�
 - Chạy: `uv run morsedesk-gui` (cần `models/acoustic.onnx` và `models/lm/{en,ru,kk}.bin`; thiếu file → hộp thoại nêu đường dẫn và thoát mã 2). Tham số: `--model`, `--lm-dir`, `--engine baseline` (dev, không cần ONNX), `--lang en|ru|kk`.
 - Tab Giải mã: mở hoặc kéo thả file (`.wav .flac .ogg .oga .mp3 .aiff .aif` — đúng `SUPPORTED_EXT`; thả nhiều file thì chỉ nhận file đầu), chọn ngôn ngữ bản tin (Tự động/Anh/Nga/Kazakh), bật/tắt mô hình ngôn ngữ; từ tô màu theo tin cậy (xanh ≥ 0,8, vàng ≥ 0,5, đỏ dưới), spectrogram 0–2 kHz với vạch tone, xuất TXT/JSON. File tới **1 giờ**; thanh tiến trình hiện phần trăm theo số cửa sổ đã xử lý và nút **Hủy** dừng lần giải mã đang chạy.
 - Tab Tạo mã: văn bản → chuỗi chấm gạch, bảng ký tự Cyrillic và 9 chữ Kazakh, WPM/Farnsworth/weight/tone/nhiễu, Nghe thử (sounddevice), Lưu WAV/FLAC/OGG. Định dạng lưu: WAV/FLAC/OGG/OGA/AIFF/AIF, và MP3 khi máy có bộ mã hóa (xem tab Cài đặt). Văn bản mà audio ước tính dài hơn 1 giờ (cùng trần với tab Giải mã) thì Nghe thử và Lưu bị tắt kèm cảnh báo.
-- Ngôn ngữ giao diện đổi ngay bằng combo trên thanh công cụ (English, Русский, Қазақша bản nháp); lưu trong QSettings. Sửa bản dịch trong `morsedesk/app/i18n/translations.json` rồi chạy `uv run python tools/build_i18n.py` để sinh lại `.ts/.qm`.
+- Ngôn ngữ giao diện đổi ngay bằng ba lá cờ trên thanh công cụ (không ảnh hưởng tới bảng mã giải mã); lưu trong QSettings. Sửa bản dịch trong `morsedesk/app/i18n/translations.json` rồi chạy `uv run python tools/build_i18n.py` để sinh lại `.ts/.qm`.
+- Thanh phát ở trang Giải mã: nghe lại chính file vừa giải mã, từ đang nghe được viền xanh, bấm một từ thì nghe từ chỗ đó. Chỉ bật sau khi giải mã xong; đọc lại file từ đĩa nên không đụng vào kết quả giải mã.
+- Tab Nghe: giải mã trực tiếp từ card âm thanh — thác nước tần số, chip từ theo độ tin cậy, WPM/tone/SNR, chữ xám = còn có thể đổi, chữ thường = đã chốt. Bảng mã mặc định `auto`, cần khoảng 8 ký tự mới nhận đúng. Chất lượng kém đường file 3,1 điểm CER (đo trên 40 clip).
 - Tab Cài đặt: engine đang dùng, xuất MP3 đi đường nào (libsndfile / ffmpeg ngoài / không có, kèm cách khắc phục), các định dạng ghi trực tiếp được, và đường dẫn file log. Trang chỉ đọc.
 - Log: `~/.local/share/morsedesk/logs/morsedesk.log` trên Linux (theo chuẩn XDG, tôn trọng `XDG_DATA_HOME`); trên Windows theo `QStandardPaths.AppDataLocation`.
 - Font: `uv run python tools/fetch_fonts.py` tải DejaVu Sans và Noto Sans vào `morsedesk/app/fonts/` (không commit). Ứng dụng tự nạp và đặt làm font mặc định, để máy Linux tối giản vẫn hiện đủ Ә Ғ Қ Ң Ө Ұ Ү Һ І.
@@ -47,7 +49,7 @@ Tùy chọn: cài `ffmpeg` (ví dụ `scoop install ffmpeg`) để bộ sinh d�
 ## Bản ghi thật và chất lượng đo được (tuần 5)
 
 - Bộ T2 gồm bản ghi thật: `uv run python tools/fetch_t2.py page --source arrl --profile en --index-url https://www.arrl.org/code-practice-files` rồi `uv run python tools/fetch_t2.py build`. Dữ liệu vào `testdata/private/t2/` (không commit). Các nguồn khác: `commons` (API Wikimedia), `local` (file tự thu), `synth` (bù tiếng Nga/Kazakh, đánh dấu `synthetic`).
-- Số đo ngày 22/09/2026: T1 tổng hợp **20,21 %** CER; bản ghi thật ARRL **4,0 %**, riêng dải 18–40 WPM **1,52 %** (đạt yêu cầu A2 của spec); T0 roundtrip audio sạch **CER = 0 trên cả 21 ô** (đạt D2). Chi tiết và cách tái lập: `docs/research/02-baseline-numbers.md`.
+- Số đo ngày 23/09/2026 (model E9 v0.3.0, cửa sổ 12 s): T1 tổng hợp **9,70 %** CER — ba kênh clean/mp3/qrm đã dưới 2 %, gần như toàn bộ phần còn lại nằm ở `qsb` 41 %; bản ghi thật ARRL **3,93 %**, riêng dải 18–40 WPM **1,52 %** (đo 22/09) (đạt yêu cầu A2 của spec); T0 roundtrip audio sạch **CER = 0 trên cả 21 ô** (đạt D2). Chi tiết và cách tái lập: `docs/research/02-baseline-numbers.md`.
 - Bộ giải mã được chọn theo bằng chứng đo từ chính clip: tín hiệu sạch hơn dải huấn luyện của model thì lấy kết quả bộ DSP, còn lại dùng model (`morsedesk/dsp/selection.py`). `DecodeResult.decoded_by` cho biết đường nào đã sinh ra văn bản.
 
 ## Đóng gói AppImage (tuần 6)
@@ -68,4 +70,5 @@ docker run --rm -v "$PWD":/work morsedesk-test bash /work/scripts/test_appimage.
 - Thư viện đồ họa `libEGL`/`libGL` **không** đóng gói: theo thông lệ AppImage chúng phải khớp
   driver của máy chạy, và mọi cài đặt Ubuntu có màn hình đều đã có.
 - Model (`models/acoustic.onnx`) và ba mô hình ngôn ngữ được gói kèm nếu có mặt lúc dựng; thiếu
-  thì AppImage vẫn chạy ở engine baseline và báo đường dẫn còn thiếu.
+  thì ứng dụng hiện hộp thoại nêu đường dẫn còn thiếu rồi thoát mã 2 (`morsedesk/app/main.py`). Bản
+  `dist/` hiện có dựng 22/09 với model v0.2.0 — dựng lại trước khi dùng.

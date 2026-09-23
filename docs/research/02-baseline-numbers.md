@@ -873,3 +873,34 @@ NHIỄU (qsb 45,55 %), không ở tham số tín hiệu.
 | kk-cyrl-ru | 0 % | 0 % |
 
 Với bản tin đủ dài, `auto` **không mất gì**. Vấn đề của nó chỉ là bản tin ngắn.
+
+---
+
+## `qsb`: giới hạn vật lý CHỈ ở SNR thấp — đo lại với E9, cửa sổ 12 s (2026-09-23)
+
+Mục "QSB: giới hạn vật lý chứ không phải lỗi xử lý" ngày 22/09 kết luận 52 % CER ở ô này *"gần với
+giới hạn vật lý hơn là lỗi xử lý"*. Hai thay đổi thuần xử lý sau đó kéo `qsb` xuống 9 điểm (cửa sổ
+12 s: 54,60 → 45,55 %; E9: → 41,05 %). Giới hạn vật lý thật thì không nhúc nhích khi đổi cửa sổ,
+nên kiểm lại bằng chính bảng d′ của mục đó.
+
+T1 dùng fade **đúng 20 dB, chu kỳ 4 s** (`morsedesk/data/channel.py:67`) — đúng ca bảng d′ đã đo.
+Ở SNR 20 dB kèm fade 20 dB, d′ = 4,51, ngang tín hiệu sạch 4,50. CER theo kênh × SNR (E9, beam+LM,
+20 clip mỗi ô, `runs/t1_E9_rows/`):
+
+| kênh | 0 dB | 3 dB | 6 dB | 10 dB | 20 dB |
+|---|---|---|---|---|---|
+| clean | 3,25 % | 1,82 % | 1,30 % | 2,14 % | 1,33 % |
+| mp3 | 3,50 % | 2,37 % | 1,15 % | 1,27 % | 0,62 % |
+| qrm | 2,25 % | 3,52 % | 1,16 % | 0,00 % | 0,00 % |
+| qrn | 2,42 % | 5,59 % | 0,50 % | 0,91 % | 2,15 % |
+| **qsb** | 66,37 % | 57,55 % | 35,88 % | 31,25 % | **14,18 %** |
+
+**Ở 20 dB, đáy fade dìm tín hiệu xuống 0 dB — mà clean ở 0 dB chỉ 3,25 %.** Mọi khoảnh khắc trong
+một clip `qsb`@20 dB đều dễ giải hơn thứ model đã xử lý tốt, vậy mà CER là 14,18 %, gấp 11 lần
+clean@20 dB. Khoảng đó là **xử lý**, sửa được. Hình dạng lỗi thống nhất: **cả đoạn bị xóa** —
+`ЦЕЛЬ ПРИНЯЛ СИГНАЛ` → `РИНЯЛ`, `N4NLO DE G6FP` → `NLOD FP`, khớp với chẩn đoán 74 % lỗi là xóa.
+
+**Ở 0–6 dB thì kết luận cũ đứng:** đáy fade xuống −14 … −20 dB, dưới nền nhiễu thật trong một phần
+mỗi chu kỳ. Cổng 2 % trên toàn ô `qsb` vì vậy gần như chắc chắn ngoài tầm mọi bộ giải mã — DeepCW
+cũng 47 % ở ô này. Theo spec tuần 5–6 §1.2, việc đúng là giao bảng số theo ô và khuyến nghị, để
+người dùng quyết, chứ không tự hạ ngưỡng.
