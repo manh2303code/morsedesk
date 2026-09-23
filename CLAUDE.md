@@ -132,6 +132,14 @@ mình**. Trong một phiên đã có hai kết luận research không sống só
 1,56 giây).
 
 ### Giao diện
+- **Tài liệu trong ứng dụng chứa số đo.** `morsedesk/app/docs/{about,technical}_{en,ru,kk}.html` ghi số
+  tham số model, CER T1/dev/T2, tốc độ, bộ nhớ. Đổi model hay số đo thì sửa CẢ SÁU file (số trong bản
+  Nga/Kazakh dùng dấu phẩy thập phân và `&nbsp;` phân nhóm). `tests/app/test_about.py` kiểm ba bản dịch
+  cùng mục, cùng số bảng/hàng, và bảng mã Kazakh khớp profile — nhưng KHÔNG kiểm từng con số.
+- Hiển thị bằng QTextBrowser (tập con HTML/CSS của Qt): `line-height` nhân lên khoảng dòng sẵn có của
+  font (145 % ra gần gấp đôi), widget bề rộng cố định trong layout dọc khống chế bề rộng cả cột trừ khi
+  thêm căn lề. Chụp `packaging/shots.py` rồi nhìn ảnh sau mỗi lần sửa.
+- Logo sinh bằng `packaging/make_icon.py`; test so từng byte PNG trong repo với bộ sinh.
 - **Ảnh chụp bắt lỗi mà test không bắt.** Ba lần trong một phiên: nút phát bị khóa vĩnh viễn, thác
   nước thành mảng vàng đặc, rồi thác nước phẳng lì. Sau mỗi thay đổi giao diện, chạy
   `packaging/shots.py` và **nhìn ảnh**.
@@ -235,8 +243,8 @@ nhận trên T1: T1 9,70 → 9,79 %, dev và T2 không đổi, 120/120 lần ch�
 cậy ~0,99 — về đường bao nó chính là Morse chữ E. Test cũ kiểm §7 bằng `engine="baseline"` nên không bắt
 được việc engine `onnx` bịa chữ; test mới chạy trên `onnx`.
 
-**Đóng gói (dựng lại 23/09, model v0.3.0 + mọi bản sửa).** Windows `dist/MorseDesk.exe` một file
-137 MB (`scripts/build_windows.ps1`); Linux `dist/MorseDesk-x86_64.AppImage` 145 MB. Kiểm: chạy
+**Đóng gói (dựng lại 23/09 đêm, model v0.4.0 + logo + tab Giới thiệu).** Windows `dist/MorseDesk.exe` một file
+139 MB (`scripts/build_windows.ps1`); Linux `dist/MorseDesk-x86_64.AppImage` 148 MB. Kiểm: chạy
 `scripts/test_windows_exe.ps1` TRƯỚC (nó sinh mẫu `dist/selftest/`), rồi `scripts/test_appimage.sh`
 — cả hai đòi `--self-test` ra văn bản giống hệt mã nguồn. Đổi model thì phải dựng lại CẢ HAI.
 Docker Desktop có lúc báo "running" mà máy ảo đã chết (lỗi 500): `docker desktop restart` — train

@@ -7,7 +7,7 @@ Spec: `docs/superpowers/specs/2026-09-18-morsedesk-design.md`.
 
 | Nền tảng | Cách nhanh nhất |
 |---|---|
-| Windows, máy người dùng | chép **một file** `dist/MorseDesk.exe` (137 MB) rồi bấm đúp — không cần Python, không cài đặt. Dựng bằng `scripts/build_windows.ps1` |
+| Windows, máy người dùng | chép **một file** `dist/MorseDesk.exe` (139 MB) rồi bấm đúp — không cần Python, không cài đặt. Dựng bằng `scripts/build_windows.ps1` |
 | Windows, máy dev | bấm đúp `MorseDesk.cmd` ở gốc kho — tự cài phụ thuộc lần đầu rồi mở giao diện |
 | Windows (dòng lệnh) | `uv run morsedesk-gui` |
 | Linux | `bash scripts/install_linux.sh dist/MorseDesk-x86_64.AppImage` một lần, rồi mở từ menu ứng dụng. Chép file rồi bấm đúp **không chạy**: file từ USB/Windows mất bit thực thi và trình quản lý file im lặng bỏ qua |
@@ -63,8 +63,8 @@ powershell -ExecutionPolicy Bypass -File scripts/test_windows_exe.ps1  # khởi 
 - Một file chứa sẵn model âm thanh, ba mô hình ngôn ngữ, Qt và onnxruntime. Mỗi lần chạy nó bung
   vào `%TEMP%\_MEIxxxx` rồi tự dọn khi đóng cửa sổ bình thường (giết cứng tiến trình thì thư mục
   đó ở lại).
-- Đo 23/09 (máy đang bận train): ảnh chờ hiện sau **0,3–0,6 s**, cửa sổ chính sau **5,0–5,4 s**;
-  chạy từ mã nguồn là 2,6–3,1 s. Ảnh chờ do bootloader PyInstaller vẽ, nói chuyện với ứng dụng qua
+- Đo 23/09 trên máy rảnh: ảnh chờ hiện sau **0,2–0,3 s**, cửa sổ chính sau **2,8–3,3 s** (lúc máy
+  bận train: 5,0–5,4 s); chạy từ mã nguồn là 2,6–3,1 s. Ảnh chờ do bootloader PyInstaller vẽ, nói chuyện với ứng dụng qua
   socket **loopback 127.0.0.1** — không ra mạng ngoài.
 - `MorseDesk.exe --self-test VÀO.wav RA.json` giải một file bằng đúng model trong gói rồi ghi
   JSON, không mở cửa sổ. `test_windows_exe.ps1` dùng nó để đòi kết quả **giống hệt** mã nguồn trên
@@ -79,7 +79,7 @@ powershell -ExecutionPolicy Bypass -File scripts/test_windows_exe.ps1  # khởi 
 ```bash
 docker build -f packaging/Dockerfile.build -t morsedesk-build .
 docker run --rm -v "$PWD":/src morsedesk-build bash scripts/build_appimage.sh
-# -> dist/MorseDesk-x86_64.AppImage (145 MB) và dist/SHA256SUMS
+# -> dist/MorseDesk-x86_64.AppImage (148 MB) và dist/SHA256SUMS
 
 docker build -f packaging/Dockerfile.test -t morsedesk-test .
 docker run --rm -v "$PWD":/work morsedesk-test bash /work/scripts/test_appimage.sh
@@ -95,5 +95,5 @@ docker run --rm -v "$PWD":/work morsedesk-test bash /work/scripts/test_appimage.
   thì ứng dụng hiện hộp thoại nêu đường dẫn còn thiếu rồi thoát mã 2 (`morsedesk/app/main.py`).
 - `test_appimage.sh` còn chạy `AppRun --self-test` trên các mẫu `dist/selftest/` mà
   `scripts/test_windows_exe.ps1` để lại, và đòi văn bản **giống hệt** mã nguồn — phần mở cửa sổ chỉ
-  dùng engine baseline nên không chứng minh được model trong gói. Bản dựng 23/09 (model v0.3.0,
-  145 MB) đạt cả ba mẫu ru/kk/en.
+  dùng engine baseline nên không chứng minh được model trong gói. Bản dựng 23/09 (model v0.4.0,
+  148 MB) đạt cả ba mẫu ru/kk/en.

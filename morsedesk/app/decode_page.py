@@ -444,6 +444,9 @@ class DecodePage(QWidget):
                 self._fallback_caption(getattr(self.result, "decoded_by", "model"),
                                        self.result.fallback_text)
             )
+        # Thanh phát là widget con có chữ riêng; thiếu dòng này nút "Play" giữ tiếng Anh sau khi đổi
+        # ngôn ngữ (ảnh chụp AppImage tiếng Kazakh 23/09 lộ ra).
+        self.player.retranslate()
 
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.Type.LanguageChange:

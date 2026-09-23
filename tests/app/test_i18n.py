@@ -103,3 +103,21 @@ def test_translated_combos_grow_and_units_are_localised(qtbot, tiny_lm_dir, tmp_
                 assert "Гц" in text and "дБ" in text and " Hz" not in text and " dB" not in text
     finally:
         window.close()
+
+
+def test_player_bar_follows_the_ui_language(qtbot, tiny_lm_dir, tmp_path):
+    """Nút thanh phát từng giữ chữ "Play" tiếng Anh trong giao diện Kazakh."""
+    from morsedesk.app.main_window import MainWindow
+    from morsedesk.app.worker import DecoderWorker, Player
+
+    worker = DecoderWorker(engine="baseline", model_path=None, lm_dir=tiny_lm_dir)
+    settings = AppSettings(settings=QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+    w = MainWindow(worker, Player(), settings, I18N_DIR)
+    qtbot.addWidget(w)
+    try:
+        assert w.set_language("kk") and w.decode_page.player.play_button.text() == "Ойнату"
+        assert w.set_language("ru") and w.decode_page.player.play_button.text() == "Воспроизвести"
+    finally:
+        w.set_language("en")
+        QCoreApplication.processEvents()
+        w.close()
