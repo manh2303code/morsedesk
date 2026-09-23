@@ -14,6 +14,8 @@ COLOR_GOOD, COLOR_MID, COLOR_LOW = "#c8f0c8", "#fff2b3", "#f7c6c6"
 # bảng màu hệ thống: ở giao diện tối của Windows/KDE màu đó là trắng, cho tương phản
 # 1,25:1 (đo trên ảnh chụp thật) tức là không đọc được.
 TEXT_COLOR = "#1a1a1a"
+# Viền của từ đang phát: đủ đậm để thấy trên cả ba màu nền độ tin cậy.
+ACTIVE_BORDER = "#1f6feb"
 
 
 def confidence_color(c: float) -> str:
@@ -33,12 +35,25 @@ class WordLabel(QLabel):
     def __init__(self, word: Word, parent=None) -> None:
         super().__init__(word.text, parent)
         self.word = word
-        self.setStyleSheet(
-            f"QLabel {{ background:{confidence_color(word.confidence)}; color:{TEXT_COLOR}; "
-            "padding:3px 6px; border-radius:4px; font-size:16pt; }"
-        )
+        self._active = False
+        self._apply_style()
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.retranslate()
+
+    def _apply_style(self) -> None:
+        # Từ đang nghe được đánh dấu bằng VIỀN chứ không bằng màu nền: nền đã mang thông tin độ
+        # tin cậy, đổi nó đi là xóa mất thông tin đó ngay lúc người dùng cần soi nhất.
+        border = (f"2px solid {ACTIVE_BORDER}" if self._active else "2px solid transparent")
+        self.setStyleSheet(
+            f"QLabel {{ background:{confidence_color(self.word.confidence)}; color:{TEXT_COLOR}; "
+            f"padding:1px 4px; border-radius:4px; border:{border}; font-size:16pt; }}"
+        )
+
+    def set_active(self, flag: bool) -> None:
+        """Đánh dấu (hoặc bỏ đánh dấu) đây là từ con trỏ phát đang chạy qua."""
+        if flag != self._active:
+            self._active = flag
+            self._apply_style()
 
     def retranslate(self) -> None:
         self.setToolTip(
@@ -81,6 +96,25 @@ class WordView(QWidget):
             self._layout.addWidget(lb)
             self._labels.append(lb)
         self._layout.invalidate()
+
+    def set_playhead(self, t_s: float | None) -> None:
+        """Tô từ chứa mốc thời gian `t_s`; `None` để bỏ tô hết.
+
+        Con trỏ hay rơi vào khoảng lặng GIỮA hai từ (mỗi từ chỉ chiếm start_s..end_s). Khi đó
+        giữ nguyên từ vừa qua thay vì bỏ trắng, nếu không vệt sáng sẽ nhấp nháy mỗi lần im lặng.
+        """
+        if t_s is None:
+            for lb in self._labels:
+                lb.set_active(False)
+            return
+        active = None
+        for lb in self._labels:
+            if lb.word.start_s <= t_s:
+                active = lb           # từ cuối cùng đã bắt đầu tính tới mốc này
+            else:
+                break
+        for lb in self._labels:
+            lb.set_active(lb is active)
 
     def clear(self) -> None:
         """Xóa toàn bộ nhãn từ, quay về trạng thái placeholder."""

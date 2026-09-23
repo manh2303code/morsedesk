@@ -1,8 +1,6 @@
 """Fixture cho test GUI: chạy offscreen, LM tí hon, WAV mẫu."""
 
 import os
-import sys
-import types
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -15,29 +13,6 @@ from morsedesk.audio.io import save_audio  # noqa: E402
 from morsedesk.lm.alphabet import LMAlphabet  # noqa: E402
 from morsedesk.lm.ngram import save_bin, train_small  # noqa: E402
 from morsedesk.lm.profile import load_profile  # noqa: E402
-
-
-@pytest.fixture
-def fake_sounddevice(monkeypatch):
-    """Thay `sounddevice` bằng module giả trong `sys.modules`.
-
-    Máy đích là Linux air-gap tối giản, có thể không có `libportaudio2`; khi đó
-    `import sounddevice` ném `OSError` ngay. Test ở đây kiểm lớp bọc `Player` của mình chứ
-    không kiểm PortAudio, nên phải chạy được ở cả hai nơi. Đã gặp thật: ba test này xanh
-    trên Windows nhưng đỏ trên Ubuntu 26.04 vì thiếu libportaudio2.
-    """
-    mod = types.ModuleType("sounddevice")
-    mod.calls = []
-
-    class PortAudioError(Exception):
-        pass
-
-    mod.PortAudioError = PortAudioError
-    mod.play = lambda x, sr, **kw: mod.calls.append(("play", len(x), sr))
-    mod.stop = lambda: mod.calls.append(("stop",))
-    monkeypatch.setitem(sys.modules, "sounddevice", mod)
-    return mod
-
 
 CORPUS = {
     "en": ["CQ CQ DE K", "THE QUICK BROWN FOX", "HELLO WORLD", "CQ DE K", "SOS SOS"],

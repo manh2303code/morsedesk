@@ -61,7 +61,52 @@ def fake_sounddevice(monkeypatch):
             data = np.asarray(block, dtype=np.float32).reshape(-1, 1)
             self.kwargs["callback"](data, len(data), None, None)
 
+    class OutputStream:
+        """`OutputStream` giả: `pump()` gọi callback đúng như PortAudio và trả khối đã ghi ra.
+
+        PortAudio thật gọi callback từ luồng riêng theo nhịp thiết bị; test cần nhịp đó tất định
+        nên tự bơm. `CallbackStop` do callback ném ra được bắt ở đây giống hệt PortAudio: dừng
+        stream rồi gọi `finished_callback`.
+        """
+
+        instances: list["OutputStream"] = []
+
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.started = False
+            self.closed = False
+            self.stopped_by_callback = False
+            OutputStream.instances.append(self)
+
+        def start(self):
+            self.started = True
+
+        def stop(self):
+            self.started = False
+
+        def close(self):
+            self.closed = True
+
+        def pump(self, frames=None):
+            n = int(frames or self.kwargs.get("blocksize") or 1024)
+            out = np.zeros((n, 1), dtype=np.float32)
+            try:
+                self.kwargs["callback"](out, n, None, None)
+            except mod.CallbackStop:
+                self.stopped_by_callback = True
+                self.started = False
+                cb = self.kwargs.get("finished_callback")
+                if cb is not None:
+                    cb()
+            return out[:, 0]
+
+    class CallbackStop(Exception):
+        pass
+
     InputStream.instances = []
+    OutputStream.instances = []
     mod.InputStream = InputStream
+    mod.OutputStream = OutputStream
+    mod.CallbackStop = CallbackStop
     monkeypatch.setitem(sys.modules, "sounddevice", mod)
     return mod

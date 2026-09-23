@@ -23,11 +23,12 @@ from PySide6.QtWidgets import (
 from morsedesk.api import DecodeResult
 from morsedesk.app.settings import AppSettings
 from morsedesk.app.widgets.banner import Banner
+from morsedesk.app.widgets.player_bar import PlayerBar
 from morsedesk.app.widgets.spectrogram import SpectrogramView
 from morsedesk.app.widgets.stats_bar import StatsBar
 from morsedesk.app.widgets.word_view import WordView
 from morsedesk.app.worker import MAX_SECONDS, DecodeRequest, DecoderWorker, Spectrogram
-from morsedesk.audio.io import SUPPORTED_EXT
+from morsedesk.audio.io import SUPPORTED_EXT, load_audio
 from morsedesk.warnings import WARNING_TEXTS, DecodeWarning, WarningCode
 
 PROFILE_CHOICES = ("auto", "en", "ru", "kk-cyrl-ru")
@@ -43,6 +44,7 @@ class DecodePage(QWidget):
         self.settings = settings
         self.result: DecodeResult | None = None
         self._path: Path | None = None
+        self._audio_loaded = False
         self._t0 = 0.0
         self._busy = False
         self.setAcceptDrops(True)
@@ -100,6 +102,11 @@ class DecodePage(QWidget):
         split.setStretchFactor(1, 1)
         split.setStretchFactor(2, 2)
         split.setSizes([340, 90, 140])
+        # Nghe lại chính file vừa giải mã: khi máy đọc sai một chỗ, cách duy nhất để biết lỗi
+        # nằm ở tín hiệu hay ở mô hình là nghe đúng đoạn đó — mà máy air-gap có khi không có
+        # ứng dụng phát nhạc nào khác.
+        self.player = PlayerBar(self)
+        self.player.setEnabled(False)
         self.stats = StatsBar(self)
         self.fallback_label = QLabel(self)
         self.fallback_label.setWordWrap(True)
@@ -117,6 +124,7 @@ class DecodePage(QWidget):
         lay.addLayout(top)
         lay.addWidget(self.banner)
         lay.addWidget(split, 1)
+        lay.addWidget(self.player)
         lay.addWidget(self.stats)
         lay.addWidget(self.fallback_label)
         lay.addLayout(bottom)
@@ -130,6 +138,10 @@ class DecodePage(QWidget):
         self.export_txt_button.clicked.connect(lambda: self._export("txt"))
         self.export_json_button.clicked.connect(lambda: self._export("json"))
         self.word_view.word_clicked.connect(self.spectrogram.set_cursor)
+        self.word_view.word_clicked.connect(self._play_from)
+        self.player.position_changed.connect(self._on_playhead)
+        self.player.error.connect(self.banner.show_warning)
+        self.player.ensure_loaded = self._ensure_audio
         worker.result_ready.connect(self.on_result)
         worker.failed.connect(self.on_failed)
         worker.busy.connect(self.on_busy)
@@ -207,6 +219,9 @@ class DecodePage(QWidget):
             # worker kịp trả lời) -> bỏ qua, tránh vẽ đè kết quả sai lên file đang mở.
             return
         self.result = result
+        self._audio_loaded = False          # nạp lười: chỉ đọc lại file khi người dùng bấm Nghe
+        self.player.clear()
+        self.player.setEnabled(True)
         self.word_view.set_words(result.words)
         self.text_view.setPlainText(result.text)
         self.spectrogram.set_spectrogram(spec)
@@ -226,6 +241,35 @@ class DecodePage(QWidget):
         else:
             self.fallback_label.hide()
         self._set_has_result(True)
+
+    # ---- nghe lại ----
+    def _ensure_audio(self) -> None:
+        """Nạp file vào thanh phát, chỉ một lần cho mỗi kết quả.
+
+        Đọc đồng bộ ngay trong luồng giao diện: đo trên bản ghi ARRL dài 37,2 phút là 0,26 giây,
+        dưới ngưỡng người dùng thấy giật, nên không đáng dựng thêm một luồng nữa cho việc này.
+        """
+        if self._audio_loaded or self._path is None:
+            return
+        self._audio_loaded = True           # đặt trước: file hỏng thì cũng đừng thử lại mỗi lần bấm
+        try:
+            x, sr = load_audio(self._path)
+        except Exception as e:
+            self.banner.show_warning(self.tr("Cannot load audio for playback: {detail}")
+                                     .format(detail=e))
+            self.player.setEnabled(False)
+            return
+        self.player.load(x, sr)
+
+    def _play_from(self, t_s: float) -> None:
+        """Bấm vào một từ thì nghe từ đúng chỗ đó."""
+        self._ensure_audio()
+        self.player.seek(t_s)
+        self.player.play()
+
+    def _on_playhead(self, t_s: float) -> None:
+        self.word_view.set_playhead(t_s if self.player.playback.duration_s > 0 else None)
+        self.spectrogram.set_cursor(t_s if self.player.playback.playing else None)
 
     def _fallback_caption(self, decoded_by: str, text: str) -> str:
         """Nhãn cho dòng dự phòng, nói đúng nguồn của nó.

@@ -77,7 +77,12 @@
     "Log file: {path}": "Файл журнала: {path}",
     "Model result: {text}": "Результат модели: {text}",
     "Detected alphabet: {name}": "Определённый алфавит: {name}",
-    "Cannot encode {chars} — fix the text or switch alphabet before sending.": "Невозможно закодировать {chars} — исправьте текст или смените алфавит перед передачей."
+    "Cannot encode {chars} — fix the text or switch alphabet before sending.": "Невозможно закодировать {chars} — исправьте текст или смените алфавит перед передачей.",
+    "Pause": "Пауза",
+    "Pause playback": "Приостановить воспроизведение",
+    "Listen to the decoded audio": "Прослушать декодированный сигнал",
+    "Drag to jump to a moment": "Перетащите, чтобы перейти к моменту",
+    "Cannot load audio for playback: {detail}": "Не удалось загрузить звук для воспроизведения: {detail}"
   },
   "kk": {
     "MorseDesk": "MorseDesk",
@@ -157,6 +162,11 @@
     "Log file: {path}": "Журнал файлы: {path}",
     "Model result: {text}": "Модель нәтижесі: {text}",
     "Detected alphabet: {name}": "Анықталған әліпби: {name}",
-    "Cannot encode {chars} — fix the text or switch alphabet before sending.": "{chars} кодтау мүмкін емес — жіберер алдында мәтінді түзетіңіз немесе әліпбиді ауыстырыңыз."
+    "Cannot encode {chars} — fix the text or switch alphabet before sending.": "{chars} кодтау мүмкін емес — жіберер алдында мәтінді түзетіңіз немесе әліпбиді ауыстырыңыз.",
+    "Pause": "Кідірту",
+    "Pause playback": "Ойнатуды кідірту",
+    "Listen to the decoded audio": "Декодталған дыбысты тыңдау",
+    "Drag to jump to a moment": "Белгілі бір сәтке өту үшін сүйреңіз",
+    "Cannot load audio for playback: {detail}": "Ойнату үшін дыбысты жүктеу мүмкін емес: {detail}"
   }
 }
