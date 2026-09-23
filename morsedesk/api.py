@@ -157,6 +157,18 @@ def symbols_to_words(
     return words
 
 
+def segment_profile(seg, file_profile_id: str) -> str:
+    """Bảng chữ để VIẾT một đoạn: luôn là ngôn ngữ của cả file, không phải lựa chọn riêng của đoạn.
+
+    Một bản tin thật không đổi ngôn ngữ giữa chừng. Nhưng Morse Latin và Kirin dùng chung mẫu
+    (`.- -... -.-.` vừa là ABC vừa là АБЦ), nên một đoạn ngắn nhiễu nặng có thể được mô hình ngôn
+    ngữ Nga chấm nhỉnh hơn dù cả file rõ là tiếng Anh — trước đây ra `CQ CQ DE R АБЦ РА А ILS`.
+    Lựa chọn riêng của từng đoạn chỉ còn dùng để BỎ PHIẾU chọn ngôn ngữ cả file. Beam của mọi
+    profile đã chạy sẵn trên mọi đoạn, nên việc này không tốn thêm gì.
+    """
+    return file_profile_id if file_profile_id in seg.best else seg.profile_id
+
+
 def beam_letters(tokens: list[str], profile_id: str, res: LangIdResult) -> list[str] | None:
     """Chữ beam đã chọn cho từng token của `res`; None nếu chuỗi token các đoạn không khớp `tokens`."""
     seq: list[str] = []
@@ -289,6 +301,29 @@ class Decoder:
                 self._lms[pid] = self._store.get(pid)   # thiếu file -> FileNotFoundError nêu đường dẫn
         # tau AGC lấy từ metadata model (mặc định 1,0 cho baseline/deepcw hoặc model cũ không khai báo)
         self.feature_cfg = window_cfg(float(getattr(self._model, "agc_tau_s", 1.0)))
+        self._auto_requested = self.auto
+
+    def pin_language(self, profile_id: str | None) -> bool:
+        """Khóa một bộ giải mã `auto` vào một ngôn ngữ (None = mở khóa, về lại `auto`).
+
+        Dùng cho chế độ nghe: mỗi lần giải mã chỉ thấy vài giây gần nhất nên tự chọn ngôn ngữ LẠI
+        mỗi lần, và dòng chữ đã chốt có thể lẫn hai bảng chữ. Khi phiên nghe đã đủ chắc chắn, khóa
+        lại cho cả phần còn lại. Trả False nếu không áp dụng (bộ giải mã không phải `auto`, hoặc
+        profile lạ).
+        """
+        if not self._auto_requested:
+            return False
+        if profile_id is None:
+            self.auto, self.profile = True, None
+            return True
+        if profile_id not in self._profiles:
+            return False
+        self.auto, self.profile = False, self._profiles[profile_id]
+        return True
+
+    @property
+    def pinned_language(self) -> str | None:
+        return self.profile.id if self._auto_requested and not self.auto else None
 
     @staticmethod
     def lm_available(lm_dir: Path | None = None) -> bool:
@@ -417,7 +452,7 @@ class Decoder:
         for seg in res.segments:
             if seg.profile_id is None:
                 continue
-            hyp = seg.best[seg.profile_id]
+            hyp = seg.best[segment_profile(seg, res.profile_id)]
             end_in = min(n_in, seg.end * stride)
             words += hypothesis_to_words(hyp, FRAME_RATE, stride, end_in, offset=seg.start)
             emissions += [(tok, (seg.start + f) * stride, p) for tok, f, p in hyp.emissions]

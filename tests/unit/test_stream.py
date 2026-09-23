@@ -141,3 +141,44 @@ def test_empty_push_does_not_decode():
     sd = StreamDecoder(decoder=fake)
     up = sd.push(np.zeros(0, dtype=np.float32))
     assert not up.decoded and fake.calls == 0
+
+
+class _LangDecoder:
+    """Bộ giải mã giả: mỗi lần trả một từ mới (thời gian tăng dần) với ngôn ngữ theo kịch bản."""
+
+    def __init__(self, languages):
+        self.languages = list(languages)
+        self.calls = 0
+        self.pinned = []
+
+    def pin_language(self, pid):
+        self.pinned.append(pid)
+        return True
+
+    def decode_array(self, x, sr):
+        from types import SimpleNamespace
+
+        lang = self.languages[min(self.calls, len(self.languages) - 1)]
+        self.calls += 1
+        dur = len(x) / sr
+        word = SimpleNamespace(text="ABCDEFGHIJ", start_s=max(0.0, dur - 2.2), end_s=dur - 1.6,
+                               confidence=0.9)
+        return SimpleNamespace(words=[word], wpm=20.0, tone_hz=700.0, snr_db=10.0, language=lang)
+
+
+def test_live_session_pins_its_language_once_certain_and_unpins_on_reset():
+    """Nghe trực tiếp: đủ 50 chữ đã chốt + 3 lần liền cùng ngôn ngữ -> khóa; reset -> mở khóa."""
+    from morsedesk.model.stream import PIN_MIN_LETTERS, StreamDecoder
+
+    dec = _LangDecoder(["ru", "en"] + ["en"] * 40)
+    sd = StreamDecoder(dec, sample_rate=1000, chunk_s=0.5)
+    block = np.zeros(500, dtype=np.float32)
+    for _ in range(40):
+        sd.push(block)
+        if sd.pinned_language:
+            break
+    assert sd.pinned_language == "en" and dec.pinned == ["en"]
+    assert sum(1 for c in sd.committed if not c.isspace()) >= PIN_MIN_LETTERS
+    sd.reset()
+    assert sd.pinned_language is None and dec.pinned == ["en", None]
+

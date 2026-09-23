@@ -211,3 +211,40 @@ def test_language_correct_none_without_profile(tmp_path, lm_dir):
     res = bench.evaluate(bench.load_rows(manifest), engine="baseline", profile_override="auto", lm_dir=lm_dir)
     assert res[0]["language_correct"] is None
     assert bench.language_accuracy(res) is None
+
+
+def test_every_segment_is_written_in_the_language_of_the_whole_file():
+    """Một bản tin không đổi ngôn ngữ giữa chừng: đoạn nào tự chọn khác thì vẫn viết theo cả file."""
+    from types import SimpleNamespace
+
+    from morsedesk.api import segment_profile
+
+    seg = SimpleNamespace(profile_id="ru", best={"en": 1, "ru": 2, "kk-cyrl-ru": 3})
+    assert segment_profile(seg, "en") == "en"
+    assert segment_profile(SimpleNamespace(profile_id="ru", best={"ru": 2}), "en") == "ru"
+
+
+@pytest.mark.parametrize("seed", [0, 2, 8])
+def test_auto_never_mixes_latin_and_cyrillic_in_one_message(seed):
+    """Ba seed này (SNR 3 dB, nhịp Farnsworth) từng ra 'CQ CQ DE R АБЦ РА AND' — lẫn hai bảng chữ."""
+    import re
+
+    from morsedesk.api import DEFAULT_MODEL_PATH, Decoder, Encoder
+
+    if not Path(DEFAULT_MODEL_PATH).is_file() or not Decoder.lm_available():
+        pytest.skip("cần models/acoustic.onnx và LM")
+    x = Encoder("en").to_audio("CQ CQ DE R1ABC R1ABC K", 20.0, 10.0, snr_db=3.0, seed=seed)
+    r = Decoder("auto", engine="onnx").decode_array(x, 8000)
+    has_latin = bool(re.search(r"[A-Z]", r.text))
+    has_cyrillic = bool(re.search(r"[Ѐ-ӿ]", r.text))
+    assert r.language == "en" and has_latin and not has_cyrillic, r.text
+
+
+def test_decoder_pin_language_only_applies_to_auto(lm_dir):
+    from morsedesk.api import Decoder
+
+    auto = Decoder("auto", engine="baseline", lm_dir=lm_dir)
+    assert auto.pin_language("ru") and auto.pinned_language == "ru" and not auto.auto
+    assert auto.pin_language(None) and auto.auto and auto.pinned_language is None
+    fixed = Decoder("en", engine="baseline", lm_dir=lm_dir)
+    assert not fixed.pin_language("ru") and fixed.profile.id == "en"

@@ -46,6 +46,8 @@ CHUNK_S = 0.5               # mỗi lần giải mã lại tiến thêm chừng 
 
 
 _TIME_EPS = 0.05        # 50 ms: hai lần giải mã không bao giờ đặt mốc trùng nhau đến từng mẫu
+PIN_MIN_LETTERS = 50    # khóa ngôn ngữ phiên nghe khi đã chốt ngần này chữ (CP-03: 100 % từ 50)
+PIN_AGREEING = 3        # ... và ngần này lần giải mã liền nhau cùng một ngôn ngữ
 
 
 def _agreeing_prefix(prev: list, cur: list) -> list:
@@ -128,10 +130,17 @@ class StreamDecoder:
     _tone_hz: float | None = field(default=None, init=False)
     _snr_db: float | None = field(default=None, init=False)
     _language: str = field(default="", init=False)
+    _recent_languages: list = field(default_factory=list, init=False)
+    _pinned: str | None = field(default=None, init=False)
 
     @property
     def committed(self) -> str:
         return self._committed
+
+    @property
+    def pinned_language(self) -> str | None:
+        """Ngôn ngữ mà phiên nghe đã khóa vào (None khi còn đang tự nhận)."""
+        return self._pinned
 
     @property
     def text(self) -> str:
@@ -151,6 +160,10 @@ class StreamDecoder:
         self._prev_fresh = []
         self._tentative = ""
         self._reset_stats()
+        self._recent_languages = []
+        if self._pinned is not None and hasattr(self.decoder, "pin_language"):
+            self.decoder.pin_language(None)
+        self._pinned = None
 
     def push(self, block: np.ndarray) -> StreamUpdate:
         """Nhận một khối audio mono. Chỉ giải mã lại khi đã dồn đủ `chunk_s`."""
@@ -193,6 +206,21 @@ class StreamDecoder:
             self._buf = self._buf[cut:]
             self._dropped_frames += cut
 
+    def _maybe_pin_language(self, language: str) -> None:
+        """Khóa ngôn ngữ khi đã chắc: đủ `PIN_MIN_LETTERS` chữ đã chốt và `PIN_AGREEING` lần giải
+        mã liền nhau cùng nói một ngôn ngữ. Một bản tin thật không đổi ngôn ngữ giữa chừng, nên từ
+        đó mọi chữ viết theo đúng một bảng chữ. Ngưỡng 50 chữ: đo CP-03, tự nhận đúng 100 % từ 50
+        ký tự (20 ký tự chỉ 71 %) — khóa sớm hơn thì khóa nhầm sẽ sai cho cả phiên."""
+        if self._pinned is not None or not language:
+            return
+        self._recent_languages = (self._recent_languages + [language])[-PIN_AGREEING:]
+        letters = sum(1 for c in self._committed if not c.isspace())
+        if (letters >= PIN_MIN_LETTERS and len(self._recent_languages) == PIN_AGREEING
+                and len(set(self._recent_languages)) == 1):
+            pin = getattr(self.decoder, "pin_language", None)
+            if pin is not None and pin(language):
+                self._pinned = language
+
     def _snapshot(self, decoded: bool, words=None) -> StreamUpdate:
         return StreamUpdate(self._committed, self._tentative, decoded, self.audio_s,
                             list(words or []), self._wpm, self._tone_hz, self._snr_db,
@@ -206,6 +234,7 @@ class StreamDecoder:
         self._tone_hz = getattr(res, "tone_hz", None)
         self._snr_db = getattr(res, "snr_db", None)
         self._language = getattr(res, "language", "") or self._language
+        self._maybe_pin_language(getattr(res, "language", ""))
 
         # Quy về thời gian TUYỆT ĐỐI của phiên. Buffer chỉ giữ phần đuôi, nên mốc thời gian trong
         # kết quả là tương đối với đầu buffer; cộng số giây đã cắt bỏ mới so được giữa hai lần.
