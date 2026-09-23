@@ -23,6 +23,7 @@ def main() -> int:
     from PySide6.QtWidgets import QApplication
 
     from morsedesk.app.fonts import apply_application_font
+    from morsedesk.app.live_worker import LiveWorker
     from morsedesk.app.main import I18N_DIR, set_app_identity
     from morsedesk.app.main_window import MainWindow
     from morsedesk.app.settings import AppSettings
@@ -34,7 +35,17 @@ def main() -> int:
 
     worker = DecoderWorker(engine="onnx", model_path=None, lm_dir=None)
     worker.start()
-    win = MainWindow(worker, Player(), AppSettings(), I18N_DIR)
+    live = LiveWorker(engine="onnx", model_path=None, lm_dir=None)
+    live.start()
+    win = MainWindow(worker, Player(), AppSettings(), I18N_DIR, live=live)
+
+    def show(page) -> None:
+        """Chuyển tab theo WIDGET, không theo chỉ số.
+
+        Chỉ số tab đổi mỗi lần thêm trang (tab Nghe vừa chèn vào giữa), và script chụp thì
+        không có test nào canh nên lỗi kiểu đó chỉ lộ ra khi nhìn ảnh sai trang.
+        """
+        win.tabs.setCurrentIndex(win.tabs.indexOf(page))
     win.resize(1180, 760)
     win.show()
 
@@ -47,7 +58,7 @@ def main() -> int:
     grab(win, "01-decode-rong")
 
     # Tạo mã: gõ văn bản ba thứ tiếng
-    win.tabs.setCurrentIndex(1)
+    show(win.encode_page)
     pump(300)
     # Để combo ở "Tự động": ảnh phải cho thấy bảng mã được nhận ra từ chính văn bản.
     for text, name in (
@@ -63,7 +74,7 @@ def main() -> int:
     # Giải mã một file thật
     clip = OUT.parent / "sample.wav"
     if clip.is_file():
-        win.tabs.setCurrentIndex(0)
+        show(win.decode_page)
         pump(200)
         win.decode_page.load_file(clip)
         for _ in range(40):
@@ -73,21 +84,33 @@ def main() -> int:
         pump(600)
         grab(win, "05-decode-ketqua")
 
+    # Nghe trực tiếp: chụp cả trạng thái rỗng và trạng thái có chữ hai tầng
+    if win.live_page is not None:
+        show(win.live_page)
+        pump(400)
+        grab(win, "06-nghe-rong")
+        win.live_page.on_text("CQ CQ DE R1ABC", " R1A")
+        win.live_page.on_level(0.02)
+        pump(300)
+        grab(win, "07-nghe-haitang")
+
     # Cài đặt
-    win.tabs.setCurrentIndex(2)
+    show(win.settings_page)
     pump(400)
-    grab(win, "06-caidat")
+    grab(win, "08-caidat")
 
     # Đổi ngôn ngữ giao diện
-    for code, name in (("ru", "07-giaodien-ru"), ("kk", "08-giaodien-kk")):
-        idx = win.language_combo.findData(code)
-        if idx >= 0:
-            win.language_combo.setCurrentIndex(idx)
+    for code, name in (("ru", "09-giaodien-ru"), ("kk", "10-giaodien-kk")):
+        btn = win.language_bar.buttons.get(code)
+        if btn is not None:
+            btn.click()
         pump(500)
-        win.tabs.setCurrentIndex(0)
+        show(win.decode_page)
         pump(300)
         grab(win, name)
 
+    live.shutdown()
+    live.wait(3000)
     worker.stop()
     QCoreApplication.processEvents()
     return 0

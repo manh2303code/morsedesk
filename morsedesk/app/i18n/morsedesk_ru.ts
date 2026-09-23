@@ -307,34 +307,102 @@
     </message>
 </context>
 <context>
+    <name>LivePage</name>
+    <message>
+        <location filename="../live_page.py" line="105" />
+        <source>No input device found. Plug in a sound card or check that PortAudio is installed.</source>
+        <translation>Устройство ввода не найдено. Подключите звуковую карту или проверьте установку PortAudio.</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="125" />
+        <source>Listening failed: {detail}</source>
+        <translation>Не удалось вести приём: {detail}</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="165" />
+        <source>Input:</source>
+        <translation>Вход:</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="166" />
+        <source>Refresh</source>
+        <translation>Обновить</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="167" />
+        <source>Look for newly plugged devices</source>
+        <translation>Найти недавно подключённые устройства</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="168" />
+        <source>Stop</source>
+        <translation>Стоп</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="168" />
+        <source>Listen</source>
+        <translation>Слушать</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="169" />
+        <source>Input level</source>
+        <translation>Уровень входного сигнала</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="170" />
+        <source>Decoded text appears here as it is heard.</source>
+        <translation>Декодированный текст появляется здесь по мере приёма.</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="171" />
+        <source>Grey text may still change; plain text is final.</source>
+        <translation>Серый текст ещё может измениться; обычный текст окончателен.</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="172" />
+        <source>Copy</source>
+        <translation>Копировать</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="173" />
+        <source>Clear</source>
+        <translation>Очистить</translation>
+    </message>
+</context>
+<context>
     <name>MainWindow</name>
     <message>
-        <location filename="../main_window.py" line="105" />
+        <location filename="../main_window.py" line="113" />
         <source>MorseDesk</source>
         <translation>MorseDesk</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="106" />
+        <location filename="../main_window.py" line="114" />
         <source>UI language:</source>
         <translation>Язык интерфейса:</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="108" />
+        <location filename="../main_window.py" line="119" />
         <source>Decode</source>
         <translation>Декодирование</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="109" />
+        <location filename="../main_window.py" line="121" />
+        <source>Listen</source>
+        <translation>Слушать</translation>
+    </message>
+    <message>
+        <location filename="../main_window.py" line="123" />
         <source>Encode</source>
         <translation>Кодирование</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="110" />
+        <location filename="../main_window.py" line="125" />
         <source>Settings</source>
         <translation>Настройки</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="137" />
+        <location filename="../main_window.py" line="161" />
         <source>Finishing the current decode; the window will close right after.</source>
         <translation>Завершается текущее декодирование; окно закроется сразу после этого.</translation>
     </message>

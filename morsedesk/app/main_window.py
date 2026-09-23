@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 
 from morsedesk.app.decode_page import DecodePage
 from morsedesk.app.encode_page import EncodePage
+from morsedesk.app.live_page import LivePage
 from morsedesk.app.settings import UI_LANGUAGES, AppSettings
 from morsedesk.app.settings_page import SettingsPage
 from morsedesk.app.widgets.banner import Banner
@@ -33,7 +34,8 @@ class MainWindow(QMainWindow):
     """Cửa sổ chính: chọn ngôn ngữ giao diện trên toolbar, tab Giải mã (Task 4) và Tạo mã (Task 5)."""
 
     def __init__(
-        self, worker: DecoderWorker, player: Player, settings: AppSettings, i18n_dir: Path, parent=None
+        self, worker: DecoderWorker, player: Player, settings: AppSettings, i18n_dir: Path,
+        parent=None, live=None
     ) -> None:
         super().__init__(parent)
         self.worker = worker
@@ -64,7 +66,13 @@ class MainWindow(QMainWindow):
         self.encode_page = EncodePage(player, settings, self)
         # Engine lấy từ worker: trang Cài đặt chỉ báo cáo, không phải nguồn sự thật thứ hai.
         self.settings_page = SettingsPage(engine=worker.engine, parent=self)
+        # Tab Nghe chỉ có khi bên gọi cấp một LiveWorker: test dựng cửa sổ trần không phải trả
+        # giá mở thêm một luồng và một Decoder nữa.
+        self.live = live
+        self.live_page = LivePage(live, self) if live is not None else None
         self.tabs.addTab(self.decode_page, "")
+        if self.live_page is not None:
+            self.tabs.addTab(self.live_page, "")
         self.tabs.addTab(self.encode_page, "")
         self.tabs.addTab(self.settings_page, "")
         central = QWidget(self)
@@ -105,12 +113,21 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(self.tr("MorseDesk"))
         self.language_label.setText(self.tr("UI language:"))
         self.language_bar.set_names(LANGUAGE_NAMES)
-        self.tabs.setTabText(0, self.tr("Decode"))
-        self.tabs.setTabText(1, self.tr("Encode"))
-        self.tabs.setTabText(2, self.tr("Settings"))
+        for i in range(self.tabs.count()):
+            page = self.tabs.widget(i)
+            if page is self.decode_page:
+                self.tabs.setTabText(i, self.tr("Decode"))
+            elif page is self.live_page:
+                self.tabs.setTabText(i, self.tr("Listen"))
+            elif page is self.encode_page:
+                self.tabs.setTabText(i, self.tr("Encode"))
+            else:
+                self.tabs.setTabText(i, self.tr("Settings"))
         self.decode_page.retranslate()
         self.encode_page.retranslate()
         self.settings_page.retranslate()
+        if self.live_page is not None:
+            self.live_page.retranslate()
 
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.Type.LanguageChange:
@@ -120,11 +137,18 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:
         """Đóng cửa sổ mà không bao giờ hủy QThread đang chạy.
 
+        Có HAI luồng phải lo: worker giải mã file và worker nghe trực tiếp. Luồng nghe dừng
+        được ngay (nó chỉ đang chờ khối audio tiếp theo, tối đa 200 ms), nên xử lý gọn ở đây;
+        luồng giải mã có thể đang giữa một file dài nên mới cần cơ chế hoãn đóng bên dưới.
+
         Worker còn chạy -> xin dừng không chờ rồi chờ ngắn 500 ms. Nếu yêu cầu hiện tại vẫn
         chưa xong (file dài có thể mất vài phút) thì **hoãn đóng**: `event.ignore()`, khóa
         giao diện, hiện banner, và nối `worker.finished` vào `close()` đúng một lần. Khi worker
         kết thúc, `close()` chạy lại, `isRunning()` là False và cửa sổ đóng bình thường.
         """
+        if self.live is not None and self.live.isRunning():
+            self.live.shutdown()
+            self.live.wait(1500)
         if self.worker.isRunning() and not self._closing:
             self.worker.stop_async()
             self.worker.wait(500)   # chỉ chờ ở lần đóng đầu tiên, khỏi treo thêm mỗi lần bấm X

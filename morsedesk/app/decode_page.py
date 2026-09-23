@@ -222,6 +222,7 @@ class DecodePage(QWidget):
         self._audio_loaded = False          # nạp lười: chỉ đọc lại file khi người dùng bấm Nghe
         self.player.clear()
         self.player.setEnabled(True)
+        self.player.arm()           # có file để nạp -> bật nút ngay, audio nạp khi bấm
         self.word_view.set_words(result.words)
         self.text_view.setPlainText(result.text)
         self.spectrogram.set_spectrogram(spec)

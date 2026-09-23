@@ -82,7 +82,17 @@
     "Pause playback": "Приостановить воспроизведение",
     "Listen to the decoded audio": "Прослушать декодированный сигнал",
     "Drag to jump to a moment": "Перетащите, чтобы перейти к моменту",
-    "Cannot load audio for playback: {detail}": "Не удалось загрузить звук для воспроизведения: {detail}"
+    "Cannot load audio for playback: {detail}": "Не удалось загрузить звук для воспроизведения: {detail}",
+    "Listen": "Слушать",
+    "Input:": "Вход:",
+    "Input level": "Уровень входного сигнала",
+    "Refresh": "Обновить",
+    "Look for newly plugged devices": "Найти недавно подключённые устройства",
+    "Clear": "Очистить",
+    "Decoded text appears here as it is heard.": "Декодированный текст появляется здесь по мере приёма.",
+    "Grey text may still change; plain text is final.": "Серый текст ещё может измениться; обычный текст окончателен.",
+    "Listening failed: {detail}": "Не удалось вести приём: {detail}",
+    "No input device found. Plug in a sound card or check that PortAudio is installed.": "Устройство ввода не найдено. Подключите звуковую карту или проверьте установку PortAudio."
   },
   "kk": {
     "MorseDesk": "MorseDesk",
@@ -167,6 +177,16 @@
     "Pause playback": "Ойнатуды кідірту",
     "Listen to the decoded audio": "Декодталған дыбысты тыңдау",
     "Drag to jump to a moment": "Белгілі бір сәтке өту үшін сүйреңіз",
-    "Cannot load audio for playback: {detail}": "Ойнату үшін дыбысты жүктеу мүмкін емес: {detail}"
+    "Cannot load audio for playback: {detail}": "Ойнату үшін дыбысты жүктеу мүмкін емес: {detail}",
+    "Listen": "Тыңдау",
+    "Input:": "Кіріс:",
+    "Input level": "Кіріс сигналының деңгейі",
+    "Refresh": "Жаңарту",
+    "Look for newly plugged devices": "Жаңа қосылған құрылғыларды іздеу",
+    "Clear": "Тазалау",
+    "Decoded text appears here as it is heard.": "Декодталған мәтін қабылдануына қарай осында шығады.",
+    "Grey text may still change; plain text is final.": "Сұр мәтін әлі өзгеруі мүмкін; кәдімгі мәтін — түпкілікті.",
+    "Listening failed: {detail}": "Тыңдау сәтсіз аяқталды: {detail}",
+    "No input device found. Plug in a sound card or check that PortAudio is installed.": "Кіріс құрылғысы табылмады. Дыбыс картасын қосыңыз немесе PortAudio орнатылғанын тексеріңіз."
   }
 }

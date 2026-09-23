@@ -776,3 +776,50 @@ ghi 37 phút: 183,9 giây thay vì 169,4 (+8,6 %), đỉnh bộ nhớ 643 MB tha
 bản ra không đổi một ký tự.
 
 Chốt **12 s / 2 s**. Không lấy 16 s vì không hơn gì mà đắt hơn trên bản ghi dài.
+
+---
+
+## Giải mã theo dòng (live) — số đo, 2026-09-23
+
+Chế độ nghe trực tiếp dùng `StreamDecoder`: giữ cửa sổ trượt (ngữ cảnh trái 8 s, nhìn trước 1 s),
+cứ 0,5 s lại chạy lại `Decoder.decode_array` trên cửa sổ đó rồi ghép kết quả theo **mốc thời gian
+tuyệt đối của từng từ**.
+
+Đo trên 40 clip `en` của T1:
+
+| Đường | CER |
+|---|---|
+| file (offline) | **14,21 %** |
+| live, chốt ngay | **17,31 %** |
+| live, LocalAgreement-2 | 38,41 % |
+
+**Giá của realtime là 3,1 điểm CER.** Đường giải mã file không đổi một chữ số — live là tính năng
+thêm, không thay thế gì.
+
+### LocalAgreement-2 bị loại
+
+Research đề xuất nó và trích Liu, Spanakis, Niehues (Interspeech 2020), nơi nó chỉ tốn 0,9 điểm
+WER trên How2. Trên dữ liệu của dự án này nó làm CER xấu **hơn gấp đôi**, và nới điều kiện khớp
+không cứu được:
+
+| Biến thể | CER |
+|---|---|
+| khớp chữ + mốc lệch ≤ 50 ms | 38,41 % |
+| khớp chữ + mốc lệch ≤ 300 ms | 36,17 % |
+| chỉ khớp chữ, bỏ điều kiện thời gian | 39,48 % |
+
+Nên lỗi nằm ở chính ý tưởng, không ở tham số. Nguyên nhân: LA-2 chờ hai lần giải mã **liên tiếp**
+nói giống nhau, mà bộ giải mã Morse đọc lại toàn bộ cửa sổ mỗi lần nên cả ranh giới từ lẫn nội
+dung dao động mạnh hơn hẳn ASR tiếng nói. Sự đồng thuận đó thường không tới kịp, và chữ rời khỏi
+cửa sổ trước khi được chốt — biểu hiện ra ngoài là văn bản **mất chữ**.
+
+Đây là lần thứ hai trong ngày một kết luận của research không sống sót khi đo trên dữ liệu của
+mình (lần đầu: số khởi động onefile 10,8 s so với 3,3 s, đo thật trên MorseDesk chỉ chênh 1,56 s).
+Quy tắc giữ nguyên: research để biết hướng và biết cạm bẫy, số đo của mình để quyết định.
+
+### Hai cách ghép đã thử
+
+Bản đầu ghép theo **chuỗi ký tự** (tìm hậu tố của phần đã chốt trùng tiền tố của cửa sổ mới). Nó
+hỏng ngay với bản tin có từ lặp — `CQ CQ DE` làm mối nối tìm nhầm chỗ và ra `R1ABCQ DE R1DE`.
+Bản hiện tại ghép theo **mốc thời gian tuyệt đối của từng từ**, lấy từ `DecodeResult.words` vốn
+đã có sẵn `start_s`/`end_s`, nên từ lặp không còn là vấn đề.

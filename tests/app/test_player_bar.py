@@ -109,3 +109,15 @@ def test_word_view_playhead_before_first_word_marks_nothing(qtbot):
     view.set_words([Word("CQ", 1.0, 1.6, 0.9)])
     view.set_playhead(0.2)
     assert not any(lb._active for lb in view._labels)
+
+
+def test_arm_enables_button_for_lazy_load(qtbot, fake_sounddevice):
+    """Nạp lười tự khóa mình nếu nút chỉ bật trong load(): ảnh chụp giao diện đã lộ ra."""
+    bar = PlayerBar()
+    qtbot.addWidget(bar)
+    assert not bar.play_button.isEnabled()
+    bar.arm()                                   # chưa có ensure_loaded -> vẫn tắt
+    assert not bar.play_button.isEnabled()
+    bar.ensure_loaded = lambda: None
+    bar.arm()
+    assert bar.play_button.isEnabled() and bar.slider.isEnabled()

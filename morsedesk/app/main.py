@@ -12,6 +12,7 @@ from PySide6.QtCore import QCoreApplication, QLocale
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from morsedesk.app.fonts import apply_application_font
+from morsedesk.app.live_worker import LiveWorker
 from morsedesk.app.main_window import MainWindow
 from morsedesk.app.paths import log_directory
 from morsedesk.app.settings import AppSettings, default_language
@@ -87,7 +88,12 @@ def create_app(args: argparse.Namespace) -> tuple[QApplication, MainWindow]:
     # Vòng lặp sự kiện có thể kết thúc KHÔNG qua closeEvent (QCoreApplication.exit, đăng xuất
     # phiên, tín hiệu hệ thống). Thiếu chốt này, QThread bị hủy khi còn chạy -> abort 0xC0000409.
     app.aboutToQuit.connect(worker.stop)
-    window = MainWindow(worker, Player(), settings, I18N_DIR)
+    # Luồng THỨ HAI cho chế độ nghe: hai việc có nhịp khác hẳn nhau, nhồi chung một luồng thì
+    # một bản tin 37 phút đang giải sẽ chặn đứng dòng chữ đang chạy.
+    live = LiveWorker(engine=args.engine, model_path=args.model, lm_dir=args.lm_dir)
+    live.start()
+    app.aboutToQuit.connect(live.shutdown)
+    window = MainWindow(worker, Player(), settings, I18N_DIR, live=live)
     window.set_language(default_language(args.lang, settings.ui_language, QLocale.system().name()))
     return app, window
 

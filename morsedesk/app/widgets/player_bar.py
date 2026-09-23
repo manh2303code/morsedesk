@@ -81,6 +81,17 @@ class PlayerBar(QWidget):
         self._update_labels()
         self.position_changed.emit(0.0)
 
+    def arm(self) -> None:
+        """Bật nút phát khi CHƯA có audio nhưng có nguồn để nạp lười.
+
+        Thiếu bước này thì nạp lười tự khóa mình: nút chỉ bật trong `load()`, mà `load()` chỉ
+        chạy khi người dùng bấm nút. Ảnh chụp giao diện mới lộ ra (nút xám, đồng hồ 0:00/0:00) —
+        test không thấy vì nó gọi thẳng `ensure_loaded`.
+        """
+        if self.ensure_loaded is not None:
+            self.play_button.setEnabled(True)
+            self.slider.setEnabled(True)
+
     def clear(self) -> None:
         self.playback.stop()
         self._timer.stop()

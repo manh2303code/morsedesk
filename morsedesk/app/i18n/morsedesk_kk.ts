@@ -307,34 +307,102 @@
     </message>
 </context>
 <context>
+    <name>LivePage</name>
+    <message>
+        <location filename="../live_page.py" line="105" />
+        <source>No input device found. Plug in a sound card or check that PortAudio is installed.</source>
+        <translation>Кіріс құрылғысы табылмады. Дыбыс картасын қосыңыз немесе PortAudio орнатылғанын тексеріңіз.</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="125" />
+        <source>Listening failed: {detail}</source>
+        <translation>Тыңдау сәтсіз аяқталды: {detail}</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="165" />
+        <source>Input:</source>
+        <translation>Кіріс:</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="166" />
+        <source>Refresh</source>
+        <translation>Жаңарту</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="167" />
+        <source>Look for newly plugged devices</source>
+        <translation>Жаңа қосылған құрылғыларды іздеу</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="168" />
+        <source>Stop</source>
+        <translation>Тоқтату</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="168" />
+        <source>Listen</source>
+        <translation>Тыңдау</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="169" />
+        <source>Input level</source>
+        <translation>Кіріс сигналының деңгейі</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="170" />
+        <source>Decoded text appears here as it is heard.</source>
+        <translation>Декодталған мәтін қабылдануына қарай осында шығады.</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="171" />
+        <source>Grey text may still change; plain text is final.</source>
+        <translation>Сұр мәтін әлі өзгеруі мүмкін; кәдімгі мәтін — түпкілікті.</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="172" />
+        <source>Copy</source>
+        <translation>Көшіру</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="173" />
+        <source>Clear</source>
+        <translation>Тазалау</translation>
+    </message>
+</context>
+<context>
     <name>MainWindow</name>
     <message>
-        <location filename="../main_window.py" line="105" />
+        <location filename="../main_window.py" line="113" />
         <source>MorseDesk</source>
         <translation>MorseDesk</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="106" />
+        <location filename="../main_window.py" line="114" />
         <source>UI language:</source>
         <translation>Интерфейс тілі:</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="108" />
+        <location filename="../main_window.py" line="119" />
         <source>Decode</source>
         <translation>Декодтау</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="109" />
+        <location filename="../main_window.py" line="121" />
+        <source>Listen</source>
+        <translation>Тыңдау</translation>
+    </message>
+    <message>
+        <location filename="../main_window.py" line="123" />
         <source>Encode</source>
         <translation>Кодтау</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="110" />
+        <location filename="../main_window.py" line="125" />
         <source>Settings</source>
         <translation>Параметрлер</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="137" />
+        <location filename="../main_window.py" line="161" />
         <source>Finishing the current decode; the window will close right after.</source>
         <translation>Ағымдағы декодтау аяқталуда; содан кейін терезе жабылады.</translation>
     </message>
