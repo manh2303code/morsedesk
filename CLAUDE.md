@@ -11,7 +11,8 @@ Dự án này đã nhiều lần đi ngược trực giác, và lần nào cũng
 
 1. Chạy **toàn bộ T1** (500 clip tổng hợp) — không phải một lát cắt.
 2. Chạy **T2** (bản ghi ARRL thật) — dữ liệu duy nhất không do chính mình sinh ra.
-3. Chỉ CER trên T1/T2 mới dùng để quyết định.
+3. Chỉ CER trên T1/T2 mới dùng để quyết định. **Chỉnh tham số thì chỉnh trên bộ dev** (xem mục
+   "Nhiễu đo" cuối file), T1 chỉ để xác nhận.
 
 ```bash
 PYTHONUTF8=1 uv run python tools/eval_run.py --run runs/E9 --name <tên>        # T1
@@ -41,6 +42,7 @@ model tốt nhất dự án. Khi khâu suy luận còn một lỗi lớn chưa b
 | **LocalAgreement-2** cho chế độ live | 38,41 % so với 17,31 % khi chốt ngay | 12 s | **có** |
 | `skip_silent_windows` ở **chế độ file** | 13,28 % so với 9,70 % | 12 s | **có** |
 | Nội suy ranh giới dưới khung | T1 35,12 % → 40,73 % (bộ DSP) | không dùng cửa sổ | **có** |
+| Chỉnh lại trọng số beam cho E9 (33 cấu hình `alpha`/`char_bonus`/`beta`/`lexicon_bonus`, chọn trên dev, xác nhận trên T1) | không cấu hình nào tốt hơn chắc chắn; 14 cấu hình hạ `alpha` hoặc `char_bonus` **xấu hơn chắc chắn**; `lexicon_bonus` 0 xấu hơn | 12 s | **có** — giữ 0,3 / 1,25 |
 | Lexicon rộng hơn (1000/5000 từ) | 18,13 % / 18,23 % so với 18,19 % | 4 s | chưa đo lại |
 | Nới `min_prob` 1e-3 → 1e-4 | 0,15 điểm, gấp đôi thời gian | 4 s | chưa đo lại |
 | Huấn luyện khớp tone ước lượng | 0,36 điểm | 4 s | chưa đo lại |
@@ -105,7 +107,7 @@ audio → dò tone 14 ms → dither nếu SNR>25dB → đặc trưng 11 chiều,
 | | Là gì | Ghi chú |
 |---|---|---|
 | `models/acoustic.onnx` | CTC 65 lớp, hidden 256, 2,2 MB (E9 v0.3.0) | 65 lớp là **cả ký tự** (`.-`, `-...`), không phải từng chấm gạch |
-| `models/lm/{en,ru,kk}.bin` | n-gram ký tự bậc 6, 41 MB | **bảng đếm thống kê, không phải nơ-ron**; đáng 1,05 điểm CER |
+| `models/lm/{en,ru,kk}.bin` | n-gram ký tự bậc 6, 41 MB | **bảng đếm thống kê, không phải nơ-ron**; chấm cùng đáp án gốc thì đáng ~3,9 điểm CER (T1 13,57 → 9,70 %), riêng Kazakh ~8,5 điểm |
 | `models/deepcw/model.onnx` | model ngoài, 15 MB | chỉ profile `en`, dùng đối chứng |
 
 ## Gotchas — mỗi dòng ở đây từng tốn thời gian thật
@@ -121,7 +123,7 @@ audio → dò tone 14 ms → dither nếu SNR>25dB → đặc trưng 11 chiều,
 - **Nhận diện bảng mã tự động cần ~8 ký tự.** Dưới ngưỡng đó `auto` đúng 66,7 %, và đoán sai bảng
   mã thì mọi ký tự sau đều sai. Đây đúng là tình cảnh những giây đầu một phiên nghe.
 - Ở tín hiệu sạch, model **đã bão hòa**: mọi tần số 300–1500 Hz và mọi tốc độ 5–45 WPM đều CER 0 %.
-  Khoảng cách còn lại nằm ở **nhiễu** (qsb 45,55 %), không ở tham số tín hiệu.
+  Khoảng cách còn lại nằm ở **nhiễu** (qsb 41 % T1 / 47 % dev), không ở tham số tín hiệu.
 
 ### Nghiên cứu
 Quét GitHub/paper/diễn đàn trước khi tự mò — nhưng **research xong vẫn phải đo trên dữ liệu của
@@ -184,23 +186,39 @@ mình**. Trong một phiên đã có hai kết luận research không sống só
 
 ## Hiện trạng
 
-Model E9 v0.3.0, cửa sổ 12 s. CER T1 **9,70 %**, T2 **3,93 %**. Theo kênh (beam + LM / greedy):
+Model E9 v0.3.0, cửa sổ 12 s, beam `alpha` 0,3 / `char_bonus` 1,25. Hai bộ tổng hợp cùng ma trận:
 
-| kênh | clean | mp3 | qrm | qrn | qsb |
-|---|---|---|---|---|---|
-| beam + LM | 1,97 % | 1,78 % | 1,39 % | 2,31 % | **41,05 %** |
-| greedy | **1,65 %** | **1,14 %** | **1,03 %** | 2,49 % | 44,67 % |
+| | tổng | clean | mp3 | qrm | qrn | qsb |
+|---|---|---|---|---|---|---|
+| T1 (seed 1000) | **9,70 %** | 1,97 | 1,78 | 1,39 | 2,31 | 41,05 |
+| dev (seed 500000) | **12,25 %** | 2,72 | 4,41 | 4,19 | 2,95 | 46,95 |
 
-**Ba kênh đã qua cổng 2 %.** Toàn bộ khoảng cách nằm ở `qsb` (~8,2 trong 9,7 điểm). Hai điều rút ra:
+T2 bản ghi thật **3,93 %**. **Không kênh nào qua cổng 2 % một cách chắc chắn** — trên T1 ba kênh
+chạm dưới 2 % nhưng dev độc lập cho 2,7–4,4 %.
 
-- **LM làm XẤU ba kênh** (clean/mp3/qrm): `alpha` 0,3 và `char_bonus` 1,25 được chỉnh cho E3 ở cửa
-  sổ 4 s; model âm thanh mạnh hơn thường cần ít trọng số LM hơn. Chỉnh lại là việc rẻ, chưa làm.
-  Test `test_t1_lm_not_worse_than_greedy` chỉ so trung bình tổng nên không bắt được.
-- **`qsb` vật lý chỉ một phần.** T1 dùng fade đúng 20 dB chu kỳ 4 s. qsb theo SNR: 0 dB 66,4 % /
-  3 dB 57,6 / 6 dB 35,9 / 10 dB 31,3 / **20 dB 14,2 %**. Ở 20 dB đáy fade là 0 dB — mà clean ở 0 dB
-  chỉ 3,25 % — nên 14,2 % là lỗi **xử lý**, sửa được. Ở 0–6 dB đáy fade là −14…−20 dB, dưới nền
-  nhiễu thật: cổng 2 % trên toàn ô `qsb` gần như chắc chắn **không bộ giải mã nào đạt**. Spec tuần
-  5–6 §1.2: khi đó giao bảng số theo ô để người dùng quyết, không tự hạ ngưỡng.
+### Nhiễu đo — đọc trước khi tin một con số
+
+- Sai số chuẩn (bootstrap) của CER tổng 500 clip ≈ **±1 điểm**; từng kênh (100 clip) **±0,5–2,8**;
+  từng ô kênh × SNR (20 clip) tới **±7**. Chênh lệch dưới mức đó giữa hai bộ clip là không có nghĩa.
+- **So hai cấu hình thì so GHÉP CẶP trên cùng clip** (`tools/paired_compare.py`) — nhiễu triệt tiêu,
+  sai số của hiệu chỉ còn ~0,2 điểm.
+- **Chỉnh tham số trên bộ dev, xác nhận trên T1.** T1 đã bị dùng để chọn E9, chọn cửa sổ và chỉnh
+  `alpha` trước đây, nên số T1 có phần lạc quan (T1 9,70 % so với dev 12,25 %). Dựng dev:
+  `uv run python tools/make_t1.py --out testdata/generated/t1dev --seed-base 500000`.
+- **Thử nhiều cấu hình thì may rủi tự sinh ra "người thắng".** 33 cấu hình trên dev, tốt nhất là
+  −0,34 điểm — sang T1 còn −0,01.
+- **`bench` chấm greedy và LM theo HAI đáp án khác nhau**: greedy theo văn bản đã render qua bảng mã
+  (Ә gộp thành А, dễ hơn), LM theo văn bản gốc. So hai cột đó trong `t1_summary.json` là so lệch. Chấm
+  cùng đáp án gốc thì LM thắng mọi ngôn ngữ: greedy → LM là 13,57 → 9,70 % (T1) và 16,14 → 12,25 %
+  (dev); Kazakh −8,5 điểm. `test_t1_lm_not_worse_than_greedy` mắc đúng lệch này.
+
+### `qsb` — vật lý chỉ ở SNR thấp
+
+T1 dùng fade đúng 20 dB chu kỳ 4 s. Ở SNR 20 dB đáy fade chỉ xuống 0 dB, mà clean@0 dB giải được
+**~3 %** (T1 3,3, dev 3,2 — lặp lại). Vậy mà qsb@20 dB là **14,2 % (T1) và 42,0 % (dev)** — lỗi
+**xử lý**, sửa được, và lớn hơn T1 cho thấy (20 clip mỗi ô, ±5–7 điểm). Ở 0–6 dB đáy fade xuống
+−14…−20 dB, dưới nền nhiễu thật: cổng 2 % trên toàn ô `qsb` gần như chắc chắn **không bộ giải mã nào
+đạt** (DeepCW 47 %). Spec tuần 5–6 §1.2: khi đó giao bảng số theo ô để người dùng quyết.
 
 **Vi phạm spec đang mở:** §7 *"không dò được tone → kết quả rỗng, không bịa chữ"*. `fallback_tone_hz`
 (commit 7722bc8, 22/09) đoán tone theo đỉnh phổ và biến 30 giây nhiễu trắng thuần thành `DE K`, dù

@@ -904,3 +904,82 @@ clean@20 dB. Khoảng đó là **xử lý**, sửa được. Hình dạng lỗi 
 mỗi chu kỳ. Cổng 2 % trên toàn ô `qsb` vì vậy gần như chắc chắn ngoài tầm mọi bộ giải mã — DeepCW
 cũng 47 % ở ô này. Theo spec tuần 5–6 §1.2, việc đúng là giao bảng số theo ô và khuyến nghị, để
 người dùng quyết, chứ không tự hạ ngưỡng.
+
+---
+
+## Chỉnh lại trọng số beam cho E9 — KẾT QUẢ ÂM, giữ nguyên (2026-09-23)
+
+Giả thuyết đưa vào: `alpha` 0,3 và `char_bonus` 1,25 được chỉnh cho E3 ở cửa sổ 4 s; model âm thanh
+mạnh hơn thường cần ít trọng số LM hơn; bằng chứng là trong `runs/E9/t1_summary.json` greedy thắng
+beam+LM ở clean/mp3/qrm. **Cả giả thuyết lẫn bằng chứng đều sai**, vì hai lý do bên dưới.
+
+### Phương pháp
+
+- **Bộ dev riêng**: cùng ma trận T1, seed 500000–500499 (`tools/make_t1.py --seed-base 500000`),
+  ngoài mọi dải seed huấn luyện và validation; 3/500 văn bản trùng T1. Mọi lần chỉnh trước đây
+  (`alpha`, `char_bonus`, chọn cửa sổ, chọn E9) đều làm trên chính T1.
+- **Chấm y hệt bộ đo chính thức**: `tools/beam_eval.py` gọi nguyên `bench.evaluate`/`bench.gate`,
+  chỉ thay mặc định của `BeamParams`. Kiểm: cấu hình mặc định trên T1 ra đúng 9,70 %.
+- **So ghép cặp** (`tools/paired_compare.py`): bootstrap trên hiệu từng clip giữa hai cấu hình chạy
+  trên CÙNG 500 clip. Sai số của hiệu ~0,2 điểm, nhỏ hơn nhiều sai số ±1 điểm giữa hai bộ clip.
+
+### Kết quả trên dev (33 cấu hình, mốc 0,3 / 1,25 = 12,25 %)
+
+| Nhóm | Hiệu so với mốc |
+|---|---|
+| Không cấu hình nào **tốt hơn chắc chắn** (khoảng tin cậy 95 % trọn dưới 0) | — |
+| Tốt nhất: `alpha` 0,45 / `cb` 2,0 | −0,34 [−0,76, +0,05] |
+| `alpha` 0,3 / `cb` 1,75 · 2,0 · 1,5 | −0,21 · −0,18 · −0,11 |
+| `beta` 1,5 / 2,0; `lexicon_bonus` 2 | −0,03 … −0,08 |
+| **14 cấu hình hạ `alpha` hoặc `char_bonus`** | **+0,44 … +0,75, xấu hơn chắc chắn** |
+| `lexicon_bonus` = 0 | +0,07, xấu hơn chắc chắn |
+
+Hướng "giảm trọng số LM" là hướng **sai**. Bề mặt quanh mốc gần như phẳng.
+
+### Xác nhận trên T1 — cái thắng trên dev tan biến
+
+| | dev (dùng để chọn) | T1 (không dùng để chọn) |
+|---|---|---|
+| `alpha` 0,45 / `cb` 2,0 | −0,34 | **−0,01** [−0,37, +0,35] |
+| `alpha` 0,3 / `cb` 1,75 | −0,21 | −0,14 [−0,38, +0,09] |
+
+Thử 33 cấu hình với sai số ~0,2 điểm mỗi phép so thì riêng may rủi cũng sinh ra một "người thắng"
+cỡ −0,3; đúng như vậy, nó về 0 trên bộ độc lập. `cb` 1,75 cùng chiều trên cả hai bộ nhưng quá nhỏ
+và không đủ ý nghĩa. **Giữ `alpha` 0,3 / `char_bonus` 1,25.**
+
+### Lý do 1 — `bench` chấm greedy và LM theo hai đáp án khác nhau
+
+`bench.reference_text` trả `text_original` (chữ gốc, có Ә Ғ Қ... và Ъ) cho engine onnx CÓ LM, nhưng
+`text` đã render qua bảng mã (Ә gộp thành А) cho greedy. Đề của greedy dễ hơn, nhất là tiếng Kazakh.
+Chấm cả hai theo văn bản gốc:
+
+| | T1 greedy → LM | dev greedy → LM |
+|---|---|---|
+| tổng | 13,57 → **9,70 %** | 16,14 → **12,25 %** |
+| en | 10,10 → 8,21 | 13,43 → 11,23 |
+| ru | 11,84 → 11,03 | 11,96 → 10,86 |
+| kk-cyrl-ru | 18,79 → **9,86** | 23,08 → **14,66** |
+| bỏ qsb | 5,40 → **1,86** | 7,48 → **3,57** |
+
+LM giúp **mọi** ngôn ngữ trên **cả hai** bộ. `test_t1_lm_not_worse_than_greedy_and_language_acc`
+mắc đúng lệch đáp án này (nghiêng về greedy).
+
+### Lý do 2 — nhiễu lấy mẫu lớn hơn chênh lệch đang đọc
+
+| | tổng | clean | mp3 | qrm | qrn | qsb |
+|---|---|---|---|---|---|---|
+| T1 | 9,70 ± 0,93 | 1,97 ± 0,52 | 1,78 ± 0,50 | 1,39 ± 0,60 | 2,31 ± 1,05 | 41,05 ± 2,74 |
+| dev | 12,25 ± 1,02 | 2,72 ± 0,93 | 4,41 ± 1,33 | 4,19 ± 1,07 | 2,95 ± 0,87 | 46,95 ± 2,83 |
+
+Chênh lệch greedy/LM 0,3–0,6 điểm ở từng kênh 100 clip nằm trong nhiễu. Hệ quả kéo theo: câu
+*"ba kênh clean/mp3/qrm đã qua cổng 2 %"* (ghi sáng 23/09, commit f40d0a3) **không đứng vững** —
+dev cho 2,7–4,4 %.
+
+T1 cao hơn dev 2,55 điểm, khoảng 1,85 lần sai số của hiệu hai bộ: dấu hiệu T1 hơi lạc quan vì
+nhiều quyết định đã chọn trên nó, nhưng chưa đủ để khẳng định.
+
+### Bổ sung cho mục `qsb` ở trên
+
+qsb@20 dB trên dev là **42,0 ± 7,4 %** (T1 14,2 ± 5,2), trong khi clean@0 dB lặp lại ở ~3 % trên cả
+hai bộ. Kết luận "lỗi xử lý ở SNR cao" đứng vững và còn mạnh hơn; con số 14,2 % của T1 là một lần
+rút thăm may (20 clip mỗi ô).

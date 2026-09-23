@@ -103,8 +103,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", type=Path, default=Path("testdata/generated/t1"))
     ap.add_argument("--full", action="store_true", help="toàn bộ SNR/WPM thay vì chỉ vùng gate")
     ap.add_argument("--clips", type=int, default=1, help="số clip mỗi ô")
+    # Bộ DEV để chỉnh tham số phải cùng ma trận với T1 nhưng khác seed: chỉnh trên chính T1 rồi
+    # báo số trên T1 là báo con số đẹp giả tạo. T1 dùng 1000-1499; huấn luyện dùng từ
+    # seed*1_000_000 trở lên và validation từ 2_000_000_000, nên 500_000 không đụng dải nào.
+    ap.add_argument("--seed-base", type=int, default=1000,
+                    help="seed của clip đầu tiên (T1 = 1000; bộ dev dùng 500000)")
     a = ap.parse_args(argv)
-    rows = generate_matrix(a.out, a.full, a.clips)
+    rows = generate_matrix(a.out, a.full, a.clips, seed_base=a.seed_base)
     print(f"{len(rows)} clip -> {a.out / 'manifest.jsonl'}")
     return 0
 
