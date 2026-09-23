@@ -76,6 +76,9 @@ def fake_sounddevice(monkeypatch):
             self.started = False
             self.closed = False
             self.stopped_by_callback = False
+            # Đồng hồ stream như PortAudio (`stream.time`); test tự đặt để giả thời điểm đang nghe.
+            self.time = 0.0
+            self.latency = 0.0
             OutputStream.instances.append(self)
 
         def start(self):
@@ -87,11 +90,17 @@ def fake_sounddevice(monkeypatch):
         def close(self):
             self.closed = True
 
-        def pump(self, frames=None):
+        def pump(self, frames=None, dac=None):
+            """`dac`: lúc mẫu đầu khối tới loa (giây, đồng hồ stream). None = thiết bị không báo
+            thời gian — khi đó AudioPlayback đếm theo khung đã gửi như trước."""
+            import types
+
             n = int(frames or self.kwargs.get("blocksize") or 1024)
             out = np.zeros((n, 1), dtype=np.float32)
+            info = None if dac is None else types.SimpleNamespace(outputBufferDacTime=dac,
+                                                                   currentTime=dac - 0.3)
             try:
-                self.kwargs["callback"](out, n, None, None)
+                self.kwargs["callback"](out, n, info, None)
             except mod.CallbackStop:
                 self.stopped_by_callback = True
                 self.started = False

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections import deque
 
 import numpy as np
 
@@ -49,11 +50,14 @@ class _StopPlayback(Exception):
 
 
 class AudioPlayback:
-    """Phát một mảng float32 và cho biết đang ở giây thứ mấy.
+    """Phát một mảng float32 và cho biết đang ở giây thứ mấy — giây ĐANG RA LOA.
 
-    Vị trí đếm theo số khung PortAudio đã YÊU CẦU, không phải đã nghe thấy: hai con số lệch nhau
-    đúng bằng độ trễ đệm của thiết bị (thường 10-100 ms). Chấp nhận được cho việc tô chữ, và
-    tránh hẳn việc phải hỏi `stream.time` vốn không đồng nhất giữa các backend.
+    Trước 24/09 vị trí đếm theo khung đã GỬI cho PortAudio. Đo trên máy thật
+    (tools/playback_sync.py): hình (karaoke, vệt quét 3D, con trỏ phổ) đi TRƯỚC tiếng 315 ms ở 1×,
+    628 ms (giây của file) ở 2× — đúng bằng độ trễ đệm của thiết bị, nhân theo tốc độ — và chỉ nhảy
+    theo khối 128 ms. Nay mỗi callback ghi lúc mẫu đầu khối tới loa (`outputBufferDacTime`), và
+    `position_s` nội suy giây của file gốc đang phát tại `stream.time`. Thiết bị/stream không báo
+    thời gian (stream giả trong test) thì quay về cách đếm cũ.
     """
 
     def __init__(self, sample_rate: int = SAMPLE_RATE, block: int = BLOCK_FRAMES) -> None:
@@ -63,6 +67,9 @@ class AudioPlayback:
         self._pos = 0                       # khung NGUỒN kế tiếp sẽ đẩy ra (kể cả khi phát nhanh/chậm)
         self._gain = 1.0
         self._speed = 1.0
+        self._latency = 0.0
+        # (lúc mẫu đầu khối tới loa, khung nguồn đầu khối, khung nguồn cuối khối, độ dài khối, giây)
+        self._blocks: deque[tuple[float, float, float, float]] = deque(maxlen=64)
         self._reset_stretch()
         self._stream = None
         self._lock = threading.Lock()       # callback chạy ở thread thời gian thực của PortAudio
@@ -78,8 +85,41 @@ class AudioPlayback:
 
     @property
     def position_s(self) -> float:
+        if not self.sample_rate:
+            return 0.0
         with self._lock:
-            return self._pos / self.sample_rate if self.sample_rate else 0.0
+            heard = self._heard_frame()
+            return (self._pos if heard is None else heard) / self.sample_rate
+
+    def _heard_frame(self) -> float | None:
+        """Khung nguồn đang ra loa lúc này (gọi khi đang giữ khóa); None nếu không đo được."""
+        stream = self._stream
+        if stream is None or not self._blocks:
+            return None
+        try:
+            now = float(stream.time)
+        except Exception:
+            return None
+        dac0, first, _, _ = self._blocks[0]
+        if now < dac0:
+            return first                          # stream vừa mở, khối đầu chưa tới loa
+        for dac, s0, s1, dur in reversed(self._blocks):
+            if now >= dac:
+                f = min(1.0, (now - dac) / dur) if dur > 0 else 1.0
+                return s0 + (s1 - s0) * f
+        return first
+
+    def _log_block(self, time_info, frames: int, src0: float, src1: float) -> None:
+        """Ghi mốc thời gian tới loa của khối vừa gửi (gọi trong callback, đang giữ khóa)."""
+        if time_info is None:
+            return
+        dac = float(getattr(time_info, "outputBufferDacTime", 0.0) or 0.0)
+        if dac <= 0.0:
+            now = float(getattr(time_info, "currentTime", 0.0) or 0.0)
+            if now <= 0.0:
+                return
+            dac = now + self._latency              # backend không báo DAC: ước theo độ trễ stream
+        self._blocks.append((dac, float(src0), float(src1), frames / self.sample_rate))
 
     @property
     def speed(self) -> float:
@@ -104,12 +144,13 @@ class AudioPlayback:
 
     @property
     def playing(self) -> bool:
-        return self._stream is not None and not self._finished
+        """Còn tiếng ra loa — kể cả phần đệm cuối vẫn đang phát sau khi đã gửi khối cuối."""
+        return self._stream is not None
 
     @property
     def finished(self) -> bool:
-        """True khi đã phát hết mảng (khác với dừng giữa chừng)."""
-        return self._finished
+        """True khi đã phát HẾT, tới mẫu cuối cùng ra loa (khác với dừng giữa chừng)."""
+        return self._finished and self._stream is None
 
     # ---- điều khiển ----
     def load(self, x: np.ndarray, sample_rate: int | None = None) -> None:
@@ -121,6 +162,7 @@ class AudioPlayback:
         with self._lock:
             self._pos = 0
             self._reset_stretch()
+            self._blocks.clear()
         self._finished = False
 
     # ---- co giãn thời gian (WSOLA, theo khối) ----
@@ -130,6 +172,9 @@ class AudioPlayback:
         self._prev_start: int | None = None
         self._ola = np.zeros(0, dtype=np.float32)
         self._queue = np.zeros(0, dtype=np.float32)
+        # Vị trí nguồn DANH NGHĨA của từng mẫu trong `_queue`: số khung WSOLA mỗi khối đổi 8/9, nên
+        # lấy đầu khung làm mốc thì con trỏ trên hình tiến giật cục; gắn vị trí cho từng mẫu thì đều.
+        self._queue_src = np.zeros(0, dtype=np.float64)
 
     def _stretch_frame(self) -> bool:
         """Sinh thêm một bước nhảy (nửa khung) tiếng đã co giãn vào `_queue`. False khi hết nguồn."""
@@ -163,13 +208,14 @@ class AudioPlayback:
         out = self._ola + frame[:hop]
         self._ola = frame[hop:].astype(np.float32)
         self._queue = np.concatenate([self._queue, out.astype(np.float32)])
+        self._queue_src = np.concatenate([self._queue_src, self._ana + np.arange(hop) * self._speed])
         self._prev_start = start
-        self._pos = min(start, len(x))
         self._ana += hop * self._speed
         return True
 
     def _callback(self, outdata, frames, time_info, status) -> None:
         with self._lock:
+            src0 = self._pos
             gain = self._gain
             if self._speed == 1.0:
                 start = self._pos
@@ -180,11 +226,16 @@ class AudioPlayback:
                 while len(self._queue) < frames and self._stretch_frame():
                     pass
                 chunk, self._queue = self._queue[:frames], self._queue[frames:]
+                srcs, self._queue_src = self._queue_src[:frames], self._queue_src[frames:]
+                if len(srcs):
+                    src0 = float(srcs[0])
+                    self._pos = int(min(srcs[-1] + self._speed, len(self._x)))
                 end = self._pos
                 if len(chunk) < frames:             # nguồn đã cạn: đẩy nốt phần chồng khung
                     chunk = np.concatenate([chunk, self._ola])[:frames]
                     self._ola = np.zeros(0, dtype=np.float32)
                     self._pos = end = len(self._x)
+            self._log_block(time_info, frames, src0, self._pos)
         n = len(chunk)
         outdata[:n, 0] = chunk * gain if gain != 1.0 else chunk
         if n < frames:
@@ -205,7 +256,7 @@ class AudioPlayback:
             self.seek(from_s)
         if self._stream is not None:
             return
-        if self._finished or self.position_s >= self.duration_s:
+        if self._finished or self._pos >= len(self._x):
             self.seek(0.0)
         sd = _sounddevice()
         self._stop_exc = getattr(sd, "CallbackStop", _StopPlayback)
@@ -219,18 +270,33 @@ class AudioPlayback:
         except Exception as e:
             raise PlaybackError(f"cannot open output device: {type(e).__name__}: {e}") from e
         self._finished = False
+        with self._lock:
+            self._blocks.clear()
+            self._latency = float(getattr(stream, "latency", 0.0) or 0.0)
         self._stream = stream
 
     def pause(self) -> None:
-        """Dừng nhưng GIỮ vị trí, để bấm phát lại là nghe tiếp."""
+        """Dừng NGAY nhưng giữ vị trí đang nghe, để bấm phát lại là nghe tiếp đúng chỗ đó.
+
+        `abort` bỏ phần âm thanh còn trong bộ đệm thiết bị (`stop` sẽ phát nốt ~0,3 s rồi mới
+        dừng, và lần phát tiếp bắt đầu sau chỗ người dùng vừa nghe).
+        """
+        with self._lock:
+            heard = self._heard_frame()
         stream, self._stream = self._stream, None
         if stream is None:
             return
         try:
-            stream.stop()
+            getattr(stream, "abort", stream.stop)()
             stream.close()
         except Exception:
             log.warning("closing output stream failed", exc_info=True)
+        with self._lock:
+            if heard is not None:
+                self._pos = min(int(heard), len(self._x))
+                self._finished = False
+                self._reset_stretch()
+            self._blocks.clear()
 
     def stop(self) -> None:
         """Dừng và đưa con trỏ về đầu."""
@@ -243,11 +309,17 @@ class AudioPlayback:
     def seek(self, seconds: float) -> None:
         """Nhảy tới một mốc thời gian; kẹp trong [0, độ dài]. An toàn khi đang phát."""
         frame = int(max(0.0, float(seconds)) * self.sample_rate)
+        restart = self._stream is not None and bool(self._blocks)
+        if restart:
+            self.pause()                # bỏ phần đệm của chỗ cũ: nghe ngay chỗ mới
         with self._lock:
             self._pos = min(frame, len(self._x))
             self._reset_stretch()
+            self._blocks.clear()
         if self._pos < len(self._x):
             self._finished = False
+        if restart:
+            self.play()
 
     def _on_stream_finished(self) -> None:
         self._stream = None
