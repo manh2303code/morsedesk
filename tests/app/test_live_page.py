@@ -139,7 +139,7 @@ def test_stats_populate_words_tone_and_labels(qtbot, monkeypatch):
     up = StreamUpdate("CQ DE", " R1A", True, 12.0,
                       [Word("R1A", 3.0, 3.8, 0.55)], 21.5, 712.0, 9.5, "ru")
     worker.stats_ready.emit(up)
-    assert [lb.word.text for lb in page.word_view._labels] == ["R1A"]
+    assert page.word_view.texts() == ["R1A"]
     assert page.waterfall._tone_hz == 712.0
     txt = page.stats_label.text()
     assert "21.5" in txt and "712" in txt and "9.5" in txt and "ru" in txt

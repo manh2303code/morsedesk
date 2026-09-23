@@ -47,6 +47,17 @@ class AppSettings:
         self._s.setValue("paths/last_dir", path)
         self._s.sync()
 
+    @property
+    def show_text_details(self) -> bool:
+        """Trang Giải mã: phần văn bản thuần + kết quả thay thế đang mở (mặc định) hay đã ẩn."""
+        v = self._s.value("ui/show_text_details", True)
+        return v not in (False, "false", "0", 0)
+
+    @show_text_details.setter
+    def show_text_details(self, flag: bool) -> None:
+        self._s.setValue("ui/show_text_details", bool(flag))
+        self._s.sync()
+
     def clear(self) -> None:
         self._s.clear()
         self._s.sync()

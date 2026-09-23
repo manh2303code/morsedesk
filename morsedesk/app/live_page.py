@@ -24,8 +24,9 @@ from PySide6.QtWidgets import (
 )
 
 from morsedesk.app.live_worker import LiveWorker, input_devices
-from morsedesk.app.theme import mark_primary
+from morsedesk.app.theme import NIGHT, mark_primary
 from morsedesk.app.widgets.banner import Banner
+from morsedesk.app.widgets.icons import icon_button
 from morsedesk.app.widgets.ridge3d import Ridge3DView
 from morsedesk.app.widgets.stats_bar import Readout
 from morsedesk.app.widgets.waterfall import MAX_HZ, WaterfallView
@@ -109,7 +110,8 @@ class LivePage(QWidget):
         # Chip từng từ, nền theo độ tin cậy — đúng widget trang Giải mã dùng, nên hai trang đọc
         # giống nhau và người dùng không phải học hai cách nhìn.
         self.word_view = WordView(self, live=True)
-        self.word_view.setMinimumHeight(56)
+        self.word_view.set_background(NIGHT)            # dải chữ tạm nằm thẳng trên nền trang
+        self.word_view.setMinimumHeight(self.word_view.line_height() + 2)   # một dòng trọn, không cuộn
         self.view = QTextEdit(self)
         self.view.setReadOnly(True)
         self.view.setStyleSheet("QTextEdit { font-size: 17pt; }")
@@ -118,8 +120,9 @@ class LivePage(QWidget):
         self.stats_label.hide()
         self.legend = QLabel(self)
         self.legend.setStyleSheet(f"color: {TENTATIVE_COLOR};")
-        self.copy_button = QPushButton(self)
-        self.clear_button = QPushButton(self)
+        # Cùng bộ nút biểu tượng với trang Giải mã: một cách nhìn cho cả ứng dụng.
+        self.copy_button = icon_button("copy", self)
+        self.clear_button = icon_button("clear", self)
         bottom = QHBoxLayout()
         bottom.addWidget(self.legend, 1)
         bottom.addWidget(self.copy_button)
@@ -310,8 +313,10 @@ class LivePage(QWidget):
         self.ridge.depth_label = self.tr("0–2000 Hz, newest in front")
         self.view.setPlaceholderText(self.tr("Decoded text appears here as it is heard."))
         self.legend.setText(self.tr("Grey text may still change; plain text is final."))
-        self.copy_button.setText(self.tr("Copy"))
-        self.clear_button.setText(self.tr("Clear"))
+        self.copy_button.setToolTip(self.tr("Copy the decoded text"))
+        self.copy_button.setAccessibleName(self.tr("Copy"))
+        self.clear_button.setToolTip(self.tr("Clear the text and start over"))
+        self.clear_button.setAccessibleName(self.tr("Clear"))
 
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.Type.LanguageChange:

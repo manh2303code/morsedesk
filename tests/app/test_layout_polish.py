@@ -68,4 +68,5 @@ def test_decode_split_keeps_the_spectrogram_usable(qtbot, tmp_path):
     assert page.spectrogram.minimumHeight() >= 180, page.spectrogram.minimumHeight()
     assert page.text_view.maximumHeight() <= 260, page.text_view.maximumHeight()
     sizes = page.split.sizes()
-    assert len(sizes) == 3 and sizes[0] >= sizes[2], sizes
+    # Khung kết quả là trọng tâm: không bao giờ nhỏ hơn vùng tín hiệu.
+    assert len(sizes) == 2 and sizes[1] >= sizes[0], sizes

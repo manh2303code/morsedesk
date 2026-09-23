@@ -27,11 +27,15 @@ def main() -> int:
     from morsedesk.app.main import I18N_DIR, set_app_identity
     from morsedesk.app.main_window import MainWindow
     from morsedesk.app.settings import AppSettings
+    from morsedesk.app.theme import apply_theme
     from morsedesk.app.worker import DecoderWorker, Player
 
     QApplication(sys.argv[:1])      # giữ sống qua vòng đời hàm; không cần tham chiếu
     set_app_identity()
     print("font:", apply_application_font(), flush=True)
+    # Cùng theme với ứng dụng thật (create_app): thiếu dòng này ảnh chụp ra kiểu Qt mặc định —
+    # nút xanh dương, nền xám — và không còn soi được giao diện người dùng thấy.
+    apply_theme(QApplication.instance())
 
     worker = DecoderWorker(engine="onnx", model_path=None, lm_dir=None)
     worker.start()

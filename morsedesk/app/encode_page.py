@@ -28,6 +28,7 @@ from morsedesk.app.settings import AppSettings
 from morsedesk.app.theme import mark_primary
 from morsedesk.app.widgets.banner import Banner
 from morsedesk.app.widgets.charmap import CharMap
+from morsedesk.app.widgets.icons import line_icon
 from morsedesk.app.widgets.morse_tape import MorseTape
 from morsedesk.app.widgets.player_bar import media_icon
 from morsedesk.app.worker import MAX_SECONDS, Player
@@ -187,7 +188,9 @@ class EncodePage(QWidget):
         mark_primary(self.play_button)
         self.play_button.setIcon(media_icon("play", 14))     # cùng biểu tượng ▶ với thanh phát
         self.stop_button = QPushButton(self)
+        self.stop_button.setIcon(line_icon("stop", 16))
         self.save_button = QPushButton(self)
+        self.save_button.setIcon(line_icon("export", 16))
         buttons = QHBoxLayout()
         buttons.addWidget(self.play_button, 2)
         buttons.addWidget(self.stop_button, 1)

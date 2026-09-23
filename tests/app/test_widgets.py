@@ -8,10 +8,14 @@ from morsedesk.app.widgets.charmap import CYRILLIC, KAZAKH_EXTRA, CharMap
 from morsedesk.app.widgets.spectrogram import SpectrogramView
 from morsedesk.app.widgets.stats_bar import StatsBar
 from morsedesk.app.widgets.word_view import (
+    ACTIVE_BG,
+    ACTIVE_TEXT,
     COLOR_GOOD,
     COLOR_LOW,
     COLOR_MID,
+    FADE_COLOR,
     TEXT_COLOR,
+    UPCOMING_COLOR,
     WORD_GOOD,
     WordView,
     confidence_color,
@@ -43,22 +47,22 @@ def test_confidence_colors_thresholds():
     assert len({COLOR_GOOD, COLOR_MID, COLOR_LOW}) == 3
 
 
-def test_word_view_labels_tooltips_and_click(qtbot):
+def test_word_view_texts_tooltips_and_click(qtbot):
     v = WordView()
     qtbot.addWidget(v)
+    v.resize(600, 200)
     v.show()
     words = [Word("CQ", 0.0, 0.5, 0.9), Word("DE", 0.6, 1.0, 0.55), Word("K", 1.1, 1.3, 0.2)]
     v.set_words(words)
-    labels = v.labels()
-    assert [lb.text() for lb in labels] == ["CQ", "DE", "K"]
-    assert COLOR_GOOD in labels[0].styleSheet() and COLOR_MID in labels[1].styleSheet() and COLOR_LOW in labels[2].styleSheet()
-    assert "0.90" in labels[0].toolTip() and "0.60" in labels[1].toolTip() and "1.00" in labels[1].toolTip()
+    assert v.texts() == ["CQ", "DE", "K"]
+    assert [confidence_color(w.confidence) for w in v.words()] == [COLOR_GOOD, COLOR_MID, COLOR_LOW]
+    assert "0.90" in v.tooltip_for(0) and "0.60" in v.tooltip_for(1) and "1.00" in v.tooltip_for(1)
     got = []
     v.word_clicked.connect(got.append)
-    qtbot.mouseClick(labels[1], Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(v.canvas(), Qt.MouseButton.LeftButton, pos=v.word_rect(1).center())
     assert got == [0.6]
     v.clear()
-    assert v.labels() == []
+    assert v.texts() == []
 
 
 def test_stats_bar_text_and_busy(qtbot):
@@ -154,12 +158,10 @@ def test_word_colors_are_readable_on_any_system_theme(qtbot):
     Ảnh chụp thật ở giao diện tối của Windows cho chữ trắng trên nền #c8f0c8 = 1,25:1.
     Ngưỡng 4,5:1 là mức AA của WCAG cho chữ thường.
     """
-    for bg in (COLOR_GOOD, COLOR_MID, COLOR_LOW):
-        assert _contrast(bg, TEXT_COLOR) >= 4.5, f"{bg} trên {TEXT_COLOR}"
-    w = WordView()
-    qtbot.addWidget(w)
-    w.set_words([Word("CQ", 0.0, 0.5, 0.95), Word("DE", 0.6, 0.9, 0.6), Word("K", 1.0, 1.2, 0.2)])
-    for label in w.labels():
-        css = label.styleSheet()
-        assert f"color:{TEXT_COLOR}" in css, css
-        assert confidence_color(label.word.confidence) in css
+    # Chữ thường, chữ "chưa nghe tới" (mờ hơn) và chữ trên vệt karaoke: đều đạt AA.
+    assert _contrast(TEXT_COLOR, FADE_COLOR) >= 4.5
+    assert _contrast(UPCOMING_COLOR, FADE_COLOR) >= 4.5
+    assert _contrast(ACTIVE_TEXT, ACTIVE_BG) >= 4.5
+    # Gạch chân độ tin cậy là đồ họa, không phải chữ: mức 3:1 (WCAG 1.4.11) trên nền khung.
+    for mark in (COLOR_MID, COLOR_LOW):
+        assert _contrast(mark, FADE_COLOR) >= 3.0, mark

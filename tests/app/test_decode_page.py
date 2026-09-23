@@ -39,7 +39,7 @@ def test_load_file_decodes_and_fills_widgets(qtbot, tiny_lm_dir, tmp_path, wav_c
         qtbot.waitUntil(lambda: page.result is not None, timeout=5000)
         _wait_idle(qtbot, page)
         assert page.result.text == "CQ DE K"
-        assert [lb.text() for lb in page.word_view.labels()] == ["CQ", "DE", "K"]
+        assert page.word_view.texts() == ["CQ", "DE", "K"]
         assert "WPM" in page.stats.text() and page.stats.language_label("en") in page.stats.text()
         assert page.spectrogram.image.image is not None and page.spectrogram.tone_line.isVisible()
         assert page.decode_button.isEnabled() and page.banner.isHidden()
@@ -87,7 +87,7 @@ def test_failed_shows_error_banner_and_keeps_page_usable(qtbot, tiny_lm_dir, tmp
         qtbot.waitUntil(lambda: page.banner.level == "error", timeout=5000)
         _wait_idle(qtbot, page)
         assert "bad.wav" in page.banner.text() and page.decode_button.isEnabled()
-        assert page.word_view.labels() == []
+        assert page.word_view.texts() == []
     finally:
         worker.stop()
 
@@ -118,7 +118,7 @@ def test_on_busy_blocks_drops_open_button_and_export(qtbot, tiny_lm_dir, tmp_pat
         assert page.acceptDrops() and page.open_button.isEnabled()
         page.result = _result("A")
         page._set_has_result(True)
-        exports = (page.copy_button, page.export_txt_button, page.export_json_button)
+        exports = (page.copy_button, page.export_button, page.export_txt_action, page.export_json_action)
         assert all(b.isEnabled() for b in exports)
         page.on_busy(True)
         assert not page.acceptDrops() and not page.open_button.isEnabled()
@@ -147,21 +147,21 @@ def test_stale_result_for_replaced_file_is_ignored(qtbot, tiny_lm_dir, tmp_path,
             page.load_file(wav_cq)
         qtbot.waitUntil(lambda: page.result is not None, timeout=5000)
         _wait_idle(qtbot, page)
-        words_before = [lb.text() for lb in page.word_view.labels()]
+        words_before = page.word_view.texts()
         stats_before = page.stats.text()
 
         # Kết quả trễ của một file khác (vd. file A trả lời sau khi người dùng đã kéo-thả
         # file B) -> phải bị bỏ qua, không được vẽ đè lên UI của file đang mở.
         stale = DecodeResult("STALE", [Word("STALE", 0.0, 0.5, 0.9)], None, 700.0, None, "", {}, [], "onnx")
         page.on_result(stale, Spectrogram.from_audio(np.zeros(800, np.float32)), str(tmp_path / "other.wav"))
-        assert [lb.text() for lb in page.word_view.labels()] == words_before
+        assert page.word_view.texts() == words_before
         assert page.stats.text() == stats_before
         assert page.result.text == "CQ DE K"
 
         # Kết quả đúng của file đang mở thì phải được áp dụng bình thường.
         fresh = DecodeResult("FRESH", [Word("FRESH", 0.0, 0.5, 0.9)], None, 700.0, None, "", {}, [], "onnx")
         page.on_result(fresh, Spectrogram.from_audio(np.zeros(800, np.float32)), str(page._path))
-        assert [lb.text() for lb in page.word_view.labels()] == ["FRESH"]
+        assert page.word_view.texts() == ["FRESH"]
         assert page.result.text == "FRESH"
     finally:
         worker.stop()

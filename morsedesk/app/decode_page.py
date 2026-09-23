@@ -15,18 +15,22 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
     QComboBox,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QStackedWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -36,7 +40,8 @@ from morsedesk.app.settings import AppSettings
 from morsedesk.app.theme import mark_primary
 from morsedesk.app.widgets.banner import Banner
 from morsedesk.app.widgets.busy_overlay import BusyOverlay
-from morsedesk.app.widgets.player_bar import PlayerBar
+from morsedesk.app.widgets.icons import icon_button, line_icon
+from morsedesk.app.widgets.player_bar import PlayerBar, format_time
 from morsedesk.app.widgets.ridge3d import WINDOW_S, Ridge3DView, band_window
 from morsedesk.app.widgets.spectrogram import SpectrogramView
 from morsedesk.app.widgets.stats_bar import StatsBar
@@ -62,10 +67,11 @@ def audio_duration_s(path: Path) -> float | None:
 
 
 def format_duration(seconds: float | None) -> str:
-    if seconds is None:
-        return ""
-    m, s = divmod(int(round(seconds)), 60)
-    return f"{m}:{s:02d}"
+    """Cùng cách làm tròn với đồng hồ thanh phát, để đầu trang và thanh phát ghi cùng một số."""
+    return "" if seconds is None else format_time(seconds)
+
+
+FALLBACK_MAX_H = 58
 
 
 class DecodePage(QWidget):
@@ -87,7 +93,10 @@ class DecodePage(QWidget):
         self.setAcceptDrops(True)
 
         # ---- đầu trang: file + ngôn ngữ bản tin + nút Giải mã ----
-        self.open_button = QPushButton(self)
+        # Nút biểu tượng (thư mục mở) + tooltip + Ctrl+O. Chữ "Open file…" dài gấp ba ở tiếng Nga
+        # và Kazakh; biểu tượng đọc được ở mọi ngôn ngữ giao diện.
+        self.open_button = icon_button("open", self, px=22, size=40)
+        QShortcut(QKeySequence(QKeySequence.StandardKey.Open), self, activated=self._choose_file)
         self.path_label = QLabel(self)
         self.path_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.path_label.setStyleSheet("font-size: 12pt; font-weight: 700;")
@@ -167,31 +176,48 @@ class DecodePage(QWidget):
         sb.addLayout(signal_head)
         sb.addWidget(self.signal_stack, 1)
 
-        # ---- bản giải mã ----
+        # ---- bản giải mã: khung "lời bài hát" là trọng tâm của trang ----
         self.word_view = WordView(self)
-        # Chip từng từ tiện để soi độ tin cậy, nhưng người vận hành còn cần đọc cả bản tin liền
-        # mạch và bôi chọn một đoạn để sao chép — và vùng dưới chip vốn bỏ trống với bản tin ngắn.
+        self.result_title = QLabel(self)
+        self.result_title.setProperty("role", "section")
+        # Nút ẩn/hiện phần văn bản thuần + kết quả thay thế: bản tin dài thì chúng chiếm chỗ của
+        # khung kết quả (ảnh chụp 24/09: khung chữ to chỉ còn hai dòng rưỡi).
+        self.details_button = QToolButton(self)
+        self.details_button.setProperty("flat", True)
+        self.details_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.details_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.details_button.setCheckable(True)
+        # Người vận hành còn cần đọc cả bản tin liền mạch và bôi chọn một đoạn để sao chép.
         self.text_view = QPlainTextEdit(self)
         self.text_view.setReadOnly(True)
         self.text_view.setPlaceholderText("")
-        self.text_view.setStyleSheet("QPlainTextEdit { font-size: 13pt; }")
+        self.text_view.setStyleSheet("QPlainTextEdit { font-size: 12pt; }")
         # `setStretchFactor` chỉ chia phần DƯ khi cửa sổ co giãn, không quyết định kích thước
         # ban đầu: nếu chỉ dựa vào nó, ô văn bản chiếm hơn 400 px còn biểu đồ phổ bị ép còn
         # khoảng 60 px (thấy rõ trên ảnh chụp). Phải đặt cả mức tối thiểu lẫn `setSizes`.
-        self.spectrogram.setMinimumHeight(220)
-        self.ridge.setMinimumHeight(220)
-        self.word_view.setMinimumHeight(64)
-        self.text_view.setMinimumHeight(60)
-        self.text_view.setMaximumHeight(160)
+        self.spectrogram.setMinimumHeight(180)
+        self.ridge.setMinimumHeight(180)
+        self.word_view.setMinimumHeight(120)
+        self.text_view.setMinimumHeight(56)
+        self.text_view.setMaximumHeight(92)
+        self.result_box = QFrame(self)
+        self.result_box.setProperty("panel", True)
+        rb = QVBoxLayout(self.result_box)
+        rb.setContentsMargins(12, 8, 6, 6)
+        rb.setSpacing(2)
+        self._result_head = QHBoxLayout()
+        self._result_head.setSpacing(8)
+        self._result_head.addWidget(self.result_title)
+        self._result_head.addStretch(1)
+        rb.addLayout(self._result_head)
+        rb.addWidget(self.word_view, 1)
         self.split = QSplitter(Qt.Orientation.Vertical, self)
         split = self.split
         split.addWidget(self.signal_box)
-        split.addWidget(self.word_view)
-        split.addWidget(self.text_view)
-        split.setStretchFactor(0, 5)
-        split.setStretchFactor(1, 2)
-        split.setStretchFactor(2, 1)
-        split.setSizes([360, 120, 90])
+        split.addWidget(self.result_box)
+        split.setStretchFactor(0, 2)
+        split.setStretchFactor(1, 5)
+        split.setSizes([215, 420])
         split.setChildrenCollapsible(False)
         self.content = QWidget(self)
         cl = QVBoxLayout(self.content)
@@ -218,12 +244,36 @@ class DecodePage(QWidget):
             read_as.addWidget(b)
         read_as.addStretch(1)
         self.read_as_row = QWidget(self)
+        # Theme tô nền đêm cho mọi QWidget; hàng này nằm trong khung kết quả nên phải trong suốt.
+        self.read_as_row.setObjectName("readAsRow")
+        self.read_as_row.setStyleSheet("#readAsRow { background: transparent; }")
         self.read_as_row.setLayout(read_as)
         self.read_as_row.hide()
+        self._result_head.addWidget(self.read_as_row)
+        self._result_head.addSpacing(6)
+        self._result_head.addWidget(self.details_button)
         self.fallback_label = QLabel(self)
         self.fallback_label.setWordWrap(True)
         self.fallback_label.setProperty("role", "hint")
-        self.fallback_label.hide()
+        self.fallback_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.fallback_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        # Kết quả thay thế của bản tin 13 phút dài cả trang: cho nó khung cuộn riêng, thấp.
+        self.fallback_scroll = QScrollArea(self)
+        self.fallback_scroll.setWidget(self.fallback_label)
+        self.fallback_scroll.setWidgetResizable(True)
+        self.fallback_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.fallback_scroll.setStyleSheet("QScrollArea { background: transparent; }")
+        self.fallback_scroll.hide()
+        self.details = QWidget(self)
+        self.details.setObjectName("details")
+        self.details.setStyleSheet("#details { background: transparent; }")
+        dl = QVBoxLayout(self.details)
+        dl.setContentsMargins(0, 0, 0, 0)
+        dl.setSpacing(6)
+        dl.addWidget(self.text_view)
+        dl.addWidget(self.fallback_scroll)
+        self.details_button.setChecked(settings.show_text_details)
+        self.details_button.toggled.connect(self._on_details_toggled)
 
         # ---- đáy: nghe lại + xuất ----
         # Nghe lại chính file vừa giải mã: khi máy đọc sai một chỗ, cách duy nhất để biết lỗi
@@ -231,16 +281,20 @@ class DecodePage(QWidget):
         # ứng dụng phát nhạc nào khác.
         self.player = PlayerBar(self)
         self.player.setEnabled(False)
-        self.copy_button = QPushButton(self)
-        self.export_txt_button = QPushButton(self)
-        self.export_json_button = QPushButton(self)
+        self.copy_button = icon_button("copy", self)
+        # MỘT nút xuất, bấm vào ra hai lựa chọn — thay cho hai nút chữ dài "Export TXT…/JSON…".
+        self.export_button = icon_button("export", self)
+        self.export_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.export_menu = QMenu(self.export_button)
+        self.export_txt_action = self.export_menu.addAction("")
+        self.export_json_action = self.export_menu.addAction("")
+        self.export_button.setMenu(self.export_menu)
         bottom = QHBoxLayout()
         bottom.setSpacing(8)
         bottom.addWidget(self.player, 1)
         bottom.addSpacing(12)
         bottom.addWidget(self.copy_button)
-        bottom.addWidget(self.export_txt_button)
-        bottom.addWidget(self.export_json_button)
+        bottom.addWidget(self.export_button)
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(16, 14, 16, 12)
@@ -249,8 +303,7 @@ class DecodePage(QWidget):
         lay.addWidget(self.banner)
         lay.addWidget(self.stats)
         lay.addWidget(self.content, 1)
-        lay.addWidget(self.read_as_row)
-        lay.addWidget(self.fallback_label)
+        lay.addWidget(self.details)
         lay.addLayout(bottom)
 
         self.open_button.clicked.connect(self._choose_file)
@@ -259,8 +312,8 @@ class DecodePage(QWidget):
         self.profile_combo.currentIndexChanged.connect(self._on_profile_changed)
         self.lm_check.toggled.connect(lambda _c: self._request())
         self.copy_button.clicked.connect(self._copy)
-        self.export_txt_button.clicked.connect(lambda: self._export("txt"))
-        self.export_json_button.clicked.connect(lambda: self._export("json"))
+        self.export_txt_action.triggered.connect(lambda: self._export("txt"))
+        self.export_json_action.triggered.connect(lambda: self._export("json"))
         self.word_view.word_clicked.connect(self.spectrogram.set_cursor)
         self.word_view.word_clicked.connect(self._play_from)
         self.player.position_changed.connect(self._on_playhead)
@@ -273,7 +326,43 @@ class DecodePage(QWidget):
         worker.cancelled.connect(self.on_cancelled)
         self._sync_lm_check()
         self._set_has_result(False)
+        self._on_details_toggled(self.details_button.isChecked(), save=False)
         self.retranslate()
+
+    def _on_details_toggled(self, shown: bool, save: bool = True) -> None:
+        """Ẩn/hiện phần văn bản thuần + kết quả thay thế; nhớ lựa chọn cho lần mở sau."""
+        self.details.setVisible(shown)
+        self.details_button.setIcon(line_icon("chevron-up" if shown else "chevron-down", 16))
+        self._retranslate_details_button()
+        if save:
+            self.settings.show_text_details = shown
+
+    def _retranslate_details_button(self) -> None:
+        shown = self.details_button.isChecked()
+        self.details_button.setText(self.tr("Hide plain text") if shown else self.tr("Show plain text"))
+        self.details_button.setToolTip(self.tr("Plain text to select and copy, and the alternative result"))
+
+    def _show_fallback(self, text: str | None) -> None:
+        """Kết quả thay thế (đường giải mã còn lại) trong phần chi tiết; None = ẩn."""
+        if text is None:
+            self.fallback_label.hide()
+            self.fallback_scroll.hide()
+            return
+        self.fallback_label.setText(text)
+        self.fallback_label.show()
+        self.fallback_scroll.show()
+        self._fit_fallback()
+
+    def _fit_fallback(self) -> None:
+        """Khung kết quả thay thế cao vừa đủ chữ, tối đa ~4 dòng (dài hơn thì cuộn)."""
+        width = max(100, self.fallback_scroll.viewport().width() or self.width() - 40)
+        need = self.fallback_label.heightForWidth(width)
+        self.fallback_scroll.setFixedHeight(max(18, min(FALLBACK_MAX_H, need + 2)))
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if self.fallback_scroll.isVisibleTo(self):
+            self._fit_fallback()
 
     # ---- file mẫu "Xin chào" ----
     def enable_samples(self) -> None:
@@ -396,12 +485,10 @@ class DecodePage(QWidget):
         elif result.warnings:                       # kết quả cũ chưa có mã: hiện nguyên văn
             self.banner.show_warning("; ".join(result.warnings))
         if result.fallback_text is not None:
-            self.fallback_label.setText(
-                self._fallback_caption(getattr(result, "decoded_by", "model"), result.fallback_text)
-            )
-            self.fallback_label.show()
+            self._show_fallback(
+                self._fallback_caption(getattr(result, "decoded_by", "model"), result.fallback_text))
         else:
-            self.fallback_label.hide()
+            self._show_fallback(None)
         self._set_has_result(True)
 
     # ---- nghe lại ----
@@ -472,7 +559,11 @@ class DecodePage(QWidget):
         self.player.play()
 
     def _on_playhead(self, t_s: float) -> None:
-        self.word_view.set_playhead(t_s if self.player.playback.duration_s > 0 else None)
+        # Karaoke chỉ khi đang nghe (hoặc tạm dừng giữa chừng): lúc audio vừa nạp con trỏ ở 0 và
+        # khi nghe hết thì cả bản tin trở lại sáng đều, không để phần "chưa tới" mờ mãi.
+        duration = self.player.playback.duration_s
+        listening = self.player.playback.playing or (duration > 0 and 0.01 < t_s < duration - 0.05)
+        self.word_view.set_playhead(t_s if listening else None)
         self.spectrogram.set_cursor(t_s if self.player.playback.playing else None)
         # File dài hơn cửa sổ 3D: cảnh đi theo con trỏ phát, đoạn đang nghe luôn ở giữa.
         playing = self.player.playback.playing
@@ -560,7 +651,7 @@ class DecodePage(QWidget):
         self.ridge.clear()
         self._update_read_as(None)
         self.stats.set_result(None, None)
-        self.fallback_label.hide()
+        self._show_fallback(None)
         self.banner.show_error(self.failure_message(code, detail))
         self.banner.setToolTip(detail)
         self._set_has_result(False)
@@ -614,7 +705,7 @@ class DecodePage(QWidget):
 
     def _set_has_result(self, flag: bool) -> None:
         """Nhóm nút cần kết quả; luôn tắt lúc bận để không sao chép/xuất kết quả của file trước."""
-        for b in (self.copy_button, self.export_txt_button, self.export_json_button):
+        for b in (self.copy_button, self.export_button, self.export_txt_action, self.export_json_action):
             b.setEnabled(flag and not self._busy)
 
     # ---- xuất ----
@@ -658,7 +749,8 @@ class DecodePage(QWidget):
 
     # ---- i18n ----
     def retranslate(self) -> None:
-        self.open_button.setText(self.tr("Open file…"))
+        self.open_button.setToolTip(self.tr("Open audio file… (Ctrl+O)"))
+        self.open_button.setAccessibleName(self.tr("Open audio file"))
         self.profile_label.setText(self.tr("Message language:"))
         names = {
             "auto": self.tr("Auto"),
@@ -673,9 +765,14 @@ class DecodePage(QWidget):
         self._sync_lm_check()
         self.decode_button.setText(self.tr("Decode"))
         self.cancel_button.setText(self.tr("Cancel"))
-        self.copy_button.setText(self.tr("Copy"))
-        self.export_txt_button.setText(self.tr("Export TXT…"))
-        self.export_json_button.setText(self.tr("Export JSON…"))
+        self.copy_button.setToolTip(self.tr("Copy the decoded text"))
+        self.copy_button.setAccessibleName(self.tr("Copy"))
+        self.export_button.setToolTip(self.tr("Export to a file: text or JSON with timings"))
+        self.export_button.setAccessibleName(self.tr("Export"))
+        self.export_txt_action.setText(self.tr("Text file (.txt)…"))
+        self.export_json_action.setText(self.tr("JSON with word timings (.json)…"))
+        self.result_title.setText(self.tr("Decoded text"))
+        self._retranslate_details_button()
         if self._path is None:
             self.path_label.setText(self.tr("No file selected. Drop an audio file here."))
         self.sample_badge.setText(self.tr("Sample"))
@@ -691,10 +788,8 @@ class DecodePage(QWidget):
         if self.result is not None:
             self._update_ridge()
         if self.result is not None and self.result.fallback_text is not None:
-            self.fallback_label.setText(
-                self._fallback_caption(getattr(self.result, "decoded_by", "model"),
-                                       self.result.fallback_text)
-            )
+            self._show_fallback(self._fallback_caption(getattr(self.result, "decoded_by", "model"),
+                                                       self.result.fallback_text))
         # Thanh phát là widget con có chữ riêng; thiếu dòng này nút "Play" giữ tiếng Anh sau khi đổi
         # ngôn ngữ (ảnh chụp AppImage tiếng Kazakh 23/09 lộ ra).
         self.player.retranslate()

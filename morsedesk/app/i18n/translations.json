@@ -154,7 +154,17 @@
     "{tone} Hz ± 250 Hz": "{tone} Гц ± 250 Гц",
     "Words appear here as they are heard.": "Здесь появятся слова по мере приёма.",
     "Neural network (ONNX) with the classic DSP decoder": "Нейросеть (ONNX) и классический DSP-декодер",
-    "Classic DSP decoder only": "Только классический DSP-декодер"
+    "Classic DSP decoder only": "Только классический DSP-декодер",
+    "Decoded text": "Расшифрованный текст",
+    "Hide plain text": "Скрыть простой текст",
+    "Show plain text": "Показать простой текст",
+    "Plain text to select and copy, and the alternative result": "Простой текст для выделения и копирования, а также альтернативный результат",
+    "Open audio file… (Ctrl+O)": "Открыть аудиофайл… (Ctrl+O)",
+    "Copy the decoded text": "Копировать расшифрованный текст",
+    "Export to a file: text or JSON with timings": "Экспорт в файл: текст или JSON с временными метками",
+    "Text file (.txt)…": "Текстовый файл (.txt)…",
+    "JSON with word timings (.json)…": "JSON с временем каждого слова (.json)…",
+    "Clear the text and start over": "Очистить текст и начать заново"
   },
   "kk": {
     "MorseDesk": "MorseDesk",
@@ -311,6 +321,16 @@
     "{tone} Hz ± 250 Hz": "{tone} Гц ± 250 Гц",
     "Words appear here as they are heard.": "Сөздер қабылданған сайын осында шығады.",
     "Neural network (ONNX) with the classic DSP decoder": "Нейрондық желі (ONNX) және классикалық DSP декодері",
-    "Classic DSP decoder only": "Тек классикалық DSP декодері"
+    "Classic DSP decoder only": "Тек классикалық DSP декодері",
+    "Decoded text": "Декодталған мәтін",
+    "Hide plain text": "Қарапайым мәтінді жасыру",
+    "Show plain text": "Қарапайым мәтінді көрсету",
+    "Plain text to select and copy, and the alternative result": "Белгілеп көшіруге арналған қарапайым мәтін және балама нәтиже",
+    "Open audio file… (Ctrl+O)": "Аудиофайлды ашу… (Ctrl+O)",
+    "Copy the decoded text": "Декодталған мәтінді көшіру",
+    "Export to a file: text or JSON with timings": "Файлға экспорттау: мәтін немесе уақыт белгілері бар JSON",
+    "Text file (.txt)…": "Мәтіндік файл (.txt)…",
+    "JSON with word timings (.json)…": "Әр сөздің уақыты бар JSON (.json)…",
+    "Clear the text and start over": "Мәтінді тазалап, қайта бастау"
   }
 }

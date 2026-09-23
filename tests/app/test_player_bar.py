@@ -88,19 +88,18 @@ def test_word_view_playhead_marks_current_word(qtbot):
     view = WordView()
     qtbot.addWidget(view)
     view.set_words(_words())
-    labels = view._labels
 
     view.set_playhead(0.3)
-    assert [lb._active for lb in labels] == [True, False, False]
+    assert view.active_index() == 0
     view.set_playhead(1.5)
-    assert [lb._active for lb in labels] == [False, True, False]
+    assert view.active_index() == 1
     # Khoảng lặng GIỮA hai từ: giữ từ vừa qua, nếu không vệt sáng nhấp nháy mỗi lần im tiếng.
     view.set_playhead(2.0)
-    assert [lb._active for lb in labels] == [False, True, False]
+    assert view.active_index() == 1
     view.set_playhead(3.0)
-    assert [lb._active for lb in labels] == [False, False, True]
+    assert view.active_index() == 2
     view.set_playhead(None)
-    assert not any(lb._active for lb in labels)
+    assert view.active_index() is None
 
 
 def test_word_view_playhead_before_first_word_marks_nothing(qtbot):
@@ -108,7 +107,7 @@ def test_word_view_playhead_before_first_word_marks_nothing(qtbot):
     qtbot.addWidget(view)
     view.set_words([Word("CQ", 1.0, 1.6, 0.9)])
     view.set_playhead(0.2)
-    assert not any(lb._active for lb in view._labels)
+    assert view.active_index() == -1                # đang nghe nhưng chưa tới từ nào
 
 
 def test_arm_enables_button_for_lazy_load(qtbot, fake_sounddevice):
