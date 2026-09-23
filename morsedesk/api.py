@@ -227,13 +227,21 @@ class Decoder:
         self, profile: str | Profile = "en", engine: str = "baseline", model_path: Path | None = None,
         fallback: bool = True, lm: bool = True, beam: int = 64, lm_dir: Path | None = None,
         acoustic_model: AcousticModel | None = None, lm_store: LMStore | None = None,
+        skip_silent_windows: bool = False,
     ) -> None:
-        """lm_store: dùng chung LM giữa nhiều Decoder (GUI); khi có thì bỏ qua lm_dir."""
+        """lm_store: dùng chung LM giữa nhiều Decoder (GUI); khi có thì bỏ qua lm_dir.
+
+        skip_silent_windows: cửa sổ không dò ra tone thì ép thành blank thay vì chạy mô hình.
+        Chặn được chuyện mô hình đọc nhiễu nền thành chữ (30 giây nhiễu trắng thuần ra `WE ARE`),
+        nhưng trên T1 nó làm CER xấu từ 9,70 % lên 13,28 % vì clip SNR thấp cũng bị vạ lây.
+        Chỉ bật ở chế độ nghe trực tiếp.
+        """
         self.auto = isinstance(profile, str) and profile == "auto"
         self.profile: Profile | None = None if self.auto else _resolve_profile(profile)
         self.engine = engine
         self.fallback = fallback
         self.lm_enabled = bool(lm)
+        self.skip_silent_windows = bool(skip_silent_windows)
         self.beam_params = BeamParams(beam=int(beam))
         self._baseline = BaselineDecoder()
         self._model: AcousticModel | None = acoustic_model
@@ -377,7 +385,8 @@ class Decoder:
                 return run_chunked_audio(self._model, x, f0_hint=f0_hz, cfg=self.feature_cfg,
                                          progress=progress)
             n_frames = len(x) // HOP
-            return run_chunked_windows(self._model, windows, n_frames, progress), n_frames
+            return run_chunked_windows(self._model, windows, n_frames, progress,
+                                       skip_silent=self.skip_silent_windows), n_frames
         feats = compute_features(x, f0_hz)
         return run_chunked(self._model, feats, progress=progress), len(feats)
 

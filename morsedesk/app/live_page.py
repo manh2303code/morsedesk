@@ -8,7 +8,7 @@ thật của một máy thu tự sửa chữ là người ta đã chép xuống 
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QGuiApplication, QTextCursor
 from PySide6.QtWidgets import (
     QComboBox,
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QProgressBar,
     QPushButton,
+    QSplitter,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -23,6 +24,12 @@ from PySide6.QtWidgets import (
 
 from morsedesk.app.live_worker import LiveWorker, input_devices
 from morsedesk.app.widgets.banner import Banner
+from morsedesk.app.widgets.waterfall import WaterfallView
+from morsedesk.app.widgets.word_view import WordView
+
+# Cùng danh sách với trang Giải mã. `auto` đứng đầu và là mặc định: bắt người dùng chọn bảng mã
+# trước khi nghe là bắt họ đoán thứ mà chính bản tin sẽ nói ra.
+PROFILE_CHOICES = ("auto", "en", "ru", "kk-cyrl-ru")
 
 # Xám đủ nhạt để thấy ngay là "chưa chắc", vẫn đủ đậm để đọc trên cả nền sáng lẫn nền tối.
 TENTATIVE_COLOR = "#8a8a8a"
@@ -40,6 +47,11 @@ class LivePage(QWidget):
 
         self.device_label = QLabel(self)
         self.device_combo = QComboBox(self)
+        self.profile_label = QLabel(self)
+        self.profile_combo = QComboBox(self)
+        self.profile_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        for pid in PROFILE_CHOICES:
+            self.profile_combo.addItem(pid, pid)
         self.refresh_button = QPushButton(self)
         self.listen_button = QPushButton(self)
         self.listen_button.setCheckable(True)
@@ -51,14 +63,23 @@ class LivePage(QWidget):
         top = QHBoxLayout()
         top.addWidget(self.device_label)
         top.addWidget(self.device_combo, 1)
+        top.addWidget(self.profile_label)
+        top.addWidget(self.profile_combo)
         top.addWidget(self.refresh_button)
         top.addWidget(self.level_bar)
         top.addWidget(self.listen_button)
 
         self.banner = Banner(self)
+        self.waterfall = WaterfallView(parent=self)
+        # Chip từng từ, nền theo độ tin cậy — đúng widget trang Giải mã dùng, nên hai trang đọc
+        # giống nhau và người dùng không phải học hai cách nhìn.
+        self.word_view = WordView(self)
+        self.word_view.setMinimumHeight(56)
         self.view = QTextEdit(self)
         self.view.setReadOnly(True)
         self.view.setStyleSheet("QTextEdit { font-size: 16pt; }")
+        self.stats_label = QLabel(self)
+        self.stats_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.legend = QLabel(self)
         self.legend.setStyleSheet(f"color: {TENTATIVE_COLOR};")
         self.copy_button = QPushButton(self)
@@ -68,10 +89,17 @@ class LivePage(QWidget):
         bottom.addWidget(self.copy_button)
         bottom.addWidget(self.clear_button)
 
+        self.split = QSplitter(Qt.Orientation.Vertical, self)
+        self.split.addWidget(self.waterfall)
+        self.split.addWidget(self.word_view)
+        self.split.addWidget(self.view)
+        self.split.setSizes([260, 90, 200])
+
         lay = QVBoxLayout(self)
         lay.addLayout(top)
         lay.addWidget(self.banner)
-        lay.addWidget(self.view, 1)
+        lay.addWidget(self.split, 1)
+        lay.addWidget(self.stats_label)
         lay.addLayout(bottom)
 
         self.listen_button.clicked.connect(self._on_listen_clicked)
@@ -79,6 +107,8 @@ class LivePage(QWidget):
         self.copy_button.clicked.connect(self._copy)
         self.clear_button.clicked.connect(self.clear)
         worker.text_ready.connect(self.on_text)
+        worker.stats_ready.connect(self.on_stats)
+        worker.block_ready.connect(self.waterfall.push)
         worker.level.connect(self.on_level)
         worker.listening.connect(self.on_listening)
         worker.failed.connect(self.on_failed)
@@ -110,6 +140,27 @@ class LivePage(QWidget):
         self._committed, self._tentative = committed, tentative
         self._render()
 
+    def on_stats(self, update) -> None:
+        """Thông số của lần giải mã gần nhất: chip từ, WPM, tone, SNR, ngôn ngữ nhận ra."""
+        self.word_view.set_words(list(getattr(update, "words", []) or []))
+        self.waterfall.set_tone(getattr(update, "tone_hz", None))
+        self.stats_label.setText(self._stats_text(update))
+
+    def _stats_text(self, u) -> str:
+        parts = []
+        wpm, tone, snr = getattr(u, "wpm", None), getattr(u, "tone_hz", None), getattr(u, "snr_db", None)
+        if wpm:
+            parts.append(self.tr("WPM {v:.1f}").format(v=wpm))
+        if tone:
+            parts.append(self.tr("Tone {v:.0f} Hz").format(v=tone))
+        if snr is not None:
+            parts.append(self.tr("SNR {v:.1f} dB").format(v=snr))
+        lang = getattr(u, "language", "")
+        if lang:
+            parts.append(self.tr("Alphabet: {v}").format(v=lang))
+        parts.append(self.tr("{v:.0f} s heard").format(v=getattr(u, "audio_s", 0.0)))
+        return " · ".join(parts)
+
     def on_level(self, rms: float) -> None:
         self.level_bar.setValue(max(0, min(100, int(rms * LEVEL_SCALE))))
 
@@ -129,12 +180,18 @@ class LivePage(QWidget):
     def _on_listen_clicked(self) -> None:
         if self.listen_button.isChecked():
             self.banner.hide()
-            self.worker.start_listening(self.device_combo.currentData())
+            self.waterfall.clear()
+            self.word_view.clear()
+            self.worker.start_listening(self.device_combo.currentData(),
+                                        self.profile_combo.currentData())
         else:
             self.worker.stop_listening()
 
     def clear(self) -> None:
         self._committed = self._tentative = ""
+        self.word_view.clear()
+        self.waterfall.clear()
+        self.stats_label.clear()
         self._render()
 
     def _copy(self) -> None:
@@ -163,6 +220,9 @@ class LivePage(QWidget):
     def retranslate(self) -> None:
         listening = self.listen_button.isChecked()
         self.device_label.setText(self.tr("Input:"))
+        self.profile_label.setText(self.tr("Alphabet:"))
+        self.profile_combo.setToolTip(
+            self.tr("Auto detects the alphabet from the message itself"))
         self.refresh_button.setText(self.tr("Refresh"))
         self.refresh_button.setToolTip(self.tr("Look for newly plugged devices"))
         self.listen_button.setText(self.tr("Stop") if listening else self.tr("Listen"))

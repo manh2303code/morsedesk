@@ -823,3 +823,53 @@ Bản đầu ghép theo **chuỗi ký tự** (tìm hậu tố của phần đã 
 hỏng ngay với bản tin có từ lặp — `CQ CQ DE` làm mối nối tìm nhầm chỗ và ra `R1ABCQ DE R1DE`.
 Bản hiện tại ghép theo **mốc thời gian tuyệt đối của từng từ**, lấy từ `DecodeResult.words` vốn
 đã có sẵn `start_s`/`end_s`, nên từ lặp không còn là vấn đề.
+
+---
+
+## Benchmark tần số, tốc độ, độ dài, và nhận diện bảng mã (2026-09-23)
+
+Trên tín hiệu tổng hợp sạch (SNR 12 dB), ba bảng mã, ba bản tin mỗi bảng.
+
+### Tần số tone — không có tần số nào "tốt nhất"
+
+| Hz | 300 | 400 | 500 | 600 | 700 | 800 | 900 | 1000 | 1100 | 1200 | 1500 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| CER | 0 % | 0 % | 0 % | 0 % | 0 % | 0 % | 0 % | 0 % | 0 % | 0 % | 0 % |
+
+Mô hình bám tone chứ không học tần số tuyệt đối: đặc trưng là 9 bin phổ **quanh tone đã dò**,
+nên 300 Hz và 1500 Hz đi vào mạng giống hệt nhau. Không cần khuyên người dùng chỉnh tần số.
+
+### Tốc độ — cũng không có tốc độ nào "tốt nhất"
+
+5, 8, 10, 12, 15, 18, 20, 25, 30, 35, 40, 45 WPM: **CER 0 % ở mọi mức**.
+
+Hai bảng trên nói rằng ở tín hiệu sạch, mô hình đã bão hòa. Mọi khoảng cách còn lại nằm ở
+NHIỄU (qsb 45,55 %), không ở tham số tín hiệu.
+
+### Độ dài bản tin và nhận diện bảng mã tự động
+
+| Số từ | ~ký tự | CER | Nhận đúng bảng mã |
+|---|---|---|---|
+| 1 | 3 | 33,33 % | **66,7 %** |
+| 2 | 8 | 0 % | **100 %** |
+| 3 | 13 | 0 % | 100 % |
+| 5 | 22 | 1,08 % | 100 % |
+| 8 | 38 | 0,71 % | 100 % |
+| 12 | 60 | 0,46 % | 100 % |
+| 20 | 115 | 0,49 % | 100 % |
+
+**Ngưỡng là khoảng 8 ký tự.** Dưới ngưỡng đó `auto` đoán sai một phần ba số lần, và con số
+33,33 % CER ở cột đầu chính là hậu quả: đoán sai bảng mã thì mọi ký tự sau đó đều sai.
+
+Đây là điều cần biết cho **chế độ nghe trực tiếp**: những giây đầu của một phiên luôn có ít hơn
+8 ký tự, nên `auto` ở đó kém tin cậy hơn hẳn so với khi mở một file.
+
+### `auto` so với chọn tay
+
+| | auto | chọn tay |
+|---|---|---|
+| en | 0 % | 0 % |
+| ru | 0 % | 0 % |
+| kk-cyrl-ru | 0 % | 0 % |
+
+Với bản tin đủ dài, `auto` **không mất gì**. Vấn đề của nó chỉ là bản tin ngắn.

@@ -92,7 +92,14 @@
     "Decoded text appears here as it is heard.": "Декодированный текст появляется здесь по мере приёма.",
     "Grey text may still change; plain text is final.": "Серый текст ещё может измениться; обычный текст окончателен.",
     "Listening failed: {detail}": "Не удалось вести приём: {detail}",
-    "No input device found. Plug in a sound card or check that PortAudio is installed.": "Устройство ввода не найдено. Подключите звуковую карту или проверьте установку PortAudio."
+    "No input device found. Plug in a sound card or check that PortAudio is installed.": "Устройство ввода не найдено. Подключите звуковую карту или проверьте установку PortAudio.",
+    "Alphabet:": "Алфавит:",
+    "Alphabet: {v}": "Алфавит: {v}",
+    "Auto detects the alphabet from the message itself": "«Авто» определяет алфавит по самому сообщению",
+    "SNR {v:.1f} dB": "ОСШ {v:.1f} дБ",
+    "Tone {v:.0f} Hz": "Тон {v:.0f} Гц",
+    "WPM {v:.1f}": "Слов/мин {v:.1f}",
+    "{v:.0f} s heard": "принято {v:.0f} с"
   },
   "kk": {
     "MorseDesk": "MorseDesk",
@@ -187,6 +194,13 @@
     "Decoded text appears here as it is heard.": "Декодталған мәтін қабылдануына қарай осында шығады.",
     "Grey text may still change; plain text is final.": "Сұр мәтін әлі өзгеруі мүмкін; кәдімгі мәтін — түпкілікті.",
     "Listening failed: {detail}": "Тыңдау сәтсіз аяқталды: {detail}",
-    "No input device found. Plug in a sound card or check that PortAudio is installed.": "Кіріс құрылғысы табылмады. Дыбыс картасын қосыңыз немесе PortAudio орнатылғанын тексеріңіз."
+    "No input device found. Plug in a sound card or check that PortAudio is installed.": "Кіріс құрылғысы табылмады. Дыбыс картасын қосыңыз немесе PortAudio орнатылғанын тексеріңіз.",
+    "Alphabet:": "Әліпби:",
+    "Alphabet: {v}": "Әліпби: {v}",
+    "Auto detects the alphabet from the message itself": "«Авто» әліпбиді хабардың өзінен анықтайды",
+    "SNR {v:.1f} dB": "СШҚ {v:.1f} дБ",
+    "Tone {v:.0f} Hz": "Тон {v:.0f} Гц",
+    "WPM {v:.1f}": "Сөз/мин {v:.1f}",
+    "{v:.0f} s heard": "{v:.0f} с қабылданды"
   }
 }

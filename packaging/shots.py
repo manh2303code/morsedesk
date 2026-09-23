@@ -89,7 +89,19 @@ def main() -> int:
         show(win.live_page)
         pump(400)
         grab(win, "06-nghe-rong")
+        # Nạp dữ liệu THẬT vào thác nước và chip từ, không chỉ đặt chữ: ảnh phải cho thấy
+        # trang lúc đang làm việc, vì đó là lúc lỗi bố cục lộ ra.
+
+        from morsedesk.api import Encoder, Word
+        from morsedesk.model.stream import StreamUpdate
+
+        audio = Encoder("en").to_audio("CQ CQ DE R1ABC R1A", wpm=20, snr_db=12, seed=5)
+        for i in range(0, len(audio), 1600):
+            win.live_page.waterfall.push(audio[i:i + 1600])
         win.live_page.on_text("CQ CQ DE R1ABC", " R1A")
+        win.live_page.on_stats(StreamUpdate(
+            "CQ CQ DE R1ABC", " R1A", True, 14.0,
+            [Word("R1A", 12.1, 12.9, 0.52)], 20.3, 700.0, 12.4, "en"))
         win.live_page.on_level(0.02)
         pump(300)
         grab(win, "07-nghe-haitang")

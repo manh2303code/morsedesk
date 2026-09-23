@@ -84,6 +84,14 @@ class StreamUpdate:
     tentative: str = ""
     decoded: bool = False       # lần push này có thật sự chạy giải mã không
     audio_s: float = 0.0        # tổng số giây đã nhận
+    # Thông số của lần giải mã gần nhất, để trang Nghe hiện đúng những gì trang Giải mã hiện.
+    # Không có chúng thì chế độ nghe chỉ là một ô chữ trần, người vận hành không biết máy đang
+    # bắt được tone nào, tốc độ bao nhiêu, và có nên tin con chữ trước mắt hay không.
+    words: list = field(default_factory=list)   # Word của phần TẠM, kèm độ tin cậy
+    wpm: float | None = None
+    tone_hz: float | None = None
+    snr_db: float | None = None
+    language: str = ""
 
     @property
     def text(self) -> str:
@@ -116,6 +124,10 @@ class StreamDecoder:
     _committed_until: float = field(default=0.0, init=False)  # giây tuyệt đối đã chốt tới
     _prev_fresh: list = field(default_factory=list, init=False)   # phần chưa chốt của lần trước
     _tentative: str = field(default="", init=False)
+    _wpm: float | None = field(default=None, init=False)
+    _tone_hz: float | None = field(default=None, init=False)
+    _snr_db: float | None = field(default=None, init=False)
+    _language: str = field(default="", init=False)
 
     @property
     def committed(self) -> str:
@@ -138,6 +150,7 @@ class StreamDecoder:
         self._committed_until = 0.0
         self._prev_fresh = []
         self._tentative = ""
+        self._reset_stats()
 
     def push(self, block: np.ndarray) -> StreamUpdate:
         """Nhận một khối audio mono. Chỉ giải mã lại khi đã dồn đủ `chunk_s`."""
@@ -148,9 +161,13 @@ class StreamDecoder:
             self._since_decode += len(b)
         self._trim()
         if self._since_decode < int(self.chunk_s * self.sample_rate):
-            return StreamUpdate(self._committed, self._tentative, False, self.audio_s)
+            return self._snapshot(False)
         self._since_decode = 0
         return self._decode()
+
+    def _reset_stats(self) -> None:
+        self._wpm = self._tone_hz = self._snr_db = None
+        self._language = ""
 
     def flush(self) -> StreamUpdate:
         """Kết thúc phiên: giải mã nốt phần đuôi và chốt tất cả.
@@ -160,7 +177,7 @@ class StreamDecoder:
         self._since_decode = 0
         up = self._decode(final=True)
         self._committed, self._tentative = up.text.strip(), ""
-        return StreamUpdate(self._committed, "", True, self.audio_s)
+        return self._snapshot(True)
 
     # ---- nội bộ ----
     def _trim(self) -> None:
@@ -176,10 +193,19 @@ class StreamDecoder:
             self._buf = self._buf[cut:]
             self._dropped_frames += cut
 
+    def _snapshot(self, decoded: bool, words=None) -> StreamUpdate:
+        return StreamUpdate(self._committed, self._tentative, decoded, self.audio_s,
+                            list(words or []), self._wpm, self._tone_hz, self._snr_db,
+                            self._language)
+
     def _decode(self, final: bool = False) -> StreamUpdate:
         if len(self._buf) == 0:
-            return StreamUpdate(self._committed, self._tentative, False, self.audio_s)
+            return self._snapshot(False)
         res = self.decoder.decode_array(self._buf, self.sample_rate)
+        self._wpm = getattr(res, "wpm", None)
+        self._tone_hz = getattr(res, "tone_hz", None)
+        self._snr_db = getattr(res, "snr_db", None)
+        self._language = getattr(res, "language", "") or self._language
 
         # Quy về thời gian TUYỆT ĐỐI của phiên. Buffer chỉ giữ phần đuôi, nên mốc thời gian trong
         # kết quả là tương đối với đầu buffer; cộng số giây đã cắt bỏ mới so được giữa hai lần.
@@ -211,4 +237,7 @@ class StreamDecoder:
             self._committed = (self._committed + " " if self._committed else "") +                 " ".join(w[2] for w in stable)
             self._committed_until = stable[-1][1]
         self._tentative = (" " if self._committed and rest else "") + " ".join(w[2] for w in rest)
-        return StreamUpdate(self._committed, self._tentative, True, self.audio_s)
+        # Ghép lại Word cho phần tạm: giao diện cần `confidence` để tô chip theo độ tin cậy.
+        by_start = {round(w.start_s + offset, 3): w for w in res.words}
+        rest_words = [by_start[k] for k in (round(r[0], 3) for r in rest) if k in by_start]
+        return self._snapshot(True, rest_words)

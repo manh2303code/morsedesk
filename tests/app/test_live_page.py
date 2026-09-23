@@ -14,6 +14,8 @@ from morsedesk.app.live_page import TENTATIVE_COLOR, LivePage
 
 class FakeLiveWorker(QObject):
     text_ready = Signal(str, str)
+    stats_ready = Signal(object)
+    block_ready = Signal(object)
     level = Signal(float)
     listening = Signal(bool)
     failed = Signal(str)
@@ -23,8 +25,8 @@ class FakeLiveWorker(QObject):
         self.started_with: list = []
         self.stopped = 0
 
-    def start_listening(self, device=None) -> None:
-        self.started_with.append(device)
+    def start_listening(self, device=None, profile=None) -> None:
+        self.started_with.append((device, profile))
 
     def stop_listening(self) -> None:
         self.stopped += 1
@@ -45,7 +47,8 @@ def test_lists_devices_and_starts_with_selected_one(qtbot, monkeypatch):
     page.device_combo.setCurrentIndex(1)
     page.listen_button.setChecked(True)
     page._on_listen_clicked()
-    assert worker.started_with == [2]                   # gửi CHỈ SỐ thiết bị, không phải tên
+    # gửi CHỈ SỐ thiết bị (không phải tên) kèm bảng mã đang chọn
+    assert worker.started_with == [(2, "auto")]
 
 
 def test_stop_asks_worker_to_stop(qtbot, monkeypatch):
@@ -116,3 +119,36 @@ def test_clear_empties_both_tiers(qtbot, monkeypatch):
     worker.text_ready.emit("CQ", " DE")
     page.clear()
     assert page.view.toPlainText().strip() == ""
+
+
+def test_alphabet_defaults_to_auto_and_is_passed_through(qtbot, monkeypatch):
+    """Ghim cứng `en` là lý do bản tin tiếng Nga từng ra chữ tiếng Anh — phải mặc định `auto`."""
+    page, worker = _page(qtbot, monkeypatch)
+    assert page.profile_combo.currentData() == "auto"
+    page.profile_combo.setCurrentIndex(page.profile_combo.findData("ru"))
+    page.listen_button.setChecked(True)
+    page._on_listen_clicked()
+    assert worker.started_with[-1][1] == "ru"
+
+
+def test_stats_populate_words_tone_and_labels(qtbot, monkeypatch):
+    from morsedesk.api import Word
+    from morsedesk.model.stream import StreamUpdate
+
+    page, worker = _page(qtbot, monkeypatch)
+    up = StreamUpdate("CQ DE", " R1A", True, 12.0,
+                      [Word("R1A", 3.0, 3.8, 0.55)], 21.5, 712.0, 9.5, "ru")
+    worker.stats_ready.emit(up)
+    assert [lb.word.text for lb in page.word_view._labels] == ["R1A"]
+    assert page.waterfall._tone_hz == 712.0
+    txt = page.stats_label.text()
+    assert "21.5" in txt and "712" in txt and "9.5" in txt and "ru" in txt
+
+
+def test_waterfall_receives_audio_blocks(qtbot, monkeypatch):
+    import numpy as np
+
+    page, worker = _page(qtbot, monkeypatch)
+    before = float(page.waterfall._data.max())
+    worker.block_ready.emit(np.sin(2 * np.pi * 700 * np.arange(8000) / 8000).astype(np.float32))
+    assert float(page.waterfall._data.max()) > before

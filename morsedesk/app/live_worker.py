@@ -36,11 +36,13 @@ class LiveWorker(QThread):
     """
 
     text_ready = Signal(str, str)       # (đã chốt, tạm thời)
+    stats_ready = Signal(object)        # StreamUpdate đầy đủ: từ + độ tin cậy, WPM, tone, SNR
+    block_ready = Signal(object)        # khối audio thô, cho thác nước tần số
     level = Signal(float)               # RMS của khối vừa thu, cho vạch mức
     listening = Signal(bool)
     failed = Signal(str)                # thông điệp lỗi thiết bị, đã sẵn sàng hiển thị
 
-    def __init__(self, profile: str = "en", engine: str = "onnx",
+    def __init__(self, profile: str = "auto", engine: str = "onnx",
                  model_path=None, lm_dir=None, parent=None) -> None:
         super().__init__(parent)
         self.profile = profile
@@ -55,8 +57,13 @@ class LiveWorker(QThread):
         self._error: str | None = None
 
     # ---- điều khiển từ luồng giao diện ----
-    def start_listening(self, device: int | None = None) -> None:
+    def start_listening(self, device: int | None = None, profile: str | None = None) -> None:
+        """Bắt đầu nghe. `profile` khác lần trước thì dựng lại bộ giải mã."""
         self._device = device
+        if profile is not None and profile != self.profile:
+            self.profile = profile
+            self._stream = None         # buộc dựng lại với bảng mã mới
+            self._decoder = None
         self._want = True
 
     def stop_listening(self) -> None:
@@ -74,8 +81,14 @@ class LiveWorker(QThread):
             # `fallback=False`: bộ giải mã DSP dự phòng chạy lại trên TOÀN cửa sổ mỗi nửa giây,
             # tốn khoảng một phần năm thời gian mà ở chế độ live không dùng vào việc gì — quyết
             # định chọn đường đã cần cả clip mới có nghĩa.
+            # `skip_silent_windows=True` CHỈ ở chế độ nghe: phần lớn thời gian micro không có
+            # ai phát, và mô hình đọc nhiễu nền thành chữ (30 giây nhiễu trắng thuần ra `WE
+            # ARE`). Ở chế độ file thì ngược lại, cờ này làm CER xấu từ 9,70 % lên 13,28 % vì
+            # clip SNR thấp bị vạ lây — nên nó phải là lựa chọn của từng đường, không phải
+            # mặc định chung.
             self._decoder = Decoder(self.profile, engine=self.engine, model_path=self.model_path,
-                                    lm_store=lm_store, fallback=False)
+                                    lm_store=lm_store, fallback=False,
+                                    skip_silent_windows=True)
             self._stream = StreamDecoder(decoder=self._decoder)
         return self._stream
 
@@ -114,15 +127,18 @@ class LiveWorker(QThread):
                 if now - last_level >= LEVEL_EVERY_S:
                     last_level = now
                     self.level.emit(float(np.sqrt(np.mean(np.square(block)))) if len(block) else 0.0)
+                self.block_ready.emit(block)
                 up = stream.push(block)
                 if up.decoded:
                     self.text_ready.emit(up.committed, up.tentative)
+                    self.stats_ready.emit(up)
         finally:
             cap.stop()
             # Giải mã nốt phần đuôi còn trong bộ đệm: nếu không, câu cuối của phiên bị cụt.
             try:
                 final = stream.flush()
                 self.text_ready.emit(final.committed, "")
+                self.stats_ready.emit(final)
             except Exception:
                 log.warning("flush cuối phiên nghe thất bại", exc_info=True)
             self.listening.emit(False)
