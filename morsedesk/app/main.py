@@ -8,9 +8,10 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication, QLocale
+from PySide6.QtCore import QCoreApplication, QLocale, QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox
 
+from morsedesk.app import gc_guard
 from morsedesk.app.branding import install_app_identity, set_windows_app_id
 from morsedesk.app.fonts import apply_application_font
 from morsedesk.app.live_worker import LiveWorker
@@ -96,6 +97,9 @@ def load_settings() -> AppSettings:
 def create_app(args: argparse.Namespace) -> tuple[QApplication, MainWindow]:
     """Dựng QApplication (tái dùng nếu đã có) + MainWindow đã đặt ngôn ngữ giao diện; chưa show()."""
     app = QApplication.instance() or QApplication(sys.argv[:1])
+    # GC vòng chỉ ở luồng giao diện: nếu để Python gom ở luồng giải mã/nghe/PortAudio, widget bị
+    # hủy sai luồng -> timer mồ côi bắn vào vùng nhớ đã giải phóng (crash) hoặc kẹt khóa (treo).
+    gc_guard.install(app)
     set_app_identity()              # idempotent: create_app có thể được gọi thẳng (script, test)
     install_app_identity(app)       # logo trên thanh tác vụ, Alt-Tab, dock
     # Font trong gói: máy air-gap tối giản có thể không có font nào phủ Ә Ғ Қ Ң Ө Ұ Ү Һ І, khi
@@ -156,6 +160,9 @@ def main(argv: list[str] | None = None) -> int:
     install_app_identity(app)
     apply_application_font()
     splash = SplashScreen()
+    # Hủy khởi động. Đi qua hàng đợi sự kiện: nếu bị đóng lúc create_app còn chạy (trước exec),
+    # gọi quit() thẳng sẽ không có tác dụng vì vòng sự kiện chưa chạy.
+    splash.cancelled.connect(lambda: QTimer.singleShot(0, QApplication.instance().quit))
     splash.center_on_screen()
     splash.show()
     app.processEvents()

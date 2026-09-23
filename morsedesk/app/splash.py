@@ -82,11 +82,14 @@ def render_image(t_ms: float = 0.0, subtitle: str = "") -> QImage:
 
 class SplashScreen(QWidget):
     finished = Signal()
+    cancelled = Signal()        # bị đóng (Alt+F4, hệ điều hành) trước khi hoạt cảnh xong
 
     def __init__(self, subtitle: str = "") -> None:
         super().__init__(None, Qt.WindowType.SplashScreen | Qt.WindowType.FramelessWindowHint
                          | Qt.WindowType.WindowStaysOnTopHint)
         self.setFixedSize(SIZE)
+        # Tên riêng để công cụ ngoài (script kiểm bản .exe) phân biệt với cửa sổ chính "MorseDesk".
+        self.setWindowTitle("MorseDesk splash")
         self.subtitle = subtitle
         self._t = 0.0
         self._clock = QElapsedTimer()
@@ -103,6 +106,8 @@ class SplashScreen(QWidget):
 
     def play(self) -> None:
         """Chạy hoạt cảnh một lần; phát `finished` khi xong."""
+        if self._done:
+            return
         self._clock.start()
         self._timer.start()
 
@@ -116,6 +121,16 @@ class SplashScreen(QWidget):
             self._done = True
             self._timer.stop()
             self.finished.emit()
+
+    def closeEvent(self, event) -> None:
+        # Đóng màn hình chờ trước khi hoạt cảnh xong = hủy khởi động. Qt KHÔNG tính cửa sổ kiểu
+        # SplashScreen là "cửa sổ cuối cùng", nên nếu không báo ra thì tiến trình vẫn chạy ngầm và
+        # cửa sổ chính tự bật lên sau đó.
+        if not self._done:
+            self._done = True
+            self._timer.stop()
+            self.cancelled.emit()
+        super().closeEvent(event)
 
     def paintEvent(self, event) -> None:
         p = QPainter(self)

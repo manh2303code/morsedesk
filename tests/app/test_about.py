@@ -316,3 +316,21 @@ def test_play_button_is_an_icon_with_a_spoken_name(qtbot):
     qtbot.addWidget(bar)
     assert bar.play_button.text() == "" and not bar.play_button.icon().isNull()
     assert bar.play_button.accessibleName() == "Play" and bar.play_button.toolTip()
+
+
+def test_closing_the_splash_early_cancels_start_instead_of_opening_the_window(qtbot):
+    """Alt+F4 lúc màn hình chờ đang chạy: phải báo hủy và KHÔNG phát `finished` (nếu không, cửa
+    sổ chính tự bật lên sau đó trong khi người dùng đã đóng chương trình)."""
+    from morsedesk.app import splash as sp
+
+    w = sp.SplashScreen()
+    qtbot.addWidget(w)
+    w.show()
+    fired = []
+    w.finished.connect(lambda: fired.append("finished"))
+    w.play()
+    with qtbot.waitSignal(w.cancelled, timeout=2000):
+        w.close()
+    qtbot.wait(sp.TOTAL_MS + 200)
+    assert fired == []
+    assert w.windowTitle() != "MorseDesk"          # script kiểm .exe tìm cửa sổ chính theo tên này

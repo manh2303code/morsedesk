@@ -40,8 +40,11 @@ function Measure-Startup([string]$label) {
     while (((Get-Date) - $t0).TotalSeconds -lt 180 -and -not $window) {
         $parent.Refresh()
         if (-not $splash -and $parent.MainWindowHandle -ne 0) { $splash = ((Get-Date) - $t0).TotalSeconds }
+        # Tiến trình con hiện màn hình chờ động ("MorseDesk splash") trước, rồi mới tới cửa sổ chính.
         foreach ($c in Get-Children $parent.Id) {
-            if ($c.MainWindowHandle -ne 0) { $window = ((Get-Date) - $t0).TotalSeconds; $child = $c }
+            if ($c.MainWindowHandle -ne 0 -and $c.MainWindowTitle -eq "MorseDesk") {
+                $window = ((Get-Date) - $t0).TotalSeconds; $child = $c
+            }
         }
         Start-Sleep -Milliseconds 100
     }

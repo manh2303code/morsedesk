@@ -91,6 +91,12 @@ MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL="*" wsl.exe -d Ubuntu-26.04 -- \
   gọi song song.
 - `StreamDecoder` (live) **bọc chính `api.Decoder`**, không sao chép logic giải mã. Nhờ đó mọi
   cải thiện chất lượng tự có mặt ở cả hai đường.
+- **GC vòng của Python chỉ chạy ở luồng giao diện** (`app/gc_guard.py`, cài trong `create_app`;
+  test: fixture ở `tests/app/conftest.py`). GC tự động chạy ở luồng nào đang cấp phát — luồng giải
+  mã, luồng nghe, callback PortAudio — và gom luôn widget rác ở đó: widget bị hủy sai luồng, timer
+  0 ms của bố cục văn bản bắn vào vùng nhớ đã giải phóng (access violation trong
+  `QEventDispatcherWin32::event`) hoặc treo cứng (worker giữ mutex Qt chờ GIL, luồng chính giữ GIL
+  chờ mutex). Đã bắt được cả hai bằng `lldb` ngày 24/09. Đừng bật lại `gc` trong ứng dụng.
 
 ### Bốn tầng giải mã (số đo trên clip 15,8 s)
 
@@ -189,6 +195,9 @@ mình**. Trong một phiên đã có hai kết luận research không sống só
   tác dụng.
 - Windows onefile 134 MB khởi động 2,68 s so với onedir 315 MB khởi động 1,12 s. Lần chạy **đầu
   tiên mất 55 giây** vì Defender quét cả file.
+- Tiến trình con hiện **màn hình chờ động trước** (tiêu đề "MorseDesk splash"), rồi mới tới cửa
+  sổ chính "MorseDesk". Script kiểm tìm cửa sổ theo tiêu đề; đóng màn hình chờ giữa chừng là hủy
+  khởi động (Qt không tính cửa sổ kiểu SplashScreen là "cửa sổ cuối", nên phải tự thoát).
 - Onefile chạy **hai tiến trình** (cha bung, con chạy app) — `Start-Process -PassThru` trả tiến
   trình cha nên `MainWindowHandle` luôn 0, dễ tưởng app hỏng.
 

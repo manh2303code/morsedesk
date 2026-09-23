@@ -148,3 +148,46 @@ def test_splash_is_closed_before_the_missing_models_dialog(tmp_path, monkeypatch
     monkeypatch.setattr(app_main, "show_missing_dialog", lambda msg: events.append("dialog"))
     assert main(["--model", str(tmp_path / "none.onnx"), "--lm-dir", str(tmp_path)]) == 2
     assert events == ["close", "dialog"]
+
+
+def test_gc_runs_only_on_the_gui_thread(qapp):
+    """GC tự động tắt; bộ gom trên luồng giao diện vẫn gom vòng tham chiếu theo ngưỡng thế hệ."""
+    import gc
+
+    from morsedesk.app import gc_guard
+
+    was = gc.isenabled()
+    gc.enable()
+    guard = gc_guard.GuiThreadGC(None, interval_ms=10_000)
+    try:
+        assert not gc.isenabled()
+
+        class Node:
+            pass
+
+        for _ in range(guard.threshold[0] * 3):       # đủ vượt ngưỡng thế hệ 0
+            a, b = Node(), Node()
+            a.other, b.other = b, a
+        assert guard.check() > 0
+    finally:
+        guard.stop()
+        assert gc.isenabled()
+        if not was:
+            gc.disable()
+
+
+def test_create_app_installs_the_gc_guard_once(qtbot, tiny_lm_dir, tmp_path, monkeypatch):
+    import gc
+
+    from morsedesk.app import gc_guard
+
+    settings = AppSettings(settings=QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+    monkeypatch.setattr(app_main, "load_settings", lambda: settings)
+    args = build_parser().parse_args(["--engine", "baseline", "--lm-dir", str(tiny_lm_dir)])
+    app, window = create_app(args)
+    qtbot.addWidget(window)
+    try:
+        assert gc_guard.install(app) is gc_guard.install(app)
+        assert not gc.isenabled()
+    finally:
+        window.close()

@@ -1,5 +1,6 @@
 """Fixture cho test GUI: chạy offscreen, LM tí hon, WAV mẫu."""
 
+import gc
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -19,6 +20,33 @@ CORPUS = {
     "ru": ["ПРИВЕТ МИР", "ВСЕМ ПРИВЕТ", "ДОБРОЕ УТРО"],
     "kk-cyrl-ru": ["СӘЛЕМ ӘЛЕМ", "РАХМЕТ", "ҚАЙЫРЛЫ ТАҢ"],
 }
+
+
+@pytest.fixture(autouse=True, scope="package")
+def _gc_only_on_gui_thread():
+    """Như `gc_guard` của ứng dụng: không để GC tự động chạy ở luồng worker trong test GUI.
+
+    Widget của test trước thường nằm trong vòng tham chiếu; nếu GC gom chúng ở luồng
+    `DecoderWorker` (đang cấp phát dày khi giải mã) thì chúng bị hủy sai luồng: access violation
+    trong `QEventDispatcherWin32::event` hoặc treo cứng (worker giữ mutex Qt chờ GIL, luồng chính
+    giữ GIL chờ mutex). Đo 24/09: 7/8 lượt chạy đầy đủ crash hoặc treo trước khi có chốt này.
+    """
+    was = gc.isenabled()
+    gc.disable()
+    yield
+    if was:
+        gc.enable()
+
+
+@pytest.fixture(autouse=True)
+def _collect_on_gui_thread(_gc_only_on_gui_thread):
+    yield
+    # Sau khi pytest-qt đã đóng widget của test: xóa hẳn chúng rồi gom vòng — tại luồng này.
+    from PySide6.QtCore import QCoreApplication, QEvent
+
+    if QCoreApplication.instance() is not None:
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    gc.collect()
 
 
 @pytest.fixture(scope="session")
