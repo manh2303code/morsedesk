@@ -27,11 +27,10 @@ from morsedesk.app.widgets.banner import Banner
 from morsedesk.app.widgets.flags import LanguageBar
 from morsedesk.app.worker import DecoderWorker, Player
 
-# Tên hiển thị ngôn ngữ giao diện. Bản dịch Kazakh chưa được người bản ngữ soát (CP-12) nên có
-# nhãn "жоба" — đúng nghĩa "bản nháp" trong chính tiếng Kazakh. Trước đây nhãn này là chữ "nháp"
-# tiếng Việt, một ghi chú nội bộ lọt thẳng ra giao diện người dùng cuối; ảnh chụp AppImage trên
-# Ubuntu sạch mới làm nó lộ ra.
-LANGUAGE_NAMES = {"en": "English", "ru": "Русский", "kk": "Қазақша (жоба)"}
+# Tên hiển thị ngôn ngữ giao diện, viết bằng chính ngôn ngữ đó. KHÔNG gắn nhãn "bản nháp" cho bản
+# nào: tác giả là người Kazakh, và một ghi chú quy trình nội bộ (soát bản dịch, CP-12) không phải
+# việc của người dùng cuối — nó chỉ làm họ mất tin vào đúng ngôn ngữ của mình.
+LANGUAGE_NAMES = {"en": "English", "ru": "Русский", "kk": "Қазақша"}
 
 
 class MainWindow(QMainWindow):

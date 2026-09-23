@@ -50,17 +50,17 @@ its score for every language, which path produced the text, and any warnings.</p
 
 <table class="note" width="100%" cellspacing="0" cellpadding="10" bgcolor="#ECE7F7"><tr><td>
 <b>Where the time goes.</b> Beam search with the language model takes about 91&nbsp;% of the
-decoding time; the neural network takes about 2.4&nbsp;%. Making MorseDesk faster means making the
-search faster, not the network smaller.</td></tr></table>
+decoding time; the neural network takes about 2.4&nbsp;%. This is why choosing the language by hand,
+which searches one language instead of three, decodes two and a half to three times faster.</td></tr></table>
 
 <a name="signal"></a><h2 class="signal">Signal layer</h2>
 
 <h3>Loading audio</h3>
-<p>WAV, FLAC, OGG/OGA and AIFF/AIF are read through libsndfile; MP3 through libsndfile where its
-build supports it, otherwise through ffmpeg if installed. Stereo is averaged to mono. Everything is
-resampled to <b>8,000 samples per second</b> with a polyphase filter (<span class="mono">resample_poly</span>).
-Linear interpolation was measured to cost 5 points of character error rate on a comparable
-decoder, so it is not used. Files longer than one hour are refused.</p>
+<p>WAV, FLAC, OGG/OGA, AIFF/AIF and MP3 are read through the libsndfile library bundled with the
+program. Stereo is averaged to mono. Everything is resampled to <b>8,000 samples per second</b> with
+a polyphase filter (<span class="mono">resample_poly</span>); simple linear interpolation is not
+used, because it measurably raises the character error rate. Files longer than one hour are
+refused.</p>
 
 <h3>Finding the tone</h3>
 <p>A short-time Fourier transform (256-point Hann window, 31.25&nbsp;Hz per bin, a frame every
@@ -75,8 +75,8 @@ is corrected for the spread of the Hann window (1.76&nbsp;dB) and the band width
 A second peak at least 6&nbsp;dB above the band and at least half the strength of the first raises
 the warning <i>second tone</i>.</p>
 <p>On long files the analysis uses at most 60 seconds, taken as six slices spread evenly across the
-recording. This cut the memory of this step for a 20-minute file from 1,805&nbsp;MB to
-92&nbsp;MB, with the same answer.</p>
+recording. For a 20-minute file this step needs about 92&nbsp;MB instead of 1.8&nbsp;GB, with the
+same answer.</p>
 
 <table class="note" width="100%" cellspacing="0" cellpadding="10" bgcolor="#E1F1F2"><tr><td>
 <b>When no peak clears 6 dB.</b> Under deep fading at 0&nbsp;dB, a real signal often fails the
@@ -86,11 +86,11 @@ when the band holds no energy at all, so digital silence stays silent.</td></tr>
 
 <h3>Dither for very clean audio</h3>
 <p>The network was trained on signal-to-noise ratios from −6 to 25&nbsp;dB. Real broadcast
-recordings measure 49 to 143&nbsp;dB, a condition it never saw, and its error rate on them was
-89.8&nbsp;%. Above 25&nbsp;dB MorseDesk therefore adds white noise with a fixed seed to bring the
-signal down to 20&nbsp;dB. On a 20&nbsp;WPM ARRL recording this alone moved the network from
-89.8&nbsp;% to 29.9&nbsp;% error; the classic decoder (below) then takes over such recordings
-entirely.</p>
+recordings measure 49 to 143&nbsp;dB, a condition it never saw. Above 25&nbsp;dB MorseDesk therefore
+adds white noise with a fixed seed to bring the signal down to 20&nbsp;dB. On a 20&nbsp;WPM ARRL
+recording this alone moved the network from 89.8&nbsp;% to 29.9&nbsp;% error (measured with an
+earlier model). On such clean recordings the classic decoder (below) usually supplies the
+segmentation.</p>
 
 <h3>Eleven features every 5 milliseconds</h3>
 <table class="data" width="100%" cellspacing="0" cellpadding="6">
@@ -111,14 +111,14 @@ tone and normalises its own level, so drifting pitch and changing signal strengt
 window without a detectable tone reuses the previous window's tone. The network runs on each
 window; for every frame, the output of the window whose centre is nearest is kept.</p>
 <table class="data" width="100%" cellspacing="0" cellpadding="6">
-<tr><th>Window / step</th><th class="num">Error rate, test set T1</th><th>Change</th></tr>
+<tr><th>Window / step</th><th class="num">Error rate, test set T1 (model 0.2.0)</th><th>Change</th></tr>
 <tr><td>4 s / 3 s</td><td class="num">17.96 %</td><td>starting point</td></tr>
 <tr><td>8 s / 2 s</td><td class="num">11.52 %</td><td>every noise type and every language improved</td></tr>
-<tr><td>12 s / 2 s</td><td class="num">10.87 %</td><td>current; 10 s and 16 s give the same</td></tr>
+<tr><td>12 s / 2 s</td><td class="num">10.87 %</td><td>chosen</td></tr>
 </table>
-<p>No retraining was involved. The network reads in both directions, and a 4-second window at
-12&nbsp;WPM holds only a few characters of context. This was the largest single improvement in the
-project.</p>
+<p>No retraining was involved. The network reads in both directions, and a short window cuts a
+message into pieces with little context on either side: at 12&nbsp;WPM a 4-second window holds
+only a few characters.</p>
 
 <a name="model"></a><h2 class="model">Acoustic model</h2>
 <p>A small convolutional-recurrent network trained with connectionist temporal classification
@@ -157,8 +157,7 @@ spacing.</td></tr>
 ±15&nbsp;% across a message; 20&nbsp;% sent in "bug" (semi-automatic key) style.</td></tr>
 <tr><td>Tone</td><td>400–1200&nbsp;Hz, drifting up to ±2&nbsp;Hz per second.</td></tr>
 <tr><td>Noise</td><td>Signal-to-noise ratio −6 to 25&nbsp;dB in 500&nbsp;Hz.</td></tr>
-<tr><td>Fading (QSB)</td><td>60&nbsp;% of clips: depth 10–24&nbsp;dB, period 2–8&nbsp;s. (Earlier models:
-40&nbsp;%, 5–30&nbsp;dB, 2–20&nbsp;s. The harder setting is what cut fading errors by a fifth.)</td></tr>
+<tr><td>Fading (QSB)</td><td>60&nbsp;% of clips: depth 10–24&nbsp;dB, period 2–8&nbsp;s.</td></tr>
 <tr><td>Interference (QRM)</td><td>25&nbsp;% of clips: another Morse station (70&nbsp;%) or a
 carrier (30&nbsp;%), 150–600&nbsp;Hz away, 3–20&nbsp;dB.</td></tr>
 <tr><td>Static (QRN)</td><td>20&nbsp;% of clips: 5 to 50 impulses per second.</td></tr>
@@ -166,42 +165,29 @@ carrier (30&nbsp;%), 150–600&nbsp;Hz away, 3–20&nbsp;dB.</td></tr>
 </table>
 
 <p>Optimiser AdamW, learning rate 0.001 with 500 warm-up steps and cosine decay, batch 16,
-60,000 steps in 2.7 hours, on an NVIDIA RTX&nbsp;5090 laptop GPU. The GPU sits idle most of the time: the
-bottleneck is generating audio on 14 processor cores.</p>
+60,000 steps in 2.7 hours, on an NVIDIA RTX&nbsp;5090 laptop GPU.</p>
 
 <h3>How this model was chosen</h3>
-<p>Every candidate is scored by character error rate on the fixed test set T1 with the same
-pipeline. The validation score printed during training is <i>not</i> used to compare runs: each run
-draws its own validation clips, so two runs are graded on different exams.</p>
-<table class="data" width="100%" cellspacing="0" cellpadding="6">
-<tr><th>Run</th><th class="num">Hidden</th><th class="num">Steps</th><th>Idea</th><th class="num">T1 error</th></tr>
-<tr><td>E9</td><td class="num">256</td><td class="num">40,000</td><td>larger network (model 0.3.0)</td><td class="num">9.70 %</td></tr>
-<tr><td>E14</td><td class="num">256</td><td class="num">27,000</td><td>same as E9, other seed</td><td class="num">10.37 %</td></tr>
-<tr><td>E3</td><td class="num">128</td><td class="num">21,500</td><td>previous model</td><td class="num">10.87 %</td></tr>
-<tr><td>E11</td><td class="num">128</td><td class="num">28,000</td><td>add very clean signals</td><td class="num">10.88 %</td></tr>
-<tr><td>E6</td><td class="num">128</td><td class="num">27,000</td><td>heavier fading</td><td class="num">10.92 %</td></tr>
-<tr><td>E4</td><td class="num">128</td><td class="num">21,000</td><td>per-window features</td><td class="num">10.96 %</td></tr>
-<tr><td>E15</td><td class="num">128</td><td class="num">30,000</td><td>train on 8–20 s clips</td><td class="num">11.01 %</td></tr>
-<tr><td>E13</td><td class="num">128</td><td class="num">27,000</td><td>train on 12 s windows</td><td class="num">11.46 %</td></tr>
-<tr><td>E2</td><td class="num">128</td><td class="num">6,500</td><td>first per-window run</td><td class="num">13.50 %</td></tr>
-<tr><td>E1</td><td class="num">96</td><td class="num">8,000</td><td>baseline</td><td class="num">16.08 %</td></tr>
-</table>
-<p class="muted">Scores with the 12-second windows and before the path-selection fix described
-below: comparable with each other, not with the current figures.</p>
+<p>Candidates are compared by character error rate on fixed test sets, all decoded with the same
+pipeline — never by the validation score printed during training, because each training run draws
+its own validation clips and two runs would be graded on different exams. Of the variations tried
+on the earlier, smaller network (heavier fading, per-window features, longer training clips,
+training on 12-second windows, extra very clean signals), only a larger network helped clearly;
+the others were no better or worse.</p>
 
-<h3>The current model: E16</h3>
-<p>E16 combines the two ideas that each helped: the larger network, made larger again (hidden
-384, 1,119,425 parameters), and the heavier fading of E6, trained for 60,000 steps. It was compared
-with E9 on the same clips, with today's pipeline, and adopted as model 0.4.0 because it won on the
-development set and the win held on T1 and did not cost anything on real recordings.</p>
+<h3>The current model (0.4.0)</h3>
+<p>Model 0.4.0 makes the network larger again (hidden size 384, 1,119,425 parameters) and trains it
+on harder fading for 60,000 steps. It was compared with model 0.3.0 on the same clips, with the
+same pipeline, and adopted because it won on the development set, the win held on T1, and it cost
+nothing on real recordings.</p>
 <table class="data" width="100%" cellspacing="0" cellpadding="6">
-<tr><th>Set</th><th class="num">E9 (0.3.0)</th><th class="num">E16 (0.4.0)</th><th class="num">Difference, 95&nbsp;% interval</th><th>Verdict</th></tr>
+<tr><th>Set</th><th class="num">Model 0.3.0</th><th class="num">Model 0.4.0</th><th class="num">Difference, 95&nbsp;% interval</th><th>Verdict</th></tr>
 <tr><td>Development</td><td class="num">10.38 %</td><td class="num">8.07 %</td><td class="num">−2.31 [−3.10; −1.52]</td><td>better</td></tr>
 <tr><td>T1</td><td class="num">8.99 %</td><td class="num">7.78 %</td><td class="num">−1.21 [−1.84; −0.60]</td><td>better</td></tr>
 <tr><td>T2</td><td class="num">1.84 %</td><td class="num">1.62 %</td><td class="num">−0.22 [−0.65; 0.00]</td><td>no difference</td></tr>
 </table>
-<p>Most of the gain is on fading: 38.47&nbsp;% to 29.31&nbsp;% on the development set. The ten
-ARRL recordings decode identically with both models.</p>
+<p>Most of the gain is on fading: 38.47&nbsp;% to 29.31&nbsp;% on the development set, about a
+quarter fewer errors. The ten ARRL recordings decode identically with both models.</p>
 
 <a name="language"></a><h2 class="language">Language layer</h2>
 
@@ -211,11 +197,11 @@ into every letter it can mean in the current alphabet, and each candidate is sco
 <p class="formula">acoustic log-probability + 0.3 × language-model log-probability
 + 1.0 per word + 1.25 per character + 1.0 per known word</p>
 <p>The per-character bonus exists because 74&nbsp;% of the network's errors were deletions, not
-insertions; without it the search was too timid on fading signals. Known words are the common
-radio words (CQ, DE, PSE, RST, QTH, 73 and others) plus a few per language (ПРИВЕТ, СПАСИБО,
-СӘЛЕМ, РАХМЕТ, ҚАЗАҚСТАН). Symbols with probability below 0.001 in a frame are skipped, with at
-most eight per frame. The weights were re-checked for this model: 33 configurations on a separate
-development set, none significantly better.</p>
+insertions; without it the search was too timid on fading signals. Known words are common radio
+words for English (CQ, DE, PSE, RST, QTH, 73 and others) and a few common words for Russian and
+Kazakh (ПРИВЕТ, СПАСИБО, СӘЛЕМ, РАХМЕТ, ҚАЗАҚСТАН). Symbols with probability below 0.001 in a
+frame are skipped, with at most eight per frame. The weights were tuned for model 0.3.0 (33
+configurations on a separate development set, none significantly better) and kept for 0.4.0.</p>
 
 <h3>Language models</h3>
 <p>One character 6-gram model per language, built with KenLM and stored as compact tables read
@@ -229,22 +215,25 @@ messages</td><td class="num">13.6 MB</td><td class="num">3.62</td></tr>
 <tr><td>Kazakh</td><td>KazNERD corpus (88,540 lines); 20,000 generated radio messages</td><td class="num">10.1 MB</td><td class="num">3.04</td></tr>
 </table>
 <p>Scored against the original text, the language model lowered the error rate on T1 from
-13.57&nbsp;% to 9.70&nbsp;% with the previous model, and by about 8.5 points for Kazakh, where it
-also restores the Kazakh letters.</p>
+13.57&nbsp;% to 9.70&nbsp;% with model 0.3.0, and by about 8.5 points for Kazakh, where it also
+restores the Kazakh letters.</p>
 
 <h3>Choosing the language</h3>
 <p>The network output is split at silences of at least 3 seconds, and at most every 30 seconds.
 For each segment, beam search runs once per language; the score is the language-model
 log-probability per character of the best transcript. The highest score wins. When the lead is
 under 0.15 nats per character, the segment keeps the previous segment's language. The file's
-language is the vote of all segments weighted by their character counts.</p>
+language is the vote of all segments weighted by their character counts, and the <b>whole message
+is then written in that one alphabet</b>: a real message does not switch language part-way, so a
+short noisy segment that happens to score better in another language no longer comes out in
+another alphabet. Every segment has already been searched in every language, so this costs
+nothing.</p>
 <table class="data" width="100%" cellspacing="0" cellpadding="6">
 <tr><th>Message length</th><th>Result of automatic choice</th></tr>
-<tr><td>8 characters or more</td><td>as good as choosing by hand (clean signals, 23 September)</td></tr>
-<tr><td>below 8 characters</td><td>correct 66.7&nbsp;% of the time</td></tr>
-<tr><td>20 characters</td><td>71&nbsp;%; errors are Russian read as Kazakh (22 September)</td></tr>
-<tr><td>50 characters</td><td>100&nbsp;% (22 September)</td></tr>
-<tr><td>10 real ARRL recordings</td><td>identical to choosing by hand, recording by recording (23 September)</td></tr>
+<tr><td>under 8 characters</td><td>correct 66.7&nbsp;% of the time</td></tr>
+<tr><td>20 characters</td><td>71&nbsp;%; the errors are Russian read as Kazakh</td></tr>
+<tr><td>50 characters or more</td><td>100&nbsp;%, as good as choosing by hand</td></tr>
+<tr><td>10 real ARRL recordings</td><td>identical to choosing by hand, recording by recording</td></tr>
 </table>
 <p>Russian is the hard case: the Kazakh table contains every Russian pattern plus nine more
 letters, so a short Russian message contains nothing that rules Kazakh out.</p>
@@ -278,32 +267,32 @@ is kept in the result as an alternative.</p>
 <table class="note" width="100%" cellspacing="0" cellpadding="10" bgcolor="#E4EAF6"><tr><td>
 <b>Why the length rule exists.</b> On a fading signal the classic decoder reads the strong parts
 perfectly and leaves the faded parts blank; what it did read fits the grid, so its timing cost
-stays low. Until 23 September that fooled rule 2. At 20&nbsp;dB with fading, clips taking the
-classic path had 72.5&nbsp;% error against 11.5&nbsp;% for the network. With the length rule,
-fading at 20&nbsp;dB fell from 14.18&nbsp;% to 5.32&nbsp;% on T1 and from 42.00&nbsp;% to
-6.75&nbsp;% on the development set. Removing rule 2's timing branch altogether scored better on generated
-clips but raised the error on the real recordings from 3.93&nbsp;% to 12.64&nbsp;% (as scored at
-the time), so the branch stays.</td></tr></table>
+stays low, and rule 2 alone would accept it. Without rule 3, clips at 20&nbsp;dB with fading that
+took the classic path had 72.5&nbsp;% error against 11.5&nbsp;% for the network; with it, fading at
+20&nbsp;dB is 5.32&nbsp;% on T1 and 6.75&nbsp;% on the development set instead of 14.18&nbsp;% and
+42.00&nbsp;%. Dropping rule 2's timing branch altogether scores better on generated clips but more
+than triples the error on the real recordings, so the branch stays.</td></tr></table>
 
 <a name="safety"></a><h2 class="safety">Confidence and safety</h2>
 
 <h3>Word confidence</h3>
 <p>Each word's confidence comes from the network's probabilities for the frames of its characters.
-The interface colours words green from 0.8, yellow from 0.5, and red below. When the average
+The interface underlines words below 0.8 in yellow and below 0.5 in red; words from 0.8 up carry no
+mark. When the playback runs, the word being played is highlighted. When the average
 over the clip is below 0.6 the result carries the warning <i>low confidence</i>; below 0.5, the
 classic decoder's reading is shown next to it.</p>
 
 <h3>No invented text</h3>
 <p>A network trained only on Morse has never been taught to say "there is nothing here", and the
-language model will shape noise into plausible words. Before 23 September, all 81 non-Morse test
-inputs produced text: digital silence became <span class="mono">T</span>, a steady carrier
-<span class="mono">73</span>, white noise <span class="mono">SEE</span>. Two rules fixed it:</p>
+language model will shape noise into plausible words. Left unchecked, it does: in a test of 81
+inputs without Morse, digital silence became <span class="mono">T</span>, a steady carrier
+<span class="mono">73</span>, white noise <span class="mono">SEE</span>. Two rules prevent it:</p>
 <ul>
 <li>no tone is guessed from a band that holds no energy;</li>
 <li>when the average confidence over the whole clip is below <b>0.15</b>, the result is empty,
 with the warning <i>no Morse signal</i>, while tone and signal-to-noise are still reported.</li>
 </ul>
-<p>All 120 noise runs are now empty. On test clips that do contain Morse, the threshold removed three clips on T1
+<p>In 120 runs of noise without Morse, the result is empty every time. On test clips that do contain Morse, the threshold removed three clips on T1
 (which were already more than 70&nbsp;% wrong) and none on the development set. One case remains:
 noise that switches on and off perfectly regularly is, by its envelope, a Morse string of E, and
 comes out as <span class="mono">EEEE</span>.</p>
@@ -332,12 +321,15 @@ text that is at least 1&nbsp;s old, so the network has heard what comes after it
 committed by their absolute time in the stream, so repeated words such as CQ&nbsp;CQ are not
 merged. Windows without a tone are treated as silence, which stops the network reading background
 noise as letters.</p>
+<p>With the language set to automatic, each decode sees only the last few seconds and chooses the
+language again. Once about fifty characters have been committed and three decodes in a row agree,
+the session keeps that language until it is cleared, so the running text never switches alphabet
+part-way.</p>
 <table class="data" width="100%" cellspacing="0" cellpadding="6">
-<tr><th>Measure (22–23 September, model 0.3.0)</th><th class="num">Value</th></tr>
+<tr><th>Measure (model 0.3.0)</th><th class="num">Value</th></tr>
 <tr><td>Delay behind the audio, 79.8 minutes of ARRL recordings</td><td class="num">1.29 s</td></tr>
 <tr><td>Error rate, 40 English clips: file</td><td class="num">14.21 %</td></tr>
 <tr><td>Error rate, same clips: live</td><td class="num">17.31 %</td></tr>
-<tr><td>Live with LocalAgreement-2 confirmation (rejected)</td><td class="num">38.41 %</td></tr>
 </table>
 <p>Less than 0.5&nbsp;s of look-ahead makes accuracy collapse; more than 8&nbsp;s of context
 brings nothing.</p>
@@ -425,9 +417,6 @@ ebook2cw.</td></tr>
 <tr><td>T2, Kazakh (ebook2cw)</td><td class="num">3.50 %</td><td>&nbsp;</td></tr>
 <tr><td>T2, all 40</td><td class="num">1.62 %</td><td>word error rate 6.62 %</td></tr>
 </table>
-<p class="muted">Until 23 September, T2 reported 3.93&nbsp;%: its Kazakh reference texts had been
-flattened to Russian letters (САЛЕМ for СӘЛЕМ), which counted every correctly restored Kazakh letter
-as an error.</p>
 
 <h3>By channel</h3>
 <table class="data" width="100%" cellspacing="0" cellpadding="6">
@@ -436,7 +425,7 @@ as an error.</p>
 <tr><td>Development</td><td class="num">2.56</td><td class="num">3.05</td><td class="num">2.70</td><td class="num">2.73</td><td class="num">29.31</td></tr>
 </table>
 
-<h3>By language (T1)</h3>
+<h3>By language</h3>
 <table class="data" width="100%" cellspacing="0" cellpadding="6">
 <tr><th>Language</th><th class="num">T1</th><th class="num">Development</th></tr>
 <tr><td>English</td><td class="num">7.73 %</td><td class="num">6.76 %</td></tr>
@@ -447,8 +436,8 @@ as an error.</p>
 <h3>Fading by signal strength</h3>
 <p>Nearly all remaining error is fading. In T1 the fade is 20&nbsp;dB deep with a 4-second
 period, so at 20&nbsp;dB the troughs reach 0&nbsp;dB, which the decoder handles on a steady signal
-(clean at 0&nbsp;dB: about 3&nbsp;%). Below 6&nbsp;dB the troughs fall 14 to 20&nbsp;dB under the
-noise, and the letters there are simply not audible.</p>
+(clean at 0&nbsp;dB: about 3&nbsp;%). At 6&nbsp;dB and below the troughs fall 14 to 20&nbsp;dB under
+the noise, and most letters there cannot be recovered.</p>
 <table class="data" width="100%" cellspacing="0" cellpadding="6">
 <tr><th>Signal-to-noise</th><th class="num">0 dB</th><th class="num">3 dB</th><th class="num">6 dB</th><th class="num">10 dB</th><th class="num">20 dB</th></tr>
 <tr><td>T1, fading</td><td class="num">59.43</td><td class="num">46.28</td><td class="num">32.77</td><td class="num">19.83</td><td class="num">4.74</td></tr>
@@ -457,17 +446,17 @@ noise, and the letters there are simply not audible.</p>
 
 <h3>Clean signals</h3>
 <p>Every tone from 300 to 1500&nbsp;Hz and every speed from 5 to 45&nbsp;WPM decodes with 0&nbsp;%
-error on clean audio (measured with model 0.3.0; clean audio takes the classic decoder's path, so
-the network change does not affect it). All remaining room is in noise.</p>
+error on clean audio (measured with model 0.3.0). All remaining room is in noise.</p>
 
 <h3>Compared with a public decoder</h3>
 <table class="data" width="100%" cellspacing="0" cellpadding="6">
 <tr><th>Decoder</th><th class="num">T1 error</th><th class="num">Fading</th><th>Alphabets</th></tr>
-<tr><td>MorseDesk 0.4.0</td><td class="num">7.78 %</td><td class="num">32.61 %</td><td>English, Russian, Kazakh</td></tr>
+<tr><td>MorseDesk (model 0.4.0)</td><td class="num">7.78 %</td><td class="num">32.61 %</td><td>English, Russian, Kazakh</td></tr>
 <tr><td>DeepCW (pretrained, greedy)</td><td class="num">23.70 %</td><td class="num">47.00 %</td><td>Latin only; Russian and Kazakh clips transliterated for it</td></tr>
 </table>
 <p class="muted">DeepCW is used only as a yardstick; none of its code or weights is part of
-MorseDesk.</p>
+MorseDesk. T1 was also used to choose among MorseDesk's own models, which favours MorseDesk
+slightly.</p>
 
 <h3>How precise these numbers are</h3>
 <p>By bootstrap, the overall error rate of a 500-clip set is known to about ±1 point, a
@@ -490,19 +479,20 @@ language for every segment. If you know the language, choosing it by hand is fas
 
 <a name="limits"></a><h2 class="safety">Limits and known issues</h2>
 <ul>
-<li><b>Deep fading below about 6 dB</b>: 32 to 59&nbsp;% character error. The troughs are
-below the noise; this is physical, not a software limit.</li>
+<li><b>Deep fading at 6&nbsp;dB and below</b>: 32 to 59&nbsp;% character error. The troughs sink
+below the noise; this is mostly a physical limit.</li>
 <li><b>One signal</b>: the strongest tone is decoded; a second station of similar strength raises
 a warning.</li>
-<li><b>Short messages</b>: the automatic alphabet choice needs about 8 characters. Radio
-abbreviations are shared by all alphabets.</li>
-<li><b>Mixed alphabets</b>: the language is chosen per segment, so a message whose segments score
-differently can come out partly Latin and partly Cyrillic. Choosing the language by hand avoids
-it.</li>
-<li><b>Live mode</b>: about 3 points less accurate than files; 1.3&nbsp;s behind the audio.</li>
+<li><b>Short messages</b>: the automatic alphabet choice is reliable from about 50 characters.
+Radio abbreviations do not help: their codes exist in every alphabet (CQ becomes ЦЩ in
+Cyrillic).</li>
+<li><b>One alphabet per message</b>: a message that really mixes languages is written entirely in
+the language that dominates it.</li>
+<li><b>Live mode</b>: about 3 points less accurate than files (model 0.3.0); 1.3&nbsp;s behind the
+audio.</li>
 <li><b>Periodic noise</b> can be read as a string of E.</li>
 <li><b>Kazakh</b>: when context is short, the Russian letter may appear where a Kazakh letter was
-meant (К for Қ). The Kazakh interface text awaits review by a native speaker.</li>
+meant (К for Қ).</li>
 <li><b>Files</b> up to one hour. <b>Memory</b> grows with the length of the file: about 2&nbsp;GB
 for one hour of audio, because the network's output for all overlapping windows is kept until the
 end.</li>
@@ -513,17 +503,19 @@ end.</li>
 <tr><th width="22%">Build</th><th>Details</th></tr>
 <tr><td>Windows</td><td>One file, <span class="mono">MorseDesk.exe</span>, about 139&nbsp;MB,
 built with PyInstaller. It unpacks to a temporary folder at start (splash screen after
-0.2–0.3&nbsp;s, window after about 3&nbsp;s) and removes it on a normal exit.</td></tr>
+0.2–0.3&nbsp;s, main window after about 5&nbsp;s including the start animation) and removes it on a
+normal exit. The first start of a new copy can take up to a minute while Windows scans the
+file.</td></tr>
 <tr><td>Linux</td><td><span class="mono">MorseDesk-x86_64.AppImage</span>, about 148&nbsp;MB,
 built on Ubuntu 22.04 so it runs on 22.04 and later. It carries the X11 libraries a minimal system
-may lack, and the fonts needed for Kazakh letters. Mark it executable, or use
-<span class="mono">scripts/install_linux.sh</span> to add it to the application menu.</td></tr>
+may lack, and the fonts needed for Kazakh letters. Mark it executable
+(<span class="mono">chmod +x</span>) and start it.</td></tr>
 <tr><td>Self-test</td><td><span class="mono">--self-test IN.wav OUT.json</span> decodes a file with
-the bundled models and writes the result without opening a window. Release checks require the
-same text as the source code on the same file.</td></tr>
-<tr><td>Command line</td><td><span class="mono">morsedesk decode FILE</span>,
-<span class="mono">morsedesk encode TEXT --out FILE</span>, and
-<span class="mono">morsedesk bench</span> for the test sets.</td></tr>
+the bundled models and writes the result without opening a window — a quick way to check a copy
+on a new computer.</td></tr>
+<tr><td>Command line</td><td>Only when installed from source code:
+<span class="mono">morsedesk decode FILE</span> and
+<span class="mono">morsedesk encode TEXT --out FILE</span>.</td></tr>
 </table>
 
 </body>

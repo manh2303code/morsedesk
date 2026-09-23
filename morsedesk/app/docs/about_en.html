@@ -2,38 +2,41 @@
 <body>
 
 <h2>What it works out on its own</h2>
-<p>Most Morse decoders ask you to set the pitch, the speed and the alphabet before they can read
-anything. MorseDesk measures all three from the recording itself.</p>
+<p>MorseDesk measures the pitch, the speed and the alphabet from the recording itself. There is
+nothing to set before you decode.</p>
 
 <table class="facts" width="100%" cellspacing="0" cellpadding="8">
 <tr><td class="term" width="26%">Alphabet</td>
 <td>English, Russian or Kazakh. MorseDesk reads the message with each alphabet and keeps the one
-that reads like real language. From about eight characters on, the automatic choice is as good as
-choosing by hand.</td></tr>
+that reads like real language, then writes the whole message in that one alphabet. From about
+fifty characters on, the automatic choice is as good as choosing by hand.</td></tr>
 <tr><td class="term">Tone</td>
 <td>The pitch of the signal, anywhere from 300 to 1500&nbsp;Hz. There is nothing to tune.</td></tr>
 <tr><td class="term">Speed</td>
-<td>Tested from 5 to 45 words per minute, including hand-sent Morse that speeds up and slows
-down.</td></tr>
+<td>Tested from 5 to 45 words per minute. Hand-sent Morse that speeds up and slows down is
+read too.</td></tr>
 <tr><td class="term">Confidence</td>
-<td>Every decoded word is coloured: <span class="sure">green</span> means sure,
-<span class="check">yellow</span> means worth checking, <span class="doubt">red</span> means probably
-wrong. Click a word to hear that moment of the recording.</td></tr>
+<td>Words the program is unsure of are underlined: <span class="check">yellow</span> means worth
+checking, <span class="doubt">red</span> means probably wrong. Words without a line are sure. Click a
+word to hear that moment of the recording.</td></tr>
 </table>
 
-<h2>Where it is stronger</h2>
+<h2>Strengths</h2>
 <p><b>Three alphabets in one decoder.</b> Latin, Russian Cyrillic and Kazakh Cyrillic, chosen
 automatically, or by you.</p>
-<p><b>Kazakh letters restored from context.</b> Ә, Ғ, Қ, Ң, Ө, Ұ, Ү, Һ and І are sent with the
-codes of Russian letters, so the sound alone cannot tell Қ from К. A Kazakh language model decides
-from the surrounding words: a message keyed as САЛЕМ КАЗАКСТАН is written
-<span class="kk">СӘЛЕМ ҚАЗАҚСТАН</span>.</p>
-<p><b>Accurate in noise.</b> On our test set of 500 recordings with noise, fading and interference,
-MorseDesk gets about 8 characters wrong in every 100. DeepCW, a public neural Morse decoder, gets
-24 wrong on the same recordings. On six real ARRL practice broadcasts sent at 18 to 40 words per
-minute (9,498 characters), the text came out exactly as published.</p>
-<p><b>It does not make things up.</b> When there is no Morse in the audio, you get an empty result
-and a message saying so, not invented letters.</p>
+<p><b>Kazakh letters restored.</b> Ә, Ғ, Қ, Ң, Ө, Ұ, Ү, Һ and І are sent with the codes of
+Russian letters, so the sound alone cannot tell Қ from К. The Kazakh language model decides which
+letter was meant: the greeting in the Kazakh sample, keyed as САЛЕМЕТСИЗ БЕ, is written
+<span class="kk">СӘЛЕМЕТСІЗ БЕ</span>.</p>
+<p><b>Accurate in noise.</b> On 500 generated test signals with noise, fading and interference,
+MorseDesk gets about 8 characters wrong in every 100. DeepCW, a public neural Morse decoder that
+reads Latin letters only, gets 24 wrong on the same signals. On ten real ARRL practice broadcasts
+(5 to 40 words per minute) about one character in a hundred was wrong, and the six sent at 18 to
+40 words per minute (9,498 characters) came out exactly as published.</p>
+<p><b>It does not make things up.</b> When there is no Morse in the audio — silence, hiss, a
+steady carrier — you get an empty result and a message saying so, not invented letters. The one
+exception is a perfectly regular beeping, such as a buzzer: it has the rhythm of the letter E and
+is read as E.</p>
 <p><b>Nothing leaves the computer.</b> No internet connection, no account, no data collection.
 The program is a single file.</p>
 
@@ -42,14 +45,18 @@ The program is a single file.</p>
 decoded on the <i>Decode</i> tab, so you can see how it works before opening your own file.</p>
 <ol>
 <li><b>Decode a recording.</b> On the <i>Decode</i> tab, drop an audio file onto the window or
-click <i>Open file</i>, then <i>Decode</i>. WAV, FLAC, OGG, MP3 and AIFF files up to one hour.</li>
-<li><b>Check the result.</b> Words are coloured by confidence. Press <i>Play</i> to listen along;
-the word being played is outlined. Copy the text, or export it as TXT or JSON.</li>
+click the folder button (Ctrl+O), then <i>Decode</i>. WAV, FLAC, OGG, MP3 and AIFF files up to one
+hour. The <i>Signal</i> panel shows the recording as a 3D landscape or a spectrogram.</li>
+<li><b>Check the result.</b> The decoded text is shown in large letters. Press the round ▶ button
+(or click a word) to listen along: the word being played lights up and the text scrolls with it,
+like song lyrics. Copy the text, or export it as TXT or JSON with the buttons next to the player.</li>
 <li><b>Listen live.</b> On the <i>Listen</i> tab, choose the sound input (a receiver connected to
 the line input, or a microphone), then <i>Listen</i>. Grey text may still change; plain text is
 final.</li>
 <li><b>Send Morse.</b> On the <i>Encode</i> tab, type a message, then <i>Play</i> or
-<i>Save</i>. Speed, tone, Farnsworth spacing and added noise are adjustable.</li>
+<i>Save…</i>. Speed, tone, Farnsworth spacing and added noise are adjustable.</li>
+<li><b>Settings</b> shows the model in use and the sound inputs found on this computer, and opens
+the log folder if something goes wrong.</li>
 </ol>
 
 <h2>How Kazakh is sent in Morse</h2>
@@ -88,32 +95,33 @@ measurements behind each design decision.</p>
 <h2>Limits you should know</h2>
 <ul>
 <li><b>Deep fading on a weak signal.</b> When a weak signal fades below the noise, a third to
-more than half of the characters can be wrong. No decoder can recover letters that were
-never audible.</li>
+half of the characters can be wrong. Letters that sank below the noise cannot be recovered by any
+decoder.</li>
 <li><b>One signal at a time.</b> MorseDesk follows the strongest tone. When two stations
 transmit at once, it decodes the stronger one.</li>
-<li><b>Short messages.</b> Automatic alphabet choice needs about eight characters. Radio
-abbreviations such as CQ, DE and 73 read the same in every alphabet; for those, choose the language
-yourself.</li>
-<li><b>Live listening</b> is about three characters in a hundred less accurate than decoding a
-file, and trails the audio by one to two seconds.</li>
+<li><b>Short messages.</b> Automatic alphabet choice needs a few dozen characters; a short
+Russian message can look Kazakh, because the Kazakh alphabet contains every Russian letter. Radio
+abbreviations such as CQ, DE and 73 do not help: their codes exist in every alphabet (CQ becomes ЦЩ
+in Cyrillic). For short messages, choose the language yourself.</li>
+<li><b>Live listening</b> is a little less accurate than decoding a file, and trails the audio by
+one to two seconds. Once it has heard about fifty characters in one language, it stays with that
+language for the rest of the session.</li>
 <li><b>Files</b> up to one hour.</li>
-<li><b>The Kazakh interface</b> is a draft that has not yet been reviewed by a native
-speaker.</li>
 </ul>
 
 <h2>Computer requirements</h2>
 <table class="facts" width="100%" cellspacing="0" cellpadding="8">
 <tr><td class="term" width="26%">System</td>
-<td>Windows 10 or 11 (64-bit), or Linux on x86-64. Tested on Ubuntu 22.04 and 24.04.</td></tr>
+<td>Windows 11 (64-bit), or Linux on x86-64. Tested on Windows 11, Ubuntu 22.04 and 24.04.</td></tr>
 <tr><td class="term">Processor</td>
 <td>Runs on the processor alone. No graphics card is needed.</td></tr>
 <tr><td class="term">Memory</td>
-<td>About 2,033&nbsp;MB while decoding a one-hour recording. 8&nbsp;GB of RAM or more is
+<td>About 2&nbsp;GB while decoding a one-hour recording. 8&nbsp;GB of RAM or more is
 recommended.</td></tr>
 <tr><td class="term">Disk</td>
-<td>One file of about 140&nbsp;MB. On Windows it unpacks about 300&nbsp;MB into a temporary folder
-while running and removes it on exit.</td></tr>
+<td>One file: about 140&nbsp;MB on Windows, about 150&nbsp;MB on Linux. On Windows it unpacks about
+300&nbsp;MB into a temporary folder while running and removes it on exit. The very first start of a
+new copy can take up to a minute while Windows scans the file.</td></tr>
 <tr><td class="term">Speed</td>
 <td>A one-hour recording takes about 9 minutes with automatic language choice, and
 about 3 minutes when you choose the language yourself (measured on an Intel Core Ultra 9 285H laptop processor).</td></tr>

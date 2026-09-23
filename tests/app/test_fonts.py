@@ -62,8 +62,8 @@ def test_language_names_have_no_vietnamese_leaking_into_the_ui():
     """Nhãn ngôn ngữ là thứ người dùng cuối đọc, không phải ghi chú nội bộ.
 
     Ảnh chụp AppImage trên Ubuntu sạch cho thấy combo hiện "Қазақша (nháp)" — chữ "nháp" là
-    tiếng Việt, lọt ra từ một ghi chú của nhóm phát triển. Bản dịch chưa được người bản ngữ
-    soát vẫn cần đánh dấu, nhưng phải bằng chính ngôn ngữ đó.
+    tiếng Việt, lọt ra từ một ghi chú của nhóm phát triển. Từ 24/09 không nhãn "bản nháp" nào
+    nữa, bằng bất kỳ ngôn ngữ nào: tác giả là người Kazakh (quyết định của người dùng).
     """
     from morsedesk.app.main_window import LANGUAGE_NAMES
 

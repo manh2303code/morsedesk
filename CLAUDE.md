@@ -270,4 +270,5 @@ Docker Desktop có lúc báo "running" mà máy ảo đã chết (lỗi 500): `d
 trong WSL vẫn sống qua lần khởi động lại đó (đã thử 23/09).
 
 Chưa làm: T3 live so với file lệch **3,1 điểm** (spec đòi dưới 1); trang Nghe chưa hiện bộ đếm khối
-bị bỏ (spec tuần 5–6 §7.6); người bản ngữ soát Kazakh (CP-12); đo chế độ nghe qua micro thật.
+bị bỏ (spec tuần 5–6 §7.6); đo chế độ nghe qua micro thật. CP-12 (soát bản Kazakh) KHÔNG còn là
+nhãn cho người dùng: 24/09 người dùng quyết bỏ mọi chữ "bản nháp/жоба" — tác giả là người Kazakh.
