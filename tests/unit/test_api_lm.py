@@ -248,3 +248,16 @@ def test_decoder_pin_language_only_applies_to_auto(lm_dir):
     assert auto.pin_language(None) and auto.auto and auto.pinned_language is None
     fixed = Decoder("en", engine="baseline", lm_dir=lm_dir)
     assert not fixed.pin_language("ru") and fixed.profile.id == "en"
+
+
+def test_parallel_bench_gives_exactly_the_sequential_results(tmp_path):
+    """Chạy song song chỉ để NHANH: từng clip vẫn đi đúng đường sản phẩm, kết quả phải y hệt."""
+    rows = []
+    for i, text in enumerate(["CQ DE K", "SOS", "HELLO WORLD", "TEST 73"]):
+        wav = tmp_path / f"{i}.wav"
+        save_audio(wav, Encoder("en").to_audio(text, wpm=18 + i, snr_db=12.0, seed=i), 8000)
+        rows.append({"path": str(wav), "text": text, "profile": "en"})
+    seq = bench.evaluate(rows, engine="baseline", workers=1)
+    par = bench.evaluate(rows, engine="baseline", workers=2)
+    keys = ("path", "hyp", "cer", "wer", "language", "error")
+    assert [{k: r[k] for k in keys} for r in par] == [{k: r[k] for k in keys} for r in seq]

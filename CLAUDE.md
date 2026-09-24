@@ -4,6 +4,9 @@
 Người dùng là người Việt: **trả lời bằng tiếng Việt, giữ đủ dấu**. Chữ trong giao diện, mã nguồn
 và tài liệu thì theo ngôn ngữ đã dùng ở đó.
 
+**Việc còn phải sửa/đo nằm ở `docs/backlog.md` — đọc và cập nhật mỗi phiên** (phát hiện gì thì ghi
+ngay, xong thì chuyển xuống "Đã xong" kèm commit).
+
 ## Quy tắc số một: số đo quyết định, không phải lập luận
 
 Dự án này đã nhiều lần đi ngược trực giác, và lần nào cũng chỉ phát hiện được nhờ đo. Trước khi
@@ -44,6 +47,9 @@ model tốt nhất dự án. Khi khâu suy luận còn một lỗi lớn chưa b
 | **LocalAgreement-2** cho chế độ live | 38,41 % so với 17,31 % khi chốt ngay | 12 s | **có** |
 | `skip_silent_windows` ở **chế độ file** | 13,28 % so với 9,70 % | 12 s | **có** |
 | Nội suy ranh giới dưới khung | T1 35,12 % → 40,73 % (bộ DSP) | không dùng cửa sổ | **có** |
+| Đệm nhiễu 0,5 s hai đầu CẢ FILE (ngoài đệm mép trong cửa sổ) | T1 7,78 → 9,55 %, dev 8,07 → 9,83 % | 12 s | **có** |
+| Đệm mép trong CẢ cửa sổ không tone / sóng mang liên tục | nhiễu xung ra `R R TU DE`, sóng mang ra `A` (test §7 đỏ) | 12 s | **có** |
+| Chỉ đệm-lại cửa sổ model trả RỖNG hoàn toàn | bản tin 130 s 11,3 % so với 1,2 % khi đệm mọi cửa sổ có nhịp phím | 12 s | **có** |
 | Chỉnh lại trọng số beam cho E9 (33 cấu hình `alpha`/`char_bonus`/`beta`/`lexicon_bonus`, chọn trên dev, xác nhận trên T1) | không cấu hình nào tốt hơn chắc chắn; 14 cấu hình hạ `alpha` hoặc `char_bonus` **xấu hơn chắc chắn**; `lexicon_bonus` 0 xấu hơn | 12 s | **có** — giữ 0,3 / 1,25 |
 | Lexicon rộng hơn (1000/5000 từ) | 18,13 % / 18,23 % so với 18,19 % | 4 s | chưa đo lại |
 | Nới `min_prob` 1e-3 → 1e-4 | 0,15 điểm, gấp đôi thời gian | 4 s | chưa đo lại |
@@ -67,6 +73,9 @@ HamNoise) cũng chưa chạy.
 ```bash
 uv sync --all-extras
 PYTHONUTF8=1 uv run pytest -p no:warnings          # ~558 test; -p no:warnings để đọc được kết quả
+PYTHONUTF8=1 uv run python -m morsedesk.cli bench --manifest <m> --engine onnx --out-dir runs/<tên>
+                                                   # song song mọi lõi (mặc định); --workers 1 = nghiệm thu
+PYTHONUTF8=1 uv run python tools/long_random_eval.py   # bản tin ~2 phút x 3 ngôn ngữ, ~4 phút
 PYTHONUTF8=1 uv run ruff check .
 PYTHONUTF8=1 uv run python tools/build_i18n.py     # sau MỖI lần thêm/sửa chuỗi self.tr()
 PYTHONUTF8=1 uv run morsedesk-gui
@@ -121,6 +130,14 @@ audio → dò tone 14 ms → dither nếu SNR>25dB → đặc trưng 11 chiều,
 ## Gotchas — mỗi dòng ở đây từng tốn thời gian thật
 
 ### Đo đạc và mô hình
+- **Mọi bộ đo cũ đều là clip NGẮN (<= 12 s = một cửa sổ) nên che mất lỗi của âm thanh dài.** Đến
+  24/09 cửa sổ 12 s nằm giữa bản tin dày tín hiệu làm model trả RỖNG cả cửa sổ (26/60): bản tin 2 phút
+  sai 50 %, bản ghi ARRL chỉ "đẹp" vì đi đường cổ điển. Sửa bằng đệm nhiễu nền 0,5 s ở mép TRONG
+  cửa sổ (`WINDOW_PAD_FRAMES`, `frontend.repad_window`) — CHỈ cửa sổ có tone đang được đánh phím
+  (`key_down_fraction` < 0,9: Morse thật 0,41–0,63, sóng mang 1,00). Kiểm âm thanh dài bằng
+  `tools/long_random_eval.py`, không chỉ T1/dev/T2.
+- **Model hay phát ký tự ĐẦU TIÊN ngay khung đầu ra số 0** (BiGRU biết trước), bất kể ký tự nằm ở
+  đâu — nên không được đệm rồi cắt ở đầu/cuối file.
 - **Mismatch giữa lúc huấn luyện và lúc chạy là mỏ vàng.** Hai thắng lợi lớn nhất đều từ đó:
   SNR (train −6…25 dB, bản ghi thật 49–143 dB → thêm dither, CER 89,8 % → 28,9 %) và độ dài cửa
   sổ (clip train 4–12 s nhưng suy luận cắt 4 s → nới lên 12 s, 17,96 % → 10,87 %). Sửa ở khâu

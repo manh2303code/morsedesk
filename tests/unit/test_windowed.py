@@ -209,3 +209,34 @@ def test_window_mode_decodes_when_global_tone_estimate_fails(tmp_models):
     assert not any("không có tín hiệu" in w for w in clip.warnings)
     # Chế độ 'window' dò được tone thật từ một cửa sổ nên KHÔNG mang cảnh báo đoán.
     assert not any("đang đoán theo đỉnh phổ" in w for w in r.warnings)
+
+
+def test_windows_are_padded_only_where_they_meet_another_window():
+    """Hai đầu FILE không đệm (model hay phát ký tự đầu ngay khung 0; đệm rồi cắt là mất chữ, và
+    đệm cả file làm T1 xấu 1,76 điểm); mép giáp cửa sổ khác thì đệm."""
+    from morsedesk.dsp.windowing import WINDOW_PAD_FRAMES
+
+    x = Encoder("en").to_audio("CQ CQ DE R1ABC " * 6, wpm=18, snr_db=10.0, seed=1)
+    wins = compute_features_windowed(x, 700.0, pad_frames=WINDOW_PAD_FRAMES)
+    assert len(wins) >= 3
+    assert wins[0].pad_head == 0 and wins[0].pad_tail == WINDOW_PAD_FRAMES
+    assert wins[-1].pad_tail == 0 and wins[-1].pad_head == WINDOW_PAD_FRAMES
+    for w in wins:
+        assert w.feats.shape[0] == (w.end_frame - w.start_frame) + w.pad_head + w.pad_tail
+    short = compute_features_windowed(x[: 8 * 8000], 700.0, pad_frames=WINDOW_PAD_FRAMES)
+    assert len(short) == 1 and short[0].pad_head == short[0].pad_tail == 0   # clip ngắn: y hệt trước
+
+
+def test_long_messages_do_not_lose_whole_windows():
+    """Lỗi tìm ra 24/09: cửa sổ 12 s nằm giữa bản tin dày tín hiệu -> model trả RỖNG cả cửa sổ,
+    bản tin 130 s sai 50 %. Bản tin 60 s, 8 dB, chỉ model (không LM, không bộ cổ điển)."""
+    from morsedesk.api import DEFAULT_MODEL_PATH
+    from morsedesk.metrics import cer
+
+    if not DEFAULT_MODEL_PATH.is_file():
+        pytest.skip("cần models/acoustic.onnx")
+    text = "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG 1234567890 " * 4
+    x = Encoder("en").to_audio(text, wpm=20, snr_db=8.0, seed=3)
+    assert len(x) / 8000 > 50
+    r = Decoder("en", engine="onnx", lm=False, fallback=False).decode_array(x, 8000)
+    assert cer(text, r.text) < 0.10, r.text

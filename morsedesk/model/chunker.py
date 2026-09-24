@@ -6,12 +6,13 @@ from __future__ import annotations
 import numpy as np
 
 from morsedesk.constants import HOP
-from morsedesk.dsp.frontend import FrontendConfig, Window, compute_features_windowed
+from morsedesk.dsp.frontend import FrontendConfig, Window, compute_features_windowed, repad_window
 from morsedesk.dsp.windowing import (  # noqa: F401  (re-export cho import cũ)
     LIVE_STEP_FRAMES,
     LIVE_WINDOW_FRAMES,
     STEP_FRAMES,
     WINDOW_FRAMES,
+    WINDOW_PAD_FRAMES,
     frame_windows,
 )
 from morsedesk.model.protocol import AcousticModel
@@ -56,7 +57,7 @@ def run_chunked(model: AcousticModel, feats: np.ndarray, window: int = WINDOW_FR
 
 def run_chunked_windows(model: AcousticModel, windows: list[Window], n_frames: int,
                         progress: DecodeProgress | None = None,
-                        skip_silent: bool = False) -> np.ndarray:
+                        skip_silent: bool = False, pad=None) -> np.ndarray:
     """Chế độ 'window' với đặc trưng đã tính sẵn (tránh tính lại khi bên gọi đã có cửa sổ).
 
     `skip_silent`: cửa sổ không dò ra tone thì KHÔNG chạy mô hình, mà ép thẳng thành blank.
@@ -74,21 +75,41 @@ def run_chunked_windows(model: AcousticModel, windows: list[Window], n_frames: i
     `Window.has_signal` là phép đo sẵn có và đúng việc: nhiễu trắng thuần cho False ở mọi cửa
     sổ, bản tin thật cho True. Bỏ qua chúng còn nhanh hơn, vì mỗi cửa sổ bỏ qua là một lượt
     chạy mô hình tiết kiệm được.
+
+    `pad(window) -> Window`: cửa sổ CÓ TONE (`has_signal`) được chạy trên bản đệm nhiễu nền ở mép
+    giáp cửa sổ khác (frontend.repad_window). Đo 24/09: cửa sổ 12 s nằm giữa một bản tin dài dày tín
+    hiệu từ đầu tới cuối — thứ chưa từng có lúc huấn luyện — ra RỖNG 26/60 cửa sổ, bản tin 2 phút sai
+    50 %; đệm thì 1,2 %. Chỉ cứu cửa sổ rỗng hẳn là chưa đủ (11,3 %: nhiều cửa sổ chỉ ra lác đác vài
+    chữ). Cửa sổ KHÔNG có tone thì không đệm: đệm làm AGC khởi động từ nền yên và nhiễu xung thuần
+    hóa thành chữ ('R R TU DE', test §7); sóng mang liên tục cũng không (repad_window tự trả nguyên
+    cửa sổ). Clip <= 12 s là một cửa sổ không có mép trong — y hệt trước.
     """
     pieces = []
     blank = None
+    stride = int(model.time_stride)
     for i, w in enumerate(windows, 1):
         if skip_silent and not w.has_signal:
-            t_out = int(model.output_length(w.feats.shape[0])) if hasattr(model, "output_length")                 else (w.feats.shape[0] - 1) // int(model.time_stride) + 1
+            n_in = w.end_frame - w.start_frame
+            t_out = int(model.output_length(n_in)) if hasattr(model, "output_length") \
+                else (n_in - 1) // stride + 1
             if blank is None or blank.shape[0] < t_out:
                 blank = np.full((t_out, len(model.meta["vocab"])), np.log(1e-6), dtype=np.float32)
                 blank[:, 0] = 0.0
             pieces.append((w.start_frame, w.end_frame, blank[:t_out]))
         else:
-            pieces.append((w.start_frame, w.end_frame, model(w.feats)))
+            if pad is not None and w.has_signal:
+                w = pad(w)
+            pieces.append((w.start_frame, w.end_frame, _trimmed(model, w, stride)))
         if progress is not None:
             progress.step(i, len(windows))
     return _merge_pieces(pieces, n_frames, int(model.time_stride), len(model.meta["vocab"]))
+
+
+def _trimmed(model: AcousticModel, w: Window, stride: int) -> np.ndarray:
+    """Chạy model trên cửa sổ; bỏ đầu ra ứng với đoạn đệm ở mép giáp cửa sổ khác."""
+    lp = model(w.feats)
+    a, b = w.pad_head // stride, w.pad_tail // stride
+    return lp[a: lp.shape[0] - b] if (a or b) else lp
 
 
 def run_chunked_audio(model: AcousticModel, x: np.ndarray, f0_hint: float | None = None,
@@ -98,4 +119,8 @@ def run_chunked_audio(model: AcousticModel, x: np.ndarray, f0_hint: float | None
     """Chế độ 'window': đặc trưng và tone tính riêng từng cửa sổ. Trả (log-prob gộp, số khung đầu vào)."""
     n_frames = len(x) // HOP
     windows = compute_features_windowed(x, f0_hint, window_frames=window, step_frames=step, cfg=cfg)
-    return run_chunked_windows(model, windows, n_frames, progress), n_frames
+
+    def pad(w: Window) -> Window:
+        return repad_window(x, w, n_frames, WINDOW_PAD_FRAMES, cfg)
+
+    return run_chunked_windows(model, windows, n_frames, progress, pad=pad), n_frames

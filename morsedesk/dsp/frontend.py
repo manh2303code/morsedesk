@@ -155,6 +155,8 @@ class Window:
     f0_hz: float
     feats: np.ndarray
     has_signal: bool
+    pad_head: int = 0           # khung đệm (nhiễu nền) ở đầu `feats`, cắt bỏ sau khi chạy model
+    pad_tail: int = 0           # ... và ở cuối
 
     @property
     def start_frame(self) -> int:
@@ -165,6 +167,44 @@ class Window:
         return self.end_sample // HOP
 
 
+def background_noise_std(seg: np.ndarray, f0_hz: float, sample_rate: int = SAMPLE_RATE) -> float:
+    """Độ lệch chuẩn nhiễu trắng nền, đo ở dải tần TRÁNH XA tone.
+
+    Không lấy mức của khung yên nhất: sóng mang liên tục không có khung yên nào, và nhiễu đệm khi đó
+    bằng cả biên độ sóng mang -> chỗ nối trông như nhấn phím, model đọc ra 'A' (test §7 bắt được).
+    Nhiễu trắng phương sai s2 cho E|X_k|^2 = N s2 và |X_k|^2 phân phối mũ, nên s2 = trung vị / (N ln 2).
+    """
+    seg = np.asarray(seg, dtype=np.float64)
+    n = len(seg)
+    if n < 256:
+        return 0.0
+    spec = np.abs(np.fft.rfft(seg)) ** 2
+    freqs = np.fft.rfftfreq(n, 1.0 / sample_rate)
+    keep = (freqs > 200.0) & (freqs < 0.45 * sample_rate) & (np.abs(freqs - f0_hz) > 250.0)
+    if keep.sum() < 16:
+        return 0.0
+    return float(np.sqrt(np.median(spec[keep]) / (n * np.log(2.0))))
+
+
+def pad_with_noise_floor(seg: np.ndarray, head: int, tail: int, seed: int = 0,
+                         f0_hz: float = DEFAULT_F0_HZ, sample_rate: int = SAMPLE_RATE) -> np.ndarray:
+    """Đệm `head`/`tail` mẫu hai đầu bằng nhiễu trắng cùng mức nhiễu nền của chính đoạn đó.
+
+    Lúc huấn luyện khoảng lặng luôn có nhiễu kênh, và âm thanh đi vào model lúc giải mã cũng luôn
+    có nhiễu (tín hiệu quá sạch được trộn nhiễu về 20 dB): đệm bằng nhiễu cùng mức là giống lúc học
+    nhất. Mức nhiễu đo ngoài dải tone (background_noise_std). Hạt giống cố định theo vị trí cửa sổ
+    nên cùng file luôn cho cùng kết quả.
+    """
+    seg = np.asarray(seg, dtype=np.float32)
+    if head <= 0 and tail <= 0:
+        return seg
+    sigma = background_noise_std(seg, f0_hz, sample_rate)
+    rng = np.random.default_rng(int(seed) & 0x7FFFFFFF)
+    a = (rng.standard_normal(max(0, head)) * sigma).astype(np.float32)
+    b = (rng.standard_normal(max(0, tail)) * sigma).astype(np.float32)
+    return np.concatenate([a, seg, b])
+
+
 def compute_features_windowed(
     x: np.ndarray,
     f0_hint: float | None = None,
@@ -172,9 +212,17 @@ def compute_features_windowed(
     window_frames: int = WINDOW_FRAMES,
     step_frames: int = STEP_FRAMES,
     cfg: FrontendConfig | None = None,
+    pad_frames: int = 0,
 ) -> list[Window]:
     """Dò tone và chuẩn hóa đặc trưng trong từng cửa sổ; tone cửa sổ không có tín hiệu lấy từ
-    cửa sổ trước, rồi f0_hint, rồi DEFAULT_F0_HZ. Chỉ dùng với sample_rate = SAMPLE_RATE."""
+    cửa sổ trước, rồi f0_hint, rồi DEFAULT_F0_HZ. Chỉ dùng với sample_rate = SAMPLE_RATE.
+
+    `pad_frames` > 0: đặc trưng tính trên cửa sổ đã đệm nhiễu nền ở mép GIÁP CỬA SỔ KHÁC (xem
+    WINDOW_PAD_FRAMES); phần đầu ra ở đó bị cửa sổ bên cạnh che, nên cắt bỏ an toàn. Hai mép của
+    CHÍNH `x` không đệm: model hay phát ký tự đầu tiên ngay khung đầu ra số 0, đệm rồi cắt là mất
+    chữ; và đo 24/09 đệm cả file hai đầu làm T1 xấu 1,76 điểm (clip ngắn vốn đã có khoảng lặng).
+    Nhờ vậy clip <= 12 s (một cửa sổ) giải mã y hệt trước. Tone vẫn dò trên phần tín hiệu thật.
+    Mặc định 0 để đường huấn luyện không đổi."""
     cfg = cfg or WINDOW_CFG
     n_frames = len(x) // HOP
     if n_frames == 0:
@@ -189,8 +237,48 @@ def compute_features_windowed(
         if has_signal:
             carry = float(est.f0_hz)
         f0 = carry if carry is not None else DEFAULT_F0_HZ
-        windows.append(Window(s * HOP, e * HOP, f0, compute_features(seg, f0, sample_rate, cfg), has_signal))
+        head = pad_frames if (pad_frames and s > 0) else 0
+        tail = pad_frames if (pad_frames and e < n_frames) else 0
+        feats = compute_features(pad_with_noise_floor(seg, head * HOP, tail * HOP, seed=s, f0_hz=f0,
+                                                      sample_rate=sample_rate),
+                                 f0, sample_rate, cfg)
+        windows.append(Window(s * HOP, e * HOP, f0, feats, has_signal, head, tail))
     return windows
+
+
+STEADY_KEY_FRACTION = 0.9
+
+
+def key_down_fraction(seg: np.ndarray, f0_hz: float, sample_rate: int = SAMPLE_RATE) -> float:
+    """Tỉ lệ khung mà đường bao tại tone vượt nửa mức đỉnh (phân vị 99). Morse thật nhấn phím
+    ~40–60 % thời gian; sóng mang liên tục gần 1,0; nhiễu thuần (Rayleigh) ~0,3."""
+    env = mix_envelope(np.asarray(seg, dtype=np.float32), f0_hz, sample_rate)
+    if len(env) == 0:
+        return 0.0
+    top = float(np.percentile(env, 99))
+    return float(np.mean(env > 0.5 * top)) if top > 0 else 0.0
+
+
+def repad_window(x: np.ndarray, w: Window, n_frames: int, pad_frames: int,
+                 cfg: FrontendConfig | None = None, sample_rate: int = SAMPLE_RATE) -> Window:
+    """Tính lại đặc trưng của cửa sổ `w` với đệm nhiễu nền ở mép GIÁP CỬA SỔ KHÁC (không đệm hai
+    đầu của chính `x`). Cùng tone, cùng cfg như lần tính đầu.
+
+    Trả nguyên `w` khi không có mép nào để đệm (clip một cửa sổ) hoặc khi cửa sổ là sóng mang
+    liên tục (tone bật >= STEADY_KEY_FRACTION thời gian — không có nhịp phím): đệm cho AGC một
+    nền yên để so, và sóng mang 20 s đang ra độ tin cậy 0,11 (bị cổng chặn) thành 'A' 0,17."""
+    cfg = cfg or WINDOW_CFG
+    s, e = w.start_frame, w.end_frame
+    head = pad_frames if s > 0 else 0
+    tail = pad_frames if e < n_frames else 0
+    if not (head or tail):
+        return w
+    seg = np.asarray(x[w.start_sample:w.end_sample], dtype=np.float32)
+    if key_down_fraction(seg, w.f0_hz, sample_rate) >= STEADY_KEY_FRACTION:
+        return w
+    padded = pad_with_noise_floor(seg, head * HOP, tail * HOP, seed=s, f0_hz=w.f0_hz, sample_rate=sample_rate)
+    return Window(w.start_sample, w.end_sample, w.f0_hz, compute_features(padded, w.f0_hz, sample_rate, cfg),
+                  w.has_signal, head, tail)
 
 
 def stitch_windows(windows: list[Window], n_frames: int) -> np.ndarray:

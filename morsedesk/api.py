@@ -18,10 +18,12 @@ from morsedesk.dsp.frontend import (
     compute_features,
     compute_features_windowed,
     mix_envelope,
+    repad_window,
     window_cfg,
 )
 from morsedesk.dsp.selection import dsp_is_complete, dsp_result_usable, prefer_dsp
 from morsedesk.dsp.tone import ToneEstimate, estimate_tone, fallback_tone_hz
+from morsedesk.dsp.windowing import WINDOW_PAD_FRAMES
 from morsedesk.encode.synth import add_noise, elements_to_audio, tone_power
 from morsedesk.encode.text import text_to_tokens
 from morsedesk.encode.timing import TimingParams, tokens_to_elements
@@ -435,8 +437,13 @@ class Decoder:
                 return run_chunked_audio(self._model, x, f0_hint=f0_hz, cfg=self.feature_cfg,
                                          progress=progress)
             n_frames = len(x) // HOP
+            cfg = self.feature_cfg
+
+            def pad(w: Window) -> Window:
+                return repad_window(x, w, n_frames, WINDOW_PAD_FRAMES, cfg)
+
             return run_chunked_windows(self._model, windows, n_frames, progress,
-                                       skip_silent=self.skip_silent_windows), n_frames
+                                       skip_silent=self.skip_silent_windows, pad=pad), n_frames
         feats = compute_features(x, f0_hz)
         return run_chunked(self._model, feats, progress=progress), len(feats)
 

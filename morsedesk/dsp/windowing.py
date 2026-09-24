@@ -18,6 +18,12 @@ WINDOW_FRAMES = 2400      # 12 s ở 200 khung/s (chế độ file)
 STEP_FRAMES = 400         # 2 s, chồng 10 s
 LIVE_WINDOW_FRAMES = 400  # 2 s (chế độ live)
 LIVE_STEP_FRAMES = 200    # 1 s
+# Đệm nhiễu nền ở mép cửa sổ GIÁP CỬA SỔ KHÁC khi GIẢI MÃ, chỉ cửa sổ có nhịp phím
+# (frontend.repad_window; không dùng lúc huấn luyện). Model chỉ từng học clip có khoảng lặng ở hai
+# đầu, và AGC khởi động từ 0,5 s đầu cửa sổ. Cửa sổ nằm giữa một bản tin dài thì
+# dày tín hiệu từ đầu tới cuối và bắt đầu giữa một ký tự: đo 24/09 trên bản tin ~2 phút, 26/60 cửa
+# sổ ra RỖNG hoàn toàn và CER greedy 56 %; đệm 0,5 s: 0/60 cửa sổ rỗng, 5,8 %. Số chẵn (stride 2).
+WINDOW_PAD_FRAMES = 100   # 0,5 s
 
 
 def frame_windows(n_frames: int, window: int = WINDOW_FRAMES, step: int = STEP_FRAMES) -> list[tuple[int, int]]:

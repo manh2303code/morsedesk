@@ -109,7 +109,14 @@ next to the wanted one.</td></tr>
 <p>Features are computed in <b>12-second windows every 2 seconds</b>. Each window finds its own
 tone and normalises its own level, so drifting pitch and changing signal strength are followed. A
 window without a detectable tone reuses the previous window's tone. The network runs on each
-window; for every frame, the output of the window whose centre is nearest is kept.</p>
+window; for every frame, the output of the window whose centre is nearest is kept. Where a window
+that carries keyed Morse meets its neighbour, 0.5&nbsp;s of noise at the recording's own background level is added before the
+network runs, and the matching output is dropped: a window cut from the middle of a long message is
+full of signal from edge to edge, unlike any training clip, and without this margin the network
+returned nothing at all for about four windows in ten (a 2-minute message: 50&nbsp;% character
+error, 1.2&nbsp;% with the margin). The two ends of the recording are left as they are, and so are
+windows with no tone or with a steady unkeyed carrier: there the quiet margin would give the level
+control a calm reference and turn clicks or a carrier into letters.</p>
 <table class="data" width="100%" cellspacing="0" cellpadding="6">
 <tr><th>Window / step</th><th class="num">Error rate, test set T1 (model 0.2.0)</th><th>Change</th></tr>
 <tr><td>4 s / 3 s</td><td class="num">17.96 %</td><td>starting point</td></tr>

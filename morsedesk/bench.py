@@ -24,40 +24,58 @@ def reference_text(row: dict, engine: str, lm: bool) -> str:
     return row["text"]
 
 
+_DECODERS: dict[tuple, Decoder] = {}      # mỗi tiến trình (cả tiến trình con) dựng một lần
+
+
+def _decoder(pid: str, engine: str, model_path, lm: bool, beam: int, lm_dir) -> Decoder:
+    key = (pid, engine, str(model_path), lm, beam, str(lm_dir))
+    if key not in _DECODERS:
+        _DECODERS[key] = Decoder(pid, engine=engine, model_path=model_path, lm=lm, beam=beam, lm_dir=lm_dir)
+    return _DECODERS[key]
+
+
+def _evaluate_row(job: tuple) -> dict:
+    """Giải mã MỘT hàng manifest; hàm cấp module để chạy được trong tiến trình con."""
+    row, engine, model_path, profile_override, lm, beam, lm_dir = job
+    pid = profile_override or row.get("profile", "en")
+    ref = reference_text(row, engine, lm)
+    truth = row.get("profile")
+    t0 = time.time()
+    out = dict(row)
+    out["ref"] = ref
+    # Dựng Decoder NGOÀI try: cấu hình sai (thiếu LM, 'auto' không LM) phải dừng cả lô với thông báo
+    # rõ ràng — ở tiến trình con, ngoại lệ được chuyển nguyên kiểu về tiến trình chính.
+    dec = _decoder(pid, engine, model_path, lm, beam, lm_dir)
+    try:
+        r = dec.decode_file(row["path"])
+    except Exception as e:  # một file hỏng không được làm mất cả lô
+        out.update({
+            "hyp": "", "cer": cer(ref, ""), "wer": wer(ref, ""), "wpm_est": None,
+            "seconds": time.time() - t0, "warnings": [], "language": None,
+            "language_correct": None, "error": f"{type(e).__name__}: {e}",
+        })
+        return out
+    out.update({
+        "hyp": r.text, "cer": cer(ref, r.text), "wer": wer(ref, r.text), "wpm_est": r.wpm,
+        "seconds": time.time() - t0, "warnings": r.warnings, "language": r.language,
+        # thiếu khóa "profile" (không rõ nhãn đúng) -> None, không phải False
+        "language_correct": (r.language == truth) if (profile_override == "auto" and truth is not None)
+        else None,
+        "error": None,
+    })
+    return out
+
+
 def evaluate(rows: list[dict], engine: str = "baseline", model_path: Path | None = None,
              limit: int | None = None, profile_override: str | None = None, lm: bool = True,
-             beam: int = 64, lm_dir: Path | None = None) -> list[dict]:
-    decoders: dict[str, Decoder] = {}
-    results = []
-    for row in rows[:limit] if limit else rows:
-        pid = profile_override or row.get("profile", "en")
-        if pid not in decoders:
-            decoders[pid] = Decoder(pid, engine=engine, model_path=model_path, lm=lm, beam=beam, lm_dir=lm_dir)
-        ref = reference_text(row, engine, lm)
-        truth = row.get("profile")
-        t0 = time.time()
-        out = dict(row)
-        out["ref"] = ref
-        try:
-            r = decoders[pid].decode_file(row["path"])
-        except Exception as e:  # một file hỏng không được làm mất cả lô
-            out.update({
-                "hyp": "", "cer": cer(ref, ""), "wer": wer(ref, ""), "wpm_est": None,
-                "seconds": time.time() - t0, "warnings": [], "language": None,
-                "language_correct": None, "error": f"{type(e).__name__}: {e}",
-            })
-            results.append(out)
-            continue
-        out.update({
-            "hyp": r.text, "cer": cer(ref, r.text), "wer": wer(ref, r.text), "wpm_est": r.wpm,
-            "seconds": time.time() - t0, "warnings": r.warnings, "language": r.language,
-            # thiếu khóa "profile" (không rõ nhãn đúng) -> None, không phải False
-            "language_correct": (r.language == truth) if (profile_override == "auto" and truth is not None)
-            else None,
-            "error": None,
-        })
-        results.append(out)
-    return results
+             beam: int = 64, lm_dir: Path | None = None, workers: int = 1) -> list[dict]:
+    """`workers` > 1: chia clip ra nhiều tiến trình (kết quả giống hệt; riêng cột `seconds` không
+    còn là tốc độ nghiệm thu — đo tốc độ thì để 1)."""
+    from morsedesk.parallel import map_parallel
+
+    selected = rows[:limit] if limit else rows
+    jobs = [(row, engine, model_path, profile_override, lm, beam, lm_dir) for row in selected]
+    return map_parallel(_evaluate_row, jobs, workers)
 
 
 def language_accuracy(results: list[dict]) -> float | None:
@@ -134,8 +152,9 @@ def source_gate(results: list[dict], max_cer: dict[str, float] | None = None) ->
 def run(manifest: Path, engine: str, model_path: Path | None, out_dir: Path,
         limit: int | None, do_gate: bool, max_cer: float, profile_override: str | None = None,
         lm: bool = True, beam: int = 64, lm_dir: Path | None = None,
-        t2_gate: bool = False) -> tuple[dict, bool]:
-    results = evaluate(load_rows(manifest), engine, model_path, limit, profile_override, lm, beam, lm_dir)
+        t2_gate: bool = False, workers: int = 1) -> tuple[dict, bool]:
+    results = evaluate(load_rows(manifest), engine, model_path, limit, profile_override, lm, beam, lm_dir,
+                       workers=workers)
     ok, gate_cer, gate_n = gate(results, max_cer)
     summary = {
         "engine": engine, "manifest": str(manifest), "n": len(results),

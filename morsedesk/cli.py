@@ -60,6 +60,8 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--no-lm", action="store_true")
     b.add_argument("--beam", type=int, default=64)
     b.add_argument("--lm-dir", type=Path, default=None)
+    b.add_argument("--workers", type=int, default=None,
+                   help="tiến trình song song (mặc định số lõi - 2); 1 = tuần tự, để đo tốc độ nghiệm thu")
     return p
 
 
@@ -122,8 +124,12 @@ def cmd_bench(a: argparse.Namespace) -> int:
 
     model = a.model if a.engine in ("onnx", "deepcw") else None
     try:
+        from morsedesk.parallel import default_workers
+
+        workers = a.workers if a.workers is not None else default_workers()
         _, ok = run(a.manifest, a.engine, model, a.out_dir, a.limit, a.gate, a.max_cer,
-                    profile_override=a.profile_override, lm=not a.no_lm, beam=a.beam, lm_dir=a.lm_dir)
+                    profile_override=a.profile_override, lm=not a.no_lm, beam=a.beam, lm_dir=a.lm_dir,
+                    workers=workers)
     except (NotImplementedError, UnsupportedAudio, FileNotFoundError, ValueError) as e:
         print(f"lỗi: {e}", file=sys.stderr)
         return 2

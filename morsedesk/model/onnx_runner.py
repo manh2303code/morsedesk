@@ -31,7 +31,9 @@ class OnnxAcousticModel:
                     f"({expected}); cần xuất lại model"
                 )
         so = ort.SessionOptions()
-        so.intra_op_num_threads = max(1, (os.cpu_count() or 2) // 2)
+        # Chạy song song nhiều tiến trình (morsedesk/parallel.py) thì mỗi tiến trình MỘT luồng.
+        so.intra_op_num_threads = (int(os.environ.get("MORSEDESK_ORT_THREADS", "0") or 0)
+                                   or max(1, (os.cpu_count() or 2) // 2))
         self.session = ort.InferenceSession(str(model_path), so, providers=["CPUExecutionProvider"])
         self.input_name = self.meta["input_name"]
         self.output_name = self.meta["output_name"]
