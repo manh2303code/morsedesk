@@ -52,13 +52,13 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
 
 ## Đã xong (phiên 24/09)
 
-- **Bản tin DÀI mất cả cửa sổ** (commit sửa cửa sổ). Cửa sổ 12 s nằm giữa bản tin dày tín hiệu từ đầu
+- **Bản tin DÀI mất cả cửa sổ** (0bc8dfc). Cửa sổ 12 s nằm giữa bản tin dày tín hiệu từ đầu
   tới cuối -> model trả RỖNG (26/60 cửa sổ); bản tin 2 phút sai 50 %, gõ tay 32–53 %. Sửa: đệm nhiễu
   nền 0,5 s ở mép giáp cửa sổ khác, CHỈ cửa sổ có tone đang được đánh phím (`key_down_fraction` < 0,9),
   cắt phần đầu ra tương ứng. Kết quả: bản tin 130 s 50,2 -> 1,2 %; long_random_eval app 1,1–2,0 % văn
   thật, 1,2–5,3 % mã/điện văn; T1 7,78 / dev 8,07 giống hệt 500/500 clip; T2 1,62 -> 1,51 (Kazakh
   3,50 -> 3,21); test §7 (nhiễu trắng/sóng mang/nhiễu xung không ra chữ) vẫn qua.
-- Phép thử chạy song song mọi lõi: `bench --workers`, `tools/long_random_eval.py` (cùng commit).
+- Phép thử chạy song song mọi lõi: `bench --workers`, `tools/long_random_eval.py` (0bc8dfc).
 - Một bản tin = một bảng chữ; phiên nghe khóa ngôn ngữ (00c2639).
 - Banner đọc được trên nền tối + đo tương phản tự động (628dca2).
 - Đồng bộ hình/tiếng khi phát nhanh/chậm (3ce0699).

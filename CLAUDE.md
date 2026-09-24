@@ -220,6 +220,9 @@ mình**. Trong một phiên đã có hai kết luận research không sống só
   tác dụng.
 - Windows onefile 134 MB khởi động 2,68 s so với onedir 315 MB khởi động 1,12 s. Lần chạy **đầu
   tiên mất 55 giây** vì Defender quét cả file.
+- **"Cửa sổ chính 4,7 s" trong test_windows_exe KHÔNG phải chậm đi so với "2,8 s" trước 24/09**: từ
+  3e0c225 script đo đúng cửa sổ tiêu đề "MorseDesk" (sau hoạt cảnh chờ 1,64 s), trước đó nó bắt nhầm
+  màn hình chờ động. Mã nguồn dựng cửa sổ ~1,2 s, không đổi (đo 24/09). Ảnh chờ tĩnh hiện sau 0,2 s.
 - Tiến trình con hiện **màn hình chờ động trước** (tiêu đề "MorseDesk splash"), rồi mới tới cửa
   sổ chính "MorseDesk". Script kiểm tìm cửa sổ theo tiêu đề; đóng màn hình chờ giữa chừng là hủy
   khởi động (Qt không tính cửa sổ kiểu SplashScreen là "cửa sổ cuối", nên phải tự thoát).
@@ -287,8 +290,8 @@ nhận trên T1: T1 9,70 → 9,79 %, dev và T2 không đổi, 120/120 lần ch�
 cậy ~0,99 — về đường bao nó chính là Morse chữ E. Test cũ kiểm §7 bằng `engine="baseline"` nên không bắt
 được việc engine `onnx` bịa chữ; test mới chạy trên `onnx`.
 
-**Đóng gói (dựng lại 24/09, model v0.4.0 + giao diện mới + màn hình chờ động + GC luồng giao diện).** Windows `dist/MorseDesk.exe` một file
-139 MB (`scripts/build_windows.ps1`); Linux `dist/MorseDesk-x86_64.AppImage` 148 MB. Kiểm: chạy
+**Đóng gói (dựng lại 24/09 tối, model v0.4.0 + giao diện mới + sửa cửa sổ bản tin dài 0bc8dfc).** Windows `dist/MorseDesk.exe` một file
+139,8 MB (`scripts/build_windows.ps1`); Linux `dist/MorseDesk-x86_64.AppImage` 149 MB. Kiểm: chạy
 `scripts/test_windows_exe.ps1` TRƯỚC (nó sinh mẫu `dist/selftest/`), rồi `scripts/test_appimage.sh`
 — cả hai đòi `--self-test` ra văn bản giống hệt mã nguồn. Đổi model thì phải dựng lại CẢ HAI.
 Docker Desktop có lúc báo "running" mà máy ảo đã chết (lỗi 500): `docker desktop restart` — train
