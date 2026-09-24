@@ -1,38 +1,46 @@
 # testdata
 
-- `public/`: file được phép phân phối lại (Wikimedia Commons, tự thu). Commit được.
-- `private/`: file có bản quyền hoặc chỉ dùng nội bộ (ARRL W1AW, SRAA CC BY-NC, kho QSO). KHÔNG commit.
-- `generated/`: sinh bằng công cụ (T1, WAV thử tay). KHÔNG commit, tạo lại bằng `uv run python tools/make_t1.py`.
+Mọi file dữ liệu ở đây đều KHÔNG commit (gitignored); chỉ README này nằm trong git.
 
-## Gom bộ T2 (làm tay, một lần)
+## Hiện có gì (24/09/2026)
 
-1. ARRL W1AW: tải MP3 và file text cùng tên từ trang "N WPM Code Archive" của arrl.org cho các tốc độ
-   5, 7.5, 10, 13, 15, 18, 20, 25, 30, 35, 40 (ít nhất 2 ngày mỗi tốc độ) vào `testdata/private/arrl/`.
-   Tên file dạng `260303_20WPM.mp3` và `260303_20WPM.txt`.
-2. Wikimedia Commons, Category "Audio files of Morse code": tải WAV/OGG vào `testdata/public/commons/`,
-   ghi đáp án vào file `.txt` cùng tên (nghe và chép tay).
-3. SRAA (shortwavearchive.com, tag CW) và kho QSO Ý: tải khoảng 20 clip vào `testdata/private/real/`,
-   cắt đoạn 30–60 s bằng Audacity, chép tay đáp án vào `.txt` cùng tên; ghi WPM và loại khóa vào tên
-   file dạng `qso01_25WPM_bug.wav` nếu biết.
-4. Tiếng Nga/Kazakh: thu người gõ thật hoặc tạo bằng ebook2cw (gọi ngoài) vào `testdata/private/ru/` và
-   `testdata/private/kk/`, kèm `.txt`.
-5. Tạo manifest:
-   `uv run python tools/make_t2_manifest.py testdata/private/arrl --source arrl --profile en --out testdata/manifests/t2_arrl.jsonl`
-   và tương tự cho các thư mục khác (đổi `--profile ru` / `kk-cyrl-ru`).
-
-## Đo công cụ ngoài (Ubuntu 22.04, chỉ để có số đối chứng, không nhúng vào sản phẩm)
-
-```bash
-sudo apt install multimon-ng
-uv run python tools/bench_external.py --manifest testdata/manifests/t2_arrl.jsonl \
-  --cmd "multimon-ng -a MORSE_CW -t wav {path}" --strip-prefix "MORSE_CW:" --name multimon
-pipx install pycw
-uv run python tools/bench_external.py --manifest testdata/manifests/t2_arrl.jsonl \
-  --cmd "pycw -d {path}" --name pycw
-git clone https://github.com/e04/deepcw-engine /tmp/deepcw-engine   # AGPL: chỉ đo, không nhúng
-# xem /tmp/deepcw-engine/examples/python/README để biết tên script; mẫu:
-uv run python tools/bench_external.py --manifest testdata/manifests/t2_arrl.jsonl \
-  --cmd "python /tmp/deepcw-engine/examples/python/decode.py /tmp/deepcw-engine/model.onnx /tmp/deepcw-engine/model.onnx.json {path}" --name deepcw
+```
+testdata/
+├── generated/                 tự sinh bằng công cụ của dự án, tạo lại được bất cứ lúc nào
+│   ├── t1/                    T1: 500 clip, seed 1000–1499  (tools/make_t1.py)
+│   └── t1dev/                 dev: cùng ma trận, seed 500000–500499 (--seed-base 500000)
+└── private/t2/                T2 (tools/fetch_t2.py) — manifest.jsonl gom cả ba nguồn, 40 dòng
+    ├── arrl/                  10 bản ghi THẬT của ARRL W1AW, 5–40 WPM, 124,6 phút + đáp án
+    │                          (dùng nội bộ, không phân phối) — dữ liệu độc lập DUY NHẤT
+    ├── ebook2cw/              15 tin tiếng Nga — do Encoder của MorseDesk sinh, KHÔNG phải ebook2cw
+    └── ebook2cw_kk/           15 tin tiếng Kazakh — như trên
 ```
 
-Baseline nội bộ đo bằng `uv run morsedesk bench --manifest testdata/manifests/t2_arrl.jsonl --engine baseline` (Task 14).
+Tên thư mục `ebook2cw*` là lịch sử: `fetch_t2.py synth` dùng ebook2cw nếu có trên PATH, không thì
+dùng Encoder của dự án. ebook2cw chưa từng được cài (Windows lẫn WSL) và cả 30 file đều là WAV
+(ebook2cw xuất MP3/OGG), nên đây là tín hiệu sạch do chính MorseDesk tạo, văn bản lấy từ danh sách
+từ dựng sẵn — cũng là danh sách dùng khi huấn luyện. Chưa có bản ghi THẬT tiếng Nga/Kazakh nào.
+
+## Kế hoạch ban đầu chưa làm
+
+README cũ mô tả `public/` (Wikimedia Commons), `private/real/` (SRAA, QSO thu tay) và
+`testdata/manifests/`. Chưa bước nào trong số đó được làm; các lệnh vẫn có trong `tools/fetch_t2.py`:
+
+```bash
+uv run python tools/fetch_t2.py commons --source commons --profile en --category "Morse code sound files" --limit 30
+uv run python tools/fetch_t2.py local --source sraa --profile en --dir <thư mục đã cắt + chép đáp án>
+uv run python tools/fetch_t2.py build          # gộp mọi thư mục con thành manifest.jsonl
+```
+
+Việc có giá trị nhất còn thiếu: bản ghi thật tiếng Nga và tiếng Kazakh (người gõ thật, có đáp án).
+
+## Đo
+
+```bash
+PYTHONUTF8=1 uv run python -m morsedesk.cli bench --manifest testdata/generated/t1/manifest.jsonl --engine onnx --out-dir runs/<tên>
+PYTHONUTF8=1 uv run python -m morsedesk.cli bench --manifest testdata/private/t2/manifest.jsonl --engine onnx --out-dir runs/<tên>
+# thêm --profile-override auto để đo cả khâu tự nhận ngôn ngữ
+```
+
+Công cụ ngoài (multimon-ng, pycw, DeepCW) chỉ để có số đối chứng, không nhúng vào sản phẩm:
+`tools/bench_external.py`, `tools/bench_pretrained.py` — xem docs/research/04-pretrained-baselines.md.

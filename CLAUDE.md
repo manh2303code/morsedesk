@@ -10,7 +10,9 @@ Dự án này đã nhiều lần đi ngược trực giác, và lần nào cũng
 áp dụng bất cứ thay đổi nào ảnh hưởng chất lượng:
 
 1. Chạy **toàn bộ T1** (500 clip tổng hợp) — không phải một lát cắt.
-2. Chạy **T2** (bản ghi ARRL thật) — dữ liệu duy nhất không do chính mình sinh ra.
+2. Chạy **T2** (bản ghi ARRL thật) — dữ liệu duy nhất không do chính mình sinh ra. 30 dòng Nga/Kazakh
+   trong T2 (thư mục `ebook2cw*`) thực ra do Encoder của dự án sinh (ebook2cw chưa từng được cài) và
+   dùng CHÍNH danh sách từ lúc huấn luyện: không phải phép thử độc lập.
 3. Chỉ CER trên T1/T2 mới dùng để quyết định. **Chỉnh tham số thì chỉnh trên bộ dev** (xem mục
    "Nhiễu đo" cuối file), T1 chỉ để xác nhận.
 
