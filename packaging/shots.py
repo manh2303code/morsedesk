@@ -36,6 +36,19 @@ def grab_tooltip(view, index: int, name: str) -> None:
     QToolTip.hideText()
 
 
+def tallest_cell(ridge):
+    """Điểm màn hình trên sườn dải cao nhất của cảnh 3D (để chụp ô số đo khi rê chuột)."""
+    from PySide6.QtCore import QPoint
+
+    z = ridge.surface()
+    if z.ndim != 2 or z.shape[0] < 2 or z.shape[1] < 2:
+        return None
+    h = ridge.heights(z)
+    r, c = divmod(int(h.argmax()), z.shape[1])
+    left, width, base, amp = ridge._row_geometry(r / (z.shape[0] - 1))
+    return QPoint(int(left + width * c / (z.shape[1] - 1)), int(base - h[r, c] * amp * 0.6))
+
+
 def main() -> int:
     from PySide6.QtCore import QCoreApplication, QEventLoop, QTimer
     from PySide6.QtWidgets import QApplication
@@ -107,6 +120,35 @@ def main() -> int:
         grab(win, "05-decode-ketqua")
         grab_tooltip(win.decode_page.word_view, 0, "05b-giaima-tooltip")
 
+    # File mẫu "Xin chào" (sạch, không nhiễu — người dùng 25/09) + rê chuột trên cảnh 3D và phổ 2D.
+    from morsedesk.app.decode_page import SAMPLE_FILES, SAMPLES_DIR
+
+    show(win.decode_page)
+    win.decode_page.load_file(SAMPLES_DIR / SAMPLE_FILES["en"])
+    for _ in range(40):
+        pump(500)
+        if win.decode_page.result is not None:
+            break
+    pump(600)
+    grab(win, "05c-mau-sach-3d")
+    ridge = win.decode_page.ridge
+    cell = tallest_cell(ridge)
+    if cell is not None:
+        ridge.hover_at(cell)
+        pump(200)
+        grab(win, "05d-mau-3d-rechuot")
+        ridge.hover_at(None)
+    win.decode_page.view_2d_button.click()
+    pump(300)
+    r = win.decode_page.result
+    if r is not None and r.words:
+        w = r.words[0]
+        win.decode_page.spectrogram.hover_at((w.start_s + w.end_s) / 2, r.tone_hz or 700.0)
+        pump(200)
+        grab(win, "05e-mau-2d-rechuot")
+        win.decode_page.spectrogram.hover_at(None)
+    win.decode_page.view_3d_button.click()
+
     # Nghe trực tiếp: chụp cả trạng thái rỗng và trạng thái có chữ hai tầng
     if win.live_page is not None:
         show(win.live_page)
@@ -118,9 +160,9 @@ def main() -> int:
         from morsedesk.api import Encoder, Word
         from morsedesk.model.stream import StreamUpdate
 
-        audio = Encoder("en").to_audio("CQ CQ DE R1ABC R1A", wpm=20, snr_db=12, seed=5)
-        for i in range(0, len(audio), 1600):
-            win.live_page.waterfall.push(audio[i:i + 1600])
+        audio = Encoder("en").to_audio("CQ CQ DE R1ABC QTH MOSCOW R1A", wpm=20, snr_db=12, seed=5)
+        for i in range(0, len(audio), 800):          # như LiveWorker: khối 100 ms
+            win.live_page._on_block(audio[i:i + 800])
         win.live_page.on_text("CQ CQ DE R1ABC QTH MOSCOW", " R1A")
         committed = [Word("CQ", 1.0, 1.9, 0.97), Word("CQ", 2.4, 3.3, 0.95), Word("DE", 3.8, 4.5, 0.93),
                      Word("R1ABC", 5.0, 7.6, 0.71), Word("QTH", 8.1, 9.3, 0.9), Word("MOSCOW", 9.8, 11.7, 0.42)]
@@ -133,6 +175,20 @@ def main() -> int:
         grab(win, "07-nghe-haitang")
         grab_tooltip(win.live_page.word_view, 3, "07b-nghe-tooltip-vang")
         grab_tooltip(win.live_page.word_view, 6, "07c-nghe-tooltip-tam")
+        # Rê chuột: trên cảnh 3D (thác nước hiện dấu nối), rồi trên thác nước (cảnh 3D hiện dấu).
+        cell = tallest_cell(win.live_page.ridge)
+        if cell is not None:
+            win.live_page.ridge.hover_at(cell)
+            pump(200)
+            grab(win, "07d-nghe-3d-rechuot")
+            win.live_page.ridge.hover_at(None)
+        wf = win.live_page.waterfall
+        from PySide6.QtCore import QPoint
+
+        wf.hover_at(QPoint(int(wf.width() * 0.97), int(wf.height() * (1 - 700 / 2000))))
+        pump(200)
+        grab(win, "07e-nghe-2d-rechuot")
+        wf.hover_at(None)
 
     # Cài đặt
     show(win.settings_page)

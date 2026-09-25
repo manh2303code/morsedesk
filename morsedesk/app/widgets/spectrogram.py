@@ -1,15 +1,20 @@
 """Spectrogram 0–2 kHz bằng pyqtgraph, vạch tone, vạch đầu từ, con trỏ thời gian.
 
 Dùng bảng màu phổ chung của giao diện (`theme.spectrum_lut`) — cùng bảng với thác nước và cảnh 3D.
+Rê chuột (người dùng 25/09): chữ thập + ô số đo như cảnh 3D (từ ở đó, tần số, mức trên nền, giây).
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import QEvent, QRectF
+from PySide6.QtCore import QEvent, QPointF, QRectF
 
 from morsedesk.app.theme import LAMP, LINE, MUTED, NIGHT, spectrum_lut
+from morsedesk.app.widgets.hover_readout import HoverReadout, Line
+from morsedesk.app.widgets.ridge3d import REL_CAP_DB
 from morsedesk.app.worker import DB_FLOOR, MAX_FREQ_HZ, Spectrogram
 
 EMPTY_SPAN_S = 10.0     # trục thời gian khi chưa có file
@@ -45,6 +50,19 @@ class SpectrogramView(pg.PlotWidget):
         self.cursor_line.setVisible(False)
         self.addItem(self.cursor_line)
         self.word_lines: list[pg.InfiniteLine] = []
+        # Chữ thập theo chuột + ô số đo. `describe(giây, Hz, dB trên nền)` do trang đặt.
+        self.describe: Callable[[float, float, float], list[Line]] | None = None
+        self._spec: Spectrogram | None = None
+        self._floor_db = DB_FLOOR
+        self._hover: tuple[float, float] | None = None
+        cross = pg.mkPen((255, 255, 255, 110), width=1)
+        self.hover_v = pg.InfiniteLine(angle=90, pen=cross)
+        self.hover_h = pg.InfiniteLine(angle=0, pen=cross)
+        for ln in (self.hover_v, self.hover_h):
+            ln.setVisible(False)
+            self.addItem(ln, ignoreBounds=True)
+        self.readout = HoverReadout(self)
+        self.scene().sigMouseMoved.connect(self._on_mouse)
 
     def retranslate(self) -> None:
         self.setLabel("bottom", self.tr("s"))
@@ -59,7 +77,11 @@ class SpectrogramView(pg.PlotWidget):
         """Vẽ spectrogram mới; `None` hoặc rỗng (audio 0 mẫu) chỉ xóa ảnh, không lỗi."""
         if spec is None or spec.power_db.size == 0:
             self.image.clear()
+            self._spec = None
+            self._show_hover(None)
             return
+        self._spec = spec
+        self._floor_db = float(np.percentile(spec.power_db, 20))
         self.image.setImage(np.ascontiguousarray(spec.power_db.T), autoLevels=False, levels=(DB_FLOOR, 0.0))
         t_end = float(spec.times_s[-1] + (spec.times_s[1] - spec.times_s[0] if len(spec.times_s) > 1 else 0.02))
         f_end = float(spec.freqs_hz[-1])
@@ -92,9 +114,65 @@ class SpectrogramView(pg.PlotWidget):
             self.cursor_line.setValue(float(t_s))
             self.cursor_line.setVisible(True)
 
+    # ---- rê chuột ----
+    def point_at(self, t_s: float, hz: float) -> tuple[float, float, float] | None:
+        """(giây, Hz, dB trên nền) của ô phổ gần (t_s, hz) nhất; None nếu ngoài dữ liệu."""
+        spec = self._spec
+        if spec is None or not len(spec.times_s):
+            return None
+        dt = float(spec.times_s[1] - spec.times_s[0]) if len(spec.times_s) > 1 else 0.02
+        if not (0.0 <= t_s <= float(spec.times_s[-1]) + dt / 2 and 0.0 <= hz <= float(spec.freqs_hz[-1])):
+            return None
+        col = int(np.clip(np.searchsorted(spec.times_s, t_s), 0, len(spec.times_s) - 1))
+        if col > 0 and abs(spec.times_s[col - 1] - t_s) < abs(spec.times_s[col] - t_s):
+            col -= 1
+        row = int(np.abs(spec.freqs_hz - hz).argmin())
+        rel = float(np.clip(spec.power_db[row, col] - self._floor_db, 0.0, REL_CAP_DB))
+        return t_s, hz, rel
+
+    def hover(self) -> tuple[float, float] | None:
+        return self._hover
+
+    def hover_at(self, t_s: float | None, hz: float = 0.0) -> None:
+        """Như rê chuột tới (giây, Hz) — cho test và ảnh chụp; None = chuột rời đi."""
+        if t_s is None:
+            self._show_hover(None)
+            return
+        self._on_mouse(self.getPlotItem().vb.mapViewToScene(QPointF(t_s, hz)))
+
+    def _on_mouse(self, scene_pos) -> None:
+        vb = self.getPlotItem().vb
+        if not vb.sceneBoundingRect().contains(scene_pos):
+            self._show_hover(None)
+            return
+        view = vb.mapSceneToView(scene_pos)
+        pt = self.point_at(float(view.x()), float(view.y()))
+        self._show_hover(pt, self.mapFromScene(scene_pos))
+
+    def _show_hover(self, pt, at=None) -> None:
+        if pt is None:
+            self._hover = None
+            for ln in (self.hover_v, self.hover_h):
+                ln.setVisible(False)
+            self.readout.show_lines([], at)
+            return
+        t_s, hz, rel = pt
+        self._hover = (t_s, hz)
+        self.hover_v.setValue(t_s)
+        self.hover_h.setValue(hz)
+        for ln in (self.hover_v, self.hover_h):
+            ln.setVisible(True)
+        self.readout.show_lines(self.describe(t_s, hz, rel) if self.describe else [], at)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802 (tên Qt)
+        self._show_hover(None)
+        super().leaveEvent(event)
+
     def clear(self) -> None:
         """Xóa ảnh và mọi vạch, quay về trạng thái rỗng ban đầu."""
         self.image.clear()
+        self._spec = None
+        self._show_hover(None)
         self.set_tone(None)
         self.set_word_marks([])
         self.set_cursor(None)

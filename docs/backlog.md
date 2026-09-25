@@ -82,6 +82,18 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
 
 ## Đã xong (phiên 24/09)
 
+- **Ba file mẫu "Xin chào" thuần Morse** (25/09, người dùng): bỏ nhiễu SNR 15 dB — sine 700 Hz liên
+  tục pha, sườn raised-cosine 5 ms, khoảng lặng là số 0 tuyệt đối. Cả ba vẫn tự nhận đúng nguyên văn
+  và ngôn ngữ (đi đường DSP, SNR đo 51 dB). Cảnh 3D: dải động hiển thị tối đa 30 dB (MAX_RANGE_DB) để
+  file sạch không nhòe thành đồi; gai nhỏ còn lại ở mép dấu là dải biên thật của sườn 5 ms.
+- **Cảnh 3D trang Nghe quét trái sang phải** (25/09, người dùng): cùng cảnh với trang Giải mã (ngang =
+  thời gian, sâu = ±250 Hz quanh tone), đầu ghi đi 12 s/lượt như màn hình điện tim, lượt trước hạ còn
+  35 % + khe trống (widgets/live_sweep.py). Trước đó cuộn theo chiều sâu. Cột 32 ms (thác nước 64 ms).
+- **Rê chuột trên mọi biểu đồ tín hiệu** (25/09, người dùng): cảnh 3D (chọn điểm theo thứ tự che
+  khuất), thác nước, phổ 2D trang Giải mã — ô số đo: từ ở đó, Hz, dB trên nền (kẹp 0–60), thời điểm.
+  Trang Nghe nối điểm đang xem giữa 3D và thác nước. Cảnh 3D vẽ vào ảnh đệm: rê chuột 0,5 ms/khung
+  thay vì 8,7 ms.
+
 - **Trang Tạo mã: hiệu ứng theo tiếng khi Nghe thử** (25/09): chữ đang phát có khung bo tròn, dấu
   đang kêu to và sáng hơn; phím Morse động (vẽ bằng key_art như logo) nhấn đúng lúc tone vang. Thời
   điểm từ encode/timeline.py (cùng tokens_to_elements với âm thanh, lệch < 6 ms), vị trí từ

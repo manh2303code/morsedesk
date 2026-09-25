@@ -10,15 +10,24 @@ hành nhìn vào đây để biết ngay ba điều mà dòng chữ không nói 
 
 Cuộn bằng cách dịch mảng numpy rồi đổ sang QImage một lần, chứ không vẽ từng ô bằng QPainter:
 ở 10 cột mỗi giây và vài trăm cột trên màn hình, vẽ từng ô sẽ ăn hết một lõi.
+
+Rê chuột (người dùng 25/09): chữ thập + ô số đo (từ ở thời điểm đó, tần số, mức trên nền, bao nhiêu
+giây trước). Mốc thời gian là giây kể từ lúc bấm Nghe, như cảnh 3D, nên trang Nghe nối được điểm
+đang xem ở biểu đồ này sang biểu đồ kia (`set_marker`).
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import numpy as np
+from PySide6.QtCore import QPoint, QPointF, Qt, Signal
 from PySide6.QtGui import QColor, QImage, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
-from morsedesk.app.theme import spectrum_rgb
+from morsedesk.app.theme import LAMP, NIGHT, spectrum_rgb
+from morsedesk.app.widgets.hover_readout import HoverReadout, Line
+from morsedesk.app.widgets.ridge3d import REL_CAP_DB
 from morsedesk.constants import SAMPLE_RATE
 
 MAX_HZ = 2000.0         # trên dải này Morse nghiệp vụ không dùng tới
@@ -36,13 +45,26 @@ FFT_SIZE = 512
 class WaterfallView(QWidget):
     """Thác nước tần số cuộn liên tục; `push(block)` mỗi khi có audio mới."""
 
+    hover_changed = Signal(object)      # (giây, Hz) dưới mũi chuột, hoặc None
+
     def __init__(self, sample_rate: int = SAMPLE_RATE, parent=None) -> None:
         super().__init__(parent)
         self.sample_rate = int(sample_rate)
         self.setMinimumHeight(160)
         self._data = np.zeros((N_BINS, N_COLS), dtype=np.float32)   # dB đã chuẩn hóa 0..1
+        self._rel = np.zeros((N_BINS, N_COLS), dtype=np.float32)    # dB trên nền, cho ô số đo
         self._pending = np.zeros(0, dtype=np.float32)
         self._tone_hz: float | None = None
+        self._cols_total = 0                 # số cột đã đẩy kể từ lúc bấm Nghe = mốc thời gian
+        self._filled_from = 0                # cột đầu tiên còn dữ liệu (sau nút Xóa giữa phiên)
+        self.col_s = FFT_SIZE / self.sample_rate
+        # Trang đặt: (giây, Hz, dB trên nền) -> các dòng của ô số đo.
+        self.describe: Callable[[float, float, float], list[Line]] | None = None
+        self._mouse: QPoint | None = None
+        self._hover: tuple[float, float] | None = None
+        self._marker: tuple[float, float | None] | None = None
+        self.readout = HoverReadout(self)
+        self.setMouseTracking(True)
         self._window = np.hanning(FFT_SIZE).astype(np.float32)
         # Chỉ giữ các bin dưới MAX_HZ rồi gộp về N_BINS hàng: phổ đầy đủ mịn hơn mức mắt phân
         # biệt được trên 160 px, mà lại tốn bộ nhớ và thời gian đổ ảnh.
@@ -57,10 +79,77 @@ class WaterfallView(QWidget):
         self._tone_hz = hz
         self.update()
 
-    def clear(self) -> None:
+    def clear(self, keep_time: bool = False) -> None:
+        """Xóa hình. `keep_time`: giữ mốc thời gian (nút Xóa giữa phiên nghe)."""
         self._data[:] = 0.0
-        self._pending = np.zeros(0, dtype=np.float32)
+        self._rel[:] = 0.0
         self._tone_hz = None
+        self._marker = None
+        if not keep_time:
+            self._pending = np.zeros(0, dtype=np.float32)
+            self._cols_total = 0
+            self._filled_from = 0
+        else:
+            self._filled_from = self._cols_total
+        self._refresh_hover()
+
+    # ---- rê chuột ----
+    def point_at(self, x: float, y: float) -> tuple[float, float, float] | None:
+        """(giây kể từ lúc bấm Nghe, Hz, dB trên nền) tại điểm (x, y); None nếu chỗ đó chưa có dữ liệu."""
+        w, h = max(1, self.width()), max(1, self.height())
+        if not (0 <= x < w and 0 <= y < h):
+            return None
+        i = min(N_COLS - 1, int(x / w * N_COLS))
+        j = self._cols_total - N_COLS + i
+        if j < max(0, self._filled_from):
+            return None
+        hz = max(0.0, min(MAX_HZ, (1.0 - y / h) * MAX_HZ))
+        row = int(round(hz / MAX_HZ * (N_BINS - 1)))
+        return (j + 0.5) * self.col_s, hz, float(self._rel[row, i])
+
+    def x_of(self, t_s: float) -> float | None:
+        """Hoành độ của giây `t_s`, nếu giây đó còn trên thác nước."""
+        i = int(np.floor(t_s / self.col_s)) - (self._cols_total - N_COLS)
+        if not 0 <= i < N_COLS:
+            return None
+        return (i + 0.5) / N_COLS * self.width()
+
+    def hover(self) -> tuple[float, float] | None:
+        return self._hover
+
+    def set_marker(self, t_s: float | None, hz: float | None = None) -> None:
+        """Điểm do cảnh 3D chỉ sang: vạch dọc ở giây đó, chấm ở tần số đó."""
+        m = None if t_s is None else (float(t_s), hz)
+        if m != self._marker:
+            self._marker = m
+            self.update()
+
+    def marker(self) -> tuple[float, float | None] | None:
+        return self._marker
+
+    def mouseMoveEvent(self, event) -> None:
+        self._mouse = event.position().toPoint()
+        self._refresh_hover()
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self._mouse = None
+        self._refresh_hover()
+        super().leaveEvent(event)
+
+    def hover_at(self, pos: QPoint | None) -> None:
+        """Như rê chuột tới `pos` (None = chuột rời đi) — cho test và ảnh chụp."""
+        self._mouse = pos
+        self._refresh_hover()
+
+    def _refresh_hover(self) -> None:
+        pt = None if self._mouse is None else self.point_at(self._mouse.x(), self._mouse.y())
+        hover = None if pt is None else (pt[0], pt[1])
+        lines = self.describe(*pt) if (pt is not None and self.describe is not None) else []
+        self.readout.show_lines(lines, self._mouse or QPoint())
+        if hover != self._hover:
+            self._hover = hover
+            self.hover_changed.emit(hover)
         self.update()
 
     def push(self, block) -> np.ndarray:
@@ -84,13 +173,19 @@ class WaterfallView(QWidget):
             floor = float(np.percentile(db, NOISE_PCT))
             col = np.full(N_BINS, floor, dtype=np.float32)
             np.maximum.at(col, self._bin_of, db)        # gộp bin: lấy đỉnh, không lấy trung bình
-            cols.append(np.clip((col - floor) / DB_RANGE, 0.0, 1.0))
+            cols.append(col - floor)
         if not cols:
             return np.zeros((N_BINS, 0), np.float32)
-        new = np.stack(cols, axis=1)
+        rel = np.stack(cols, axis=1)
+        new = np.clip(rel / DB_RANGE, 0.0, 1.0)
         n = min(new.shape[1], N_COLS)
         self._data = np.roll(self._data, -n, axis=1)
         self._data[:, -n:] = new[:, -n:]
+        self._rel = np.roll(self._rel, -n, axis=1)
+        self._rel[:, -n:] = np.clip(rel[:, -n:], 0.0, REL_CAP_DB)
+        self._cols_total += new.shape[1]
+        if self._mouse is not None:          # chuột đứng yên, thác nước trôi: điểm dưới nó đã khác
+            self._refresh_hover()
         self.update()
         return new
 
@@ -114,8 +209,35 @@ class WaterfallView(QWidget):
                 y = h - int(h * hz / MAX_HZ)
                 p.drawLine(0, y, 6, y)
                 p.drawText(9, y + 4, f"{hz}")
+            self._paint_pointers(p, w, h)
         finally:
             p.end()
+
+    def _paint_pointers(self, p: QPainter, w: int, h: int) -> None:
+        """Chữ thập dưới chuột; hoặc (khi chuột ở cảnh 3D) vạch + chấm của điểm bên đó."""
+        lamp = QColor(LAMP)
+        if self._hover is not None and self._mouse is not None:
+            pen = QPen(QColor(255, 255, 255, 110))
+            pen.setWidth(1)
+            p.setPen(pen)
+            p.drawLine(self._mouse.x(), 0, self._mouse.x(), h)
+            p.drawLine(0, self._mouse.y(), w, self._mouse.y())
+            return
+        if self._marker is None:
+            return
+        x = self.x_of(self._marker[0])
+        if x is None:
+            return
+        pen = QPen(QColor(lamp.red(), lamp.green(), lamp.blue(), 170))
+        pen.setStyle(Qt.PenStyle.DashLine)
+        p.setPen(pen)
+        p.drawLine(QPointF(x, 0), QPointF(x, h))
+        hz = self._marker[1]
+        if hz is not None:
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            p.setPen(QPen(QColor(NIGHT), 1.5))
+            p.setBrush(lamp)
+            p.drawEllipse(QPointF(x, h - h * min(hz, MAX_HZ) / MAX_HZ), 3.5, 3.5)
 
     def minimumSizeHint(self):
         from PySide6.QtCore import QSize

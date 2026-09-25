@@ -8,6 +8,10 @@ thật của một máy thu tự sửa chữ là người ta đã chép xuống 
 Từ 25/09 bản chép dùng CHÍNH widget của trang Giải mã (WordView): từ đáng ngờ gạch chân vàng/đỏ,
 rê chuột hiện độ tin cậy, vì sao có màu đó và tỉ lệ đúng đo được ở mức ấy (người dùng yêu cầu hai
 trang đọc giống nhau). Chưa khóa được ngôn ngữ thì mọi chữ còn ở dạng tạm (model/stream.py).
+
+Cảnh 3D (25/09, người dùng): quét từ trái sang phải như cảnh 3D trang Giải mã khi nghe lại, thay vì
+cuộn ra sau (widgets/live_sweep.py). Rê chuột trên cảnh 3D hay thác nước đều hiện ô số đo; điểm đang
+xem ở biểu đồ này được đánh dấu luôn ở biểu đồ kia (cùng mốc giây kể từ lúc bấm Nghe).
 """
 
 from __future__ import annotations
@@ -29,10 +33,12 @@ from PySide6.QtWidgets import (
 from morsedesk.app.live_worker import LiveWorker, input_devices
 from morsedesk.app.theme import NIGHT, mark_primary
 from morsedesk.app.widgets.banner import Banner
+from morsedesk.app.widgets.hover_readout import Line
 from morsedesk.app.widgets.icons import icon_button
+from morsedesk.app.widgets.live_sweep import SWEEP_S, LiveSweep
 from morsedesk.app.widgets.ridge3d import Ridge3DView
 from morsedesk.app.widgets.stats_bar import Readout
-from morsedesk.app.widgets.waterfall import MAX_HZ, WaterfallView
+from morsedesk.app.widgets.waterfall import WaterfallView
 from morsedesk.app.widgets.word_view import TENTATIVE_TEXT, WordView
 from morsedesk.warnings import WarningCode
 
@@ -42,8 +48,13 @@ PROFILE_CHOICES = ("auto", "en", "ru", "kk-cyrl-ru")
 
 # Xám đủ nhạt để thấy ngay là "chưa chắc", vẫn đủ đậm để đọc trên nền đêm (5,1:1).
 TENTATIVE_COLOR = TENTATIVE_TEXT
-RIDGE_EVERY = 2         # cột thác nước / hàng cảnh 3D: ~7,8 hàng/s, 48 hàng = ~6 s lịch sử
 LEVEL_SCALE = 3000      # RMS 0..~0,33 trải hết vạch: tín hiệu Morse điển hình rất nhỏ
+# Cảnh 3D quét: lượt trước (phía trước đầu ghi) còn 35 % chiều cao — vẫn đọc được hình, rõ là cũ;
+# khe trống ~0,25 s ngay trước đầu ghi cho thấy ranh giới mới/cũ như màn hình điện tim.
+SWEEP_OLD = 0.35
+SWEEP_GAP = 0.02
+SWEEP_RISE = 0.004      # cột vừa ghi nổi đủ cao ngay (trang Giải mã: dốc 2 % cho hiệu ứng "nổi lên")
+TICK_EVERY_S = 2
 
 
 class LivePage(QWidget):
@@ -55,6 +66,10 @@ class LivePage(QWidget):
         self._committed = ""
         self._tentative = ""
         self._clicks_warned = False     # banner "tiếng click phím" đang hiện
+        self._words: list = []          # Word đã chốt + tạm, mốc giây kể từ lúc bấm Nghe
+        self._heard_s = 0.0
+        self.sweep = LiveSweep()
+        self._scene = None
 
         self.device_label = QLabel(self)
         self.device_combo = QComboBox(self)
@@ -108,10 +123,17 @@ class LivePage(QWidget):
                 rl.addWidget(sep)
             rl.addWidget(cell, 1)
         rl.addStretch(1)
-        # Tín hiệu như máy thu SDR: thác nước 3D cuộn (hàng mới ở trước) trên thác nước phẳng.
-        self.ridge = Ridge3DView(rows=48, cols=160, parent=self)
-        self.ridge.front_ticks = [(hz / MAX_HZ, f"{hz}") for hz in (0, 500, 1000, 1500, 2000)]
+        # Tín hiệu như máy thu SDR: cảnh 3D quét trái sang phải (dải ±250 Hz quanh tone) trên thác
+        # nước phẳng cả dải 0–2000 Hz.
+        self.ridge = Ridge3DView(parent=self)
+        self.ridge.ahead_level = SWEEP_OLD
+        self.ridge.gap_width = SWEEP_GAP
+        self.ridge.rise_width = SWEEP_RISE
+        self.ridge.describe = self._describe_ridge
         self.waterfall = WaterfallView(parent=self)
+        self.waterfall.describe = self._describe_waterfall
+        self.ridge.hover_changed.connect(self._on_ridge_hover)
+        self.waterfall.hover_changed.connect(self._on_waterfall_hover)
         # Bản chép: đúng widget trang Giải mã dùng (gạch chân theo độ tin cậy, tooltip), nên hai
         # trang đọc giống nhau và người dùng không phải học hai cách nhìn. Chữ tạm vẽ màu xám.
         self.word_view = WordView(self, live=True)
@@ -192,18 +214,78 @@ class LivePage(QWidget):
         return [self.alphabet_cell, self.tone_cell, self.speed_cell, self.snr_cell, self.heard_cell]
 
     def _on_block(self, block) -> None:
-        """Một khối audio: thác nước phẳng tính phổ, cảnh 3D dùng lại chính các cột đó."""
-        cols = self.waterfall.push(block)
-        for i in range(0, cols.shape[1], RIDGE_EVERY):
-            self.ridge.push_row(cols[:, i])
+        """Một khối audio: thác nước cả dải, cảnh 3D quét dải quanh tone (cột 32 ms, mịn gấp đôi thác
+        nước — dit 40 WPM chỉ dài 30 ms)."""
+        self._heard_s += len(block) / self.sweep.sample_rate
+        self.waterfall.push(block)
+        if self.sweep.push(block):
+            self._update_ridge()
+
+    def _update_ridge(self) -> None:
+        self._scene = self.sweep.scene()
+        self.ridge.depth_label = self.tr("{tone} Hz ± 250 Hz").format(tone=f"{self.sweep.center_hz():.0f}")
+        self.ridge.set_surface(self._scene.z)
+        self.ridge.set_playhead(self.sweep.playhead())
+        if self.ridge.hover() is not None:          # ô dưới chuột vừa bị ghi đè: dời dấu bên thác nước
+            self._on_ridge_hover(self.ridge.hover())
+
+    # ---- rê chuột: ô số đo + dấu nối hai biểu đồ ----
+    def _describe_ridge(self, row: int, col: int) -> list[Line]:
+        t = self.sweep.column_time(col)
+        if t is None or self._scene is None:
+            return []
+        rel = float(self._scene.rel_db[row, col])
+        if rel != rel:                              # NaN: ô đã bị nút Xóa làm trống
+            return []
+        return self._point_lines(t, float(self._scene.freqs_hz[row]), rel)
+
+    def _describe_waterfall(self, t_s: float, hz: float, rel_db: float) -> list[Line]:
+        return self._point_lines(t_s, hz, rel_db)
+
+    def _point_lines(self, t_s: float, hz: float, rel_db: float) -> list[Line]:
+        lines: list[Line] = []
+        word = self._word_at(t_s)
+        if word:
+            lines.append((word, "word"))
+        hz_u = self.tr("Hz")
+        lines.append((f"{hz:.0f} {hz_u}", "value"))
+        lines.append((self.tr("{db:+.0f} dB above noise").format(db=rel_db), "value"))
+        lines.append((self.tr("{t:.1f} s ago").format(t=max(0.0, self._heard_s - t_s)), "muted"))
+        return lines
+
+    def _word_at(self, t_s: float) -> str:
+        for w in self._words:
+            if w.start_s <= t_s <= w.end_s:
+                return w.text
+        return ""
+
+    def _on_ridge_hover(self, cell) -> None:
+        if cell is None or self._scene is None:
+            self.waterfall.set_marker(None)
+            return
+        row, col = cell
+        self.waterfall.set_marker(self.sweep.column_time(col), float(self._scene.freqs_hz[row]))
+
+    def _on_waterfall_hover(self, point) -> None:
+        if point is None or self._scene is None:
+            self.ridge.set_marker(None, None)
+            return
+        t_s, hz = point
+        near = abs(self._scene.freqs_hz - hz)
+        row = int(near.argmin()) if near.min() <= self.sweep.bin_hz / 2 else None
+        self.ridge.set_marker(row, self.sweep.column_of(t_s))
 
     def on_stats(self, update) -> None:
         """Thông số của lần giải mã gần nhất: từ (đã chốt + tạm), WPM, tone, SNR, ngôn ngữ."""
         committed = list(getattr(update, "committed_words", []) or [])
         tentative = list(getattr(update, "words", []) or [])
+        self._words = committed + tentative
         self.word_view.set_words(committed + tentative, tentative_from=len(committed))
         self._show_clicks_warning(WarningCode.KEY_CLICKS.value in (getattr(update, "warnings", []) or []))
         self.waterfall.set_tone(getattr(update, "tone_hz", None))
+        self.sweep.set_tone(getattr(update, "tone_hz", None))
+        if self.sweep.written:
+            self._update_ridge()                    # tone mới: dải 3D dời theo ngay
         self.stats_label.setText(self._stats_text(update))
         wpm = getattr(update, "wpm", None)
         tone = getattr(update, "tone_hz", None)
@@ -252,8 +334,7 @@ class LivePage(QWidget):
     def _on_listen_clicked(self) -> None:
         if self.listen_button.isChecked():
             self.banner.hide()
-            self.waterfall.clear()
-            self.ridge.clear()
+            self._reset_signal(new_session=True)
             self.word_view.clear()
             self.worker.start_listening(self.device_combo.currentData(),
                                         self.profile_combo.currentData())
@@ -272,12 +353,22 @@ class LivePage(QWidget):
         return self.tr("Only clicks were heard, no Morse tone. If this is a telegraph key or sounder: "
                        "MorseDesk decodes Morse sent as a tone (radio CW); key clicks cannot be decoded yet.")
 
+    def _reset_signal(self, new_session: bool) -> None:
+        """Xóa hai biểu đồ. Mốc thời gian chỉ về 0 khi bắt đầu phiên nghe mới (cùng lúc StreamDecoder
+        reset); nút Xóa giữa phiên giữ mốc, nếu không từ mới về sau sẽ lệch khỏi chỗ của nó."""
+        self._words = []
+        self._scene = None
+        if new_session:
+            self._heard_s = 0.0
+        self.sweep.clear(keep_time=not new_session)
+        self.waterfall.clear(keep_time=not new_session)
+        self.ridge.clear()
+
     def clear(self) -> None:
         self._committed = self._tentative = ""
         self._show_clicks_warning(False)
         self.word_view.clear()
-        self.waterfall.clear()
-        self.ridge.clear()
+        self._reset_signal(new_session=False)
         self.stats_label.clear()
         for c in self.live_cells():
             c.value.setText("–")
@@ -309,7 +400,9 @@ class LivePage(QWidget):
         self.snr_cell.caption.setText(self.tr("SNR"))
         self.heard_cell.caption.setText(self.tr("Heard"))
         self.ridge.placeholder = self.tr("Press Listen to see the band live in 3D.")
-        self.ridge.depth_label = self.tr("0–2000 Hz, newest in front")
+        sec = self.tr("s")
+        self.ridge.front_ticks = [(k / SWEEP_S, f"{k} {sec}") for k in range(0, int(SWEEP_S) + 1, TICK_EVERY_S)]
+        self.ridge.update()
         self.legend.setText(self.tr("Grey words may still change. Underlined words are uncertain; "
                                     "point at any word for details."))
         if self._clicks_warned:

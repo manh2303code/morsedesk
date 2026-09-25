@@ -47,244 +47,259 @@
 <context>
     <name>DecodePage</name>
     <message>
-        <location filename="../decode_page.py" line="338" />
+        <location filename="../decode_page.py" line="344" />
         <source>Plain text to select and copy, and the alternative result</source>
         <translation>Белгілеп көшіруге арналған қарапайым мәтін және балама нәтиже</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="394" />
-        <location filename="../decode_page.py" line="736" />
+        <location filename="../decode_page.py" line="400" />
+        <location filename="../decode_page.py" line="765" />
         <source>Open audio file</source>
         <translation>Аудиофайлды ашу</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="396" />
+        <location filename="../decode_page.py" line="402" />
         <source>Audio files ({exts})</source>
         <translation>Аудиофайлдар ({exts})</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="504" />
+        <location filename="../decode_page.py" line="510" />
         <source>Cannot load audio for playback: {detail}</source>
         <translation>Ойнату үшін дыбысты жүктеу мүмкін емес: {detail}</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="533" />
+        <location filename="../decode_page.py" line="542" />
         <source>{tone} Hz ± 250 Hz</source>
         <translation>{tone} Гц ± 250 Гц</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="570" />
+        <location filename="../decode_page.py" line="559" />
+        <source>Hz</source>
+        <translation>Гц</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="559" />
+        <source>s</source>
+        <translation>с</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="561" />
+        <source>{db:+.0f} dB above noise</source>
+        <translation>{db:+.0f} дБ шудан жоғары</translation>
+    </message>
+    <message>
+        <location filename="../decode_page.py" line="599" />
         <source>Model result: {text}</source>
         <translation>Модель нәтижесі: {text}</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="571" />
+        <location filename="../decode_page.py" line="600" />
         <source>DSP fallback result: {text}</source>
         <translation>DSP қосалқы нәтижесі: {text}</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="582" />
+        <location filename="../decode_page.py" line="611" />
         <source>No Morse signal found in this audio.</source>
         <translation>Бұл аудиода Морзе сигналы табылмады.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="584" />
+        <location filename="../decode_page.py" line="613" />
         <source>Tone not detected clearly; guessing from the spectral peak, so the result may be wrong.</source>
         <translation>Тон анық анықталмады; спектр шыңы бойынша болжанды, сондықтан нәтиже қате болуы мүмкін.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="587" />
+        <location filename="../decode_page.py" line="616" />
         <source>A second tone was found at {second_hz:.0f} Hz; tracking {tracked_hz:.0f} Hz.</source>
         <translation>{second_hz:.0f} Гц жиілігінде екінші тон табылды; {tracked_hz:.0f} Гц бақылануда.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="589" />
+        <location filename="../decode_page.py" line="618" />
         <source>Low confidence.</source>
         <translation>Сенімділік төмен.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="591" />
+        <location filename="../decode_page.py" line="620" />
         <source>Low confidence; the DSP decoder result is shown too.</source>
         <translation>Сенімділік төмен; DSP декодерінің нәтижесі де көрсетілген.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="613" />
+        <location filename="../decode_page.py" line="642" />
         <source>File not found: {path}</source>
         <translation>Файл табылмады: {path}</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="615" />
+        <location filename="../decode_page.py" line="644" />
         <source>Cannot read {path}. Supported formats: {exts}</source>
         <translation>{path} оқылмады. Қолдау көрсетілетін пішімдер: {exts}</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="619" />
+        <location filename="../decode_page.py" line="648" />
         <source>{path} is {minutes} min long; this version supports up to {limit} min.</source>
         <translation>{path} ұзақтығы {minutes} мин; бұл нұсқа {limit} мин дейін қолдайды.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="621" />
+        <location filename="../decode_page.py" line="650" />
         <source>Setup problem: a model or language model file is missing or unusable.</source>
         <translation>Орнату мәселесі: модель немесе тіл моделі файлы жоқ не жарамсыз.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="622" />
+        <location filename="../decode_page.py" line="651" />
         <source>Internal error while decoding. See the log file for details.</source>
         <translation>Декодтау кезінде ішкі қате. Толығырақ журнал файлында.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="687" />
+        <location filename="../decode_page.py" line="716" />
         <source>Decoding cancelled.</source>
         <translation>Декодтау тоқтатылды.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="704" />
+        <location filename="../decode_page.py" line="733" />
         <source>Text files (*.txt)</source>
         <translation>Мәтін файлдары (*.txt)</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="704" />
+        <location filename="../decode_page.py" line="733" />
         <source>JSON files (*.json)</source>
         <translation>JSON файлдары (*.json)</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="705" />
-        <location filename="../decode_page.py" line="754" />
+        <location filename="../decode_page.py" line="734" />
+        <location filename="../decode_page.py" line="783" />
         <source>Export</source>
         <translation>Экспорттау</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="719" />
+        <location filename="../decode_page.py" line="748" />
         <source>Cannot write {path}: {detail}</source>
         <translation>{path} жазылмады: {detail}</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="735" />
+        <location filename="../decode_page.py" line="764" />
         <source>Open audio file… (Ctrl+O)</source>
         <translation>Аудиофайлды ашу… (Ctrl+O)</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="753" />
+        <location filename="../decode_page.py" line="782" />
         <source>Export to a file: text or JSON with timings</source>
         <translation>Файлға экспорттау: мәтін немесе уақыт белгілері бар JSON</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="755" />
+        <location filename="../decode_page.py" line="784" />
         <source>Text file (.txt)…</source>
         <translation>Мәтіндік файл (.txt)…</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="756" />
+        <location filename="../decode_page.py" line="785" />
         <source>JSON with word timings (.json)…</source>
         <translation>Әр сөздің уақыты бар JSON (.json)…</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="757" />
+        <location filename="../decode_page.py" line="786" />
         <source>Decoded text</source>
         <translation>Декодталған мәтін</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="737" />
+        <location filename="../decode_page.py" line="766" />
         <source>Message language:</source>
         <translation>Хабарлама тілі:</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="337" />
+        <location filename="../decode_page.py" line="343" />
         <source>Hide</source>
         <translation>Жасыру</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="337" />
+        <location filename="../decode_page.py" line="343" />
         <source>Show</source>
         <translation>Көрсету</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="594" />
+        <location filename="../decode_page.py" line="623" />
         <source>Only clicks were heard, no Morse tone. If this is a telegraph key or sounder: MorseDesk decodes Morse sent as a tone (radio CW); key clicks cannot be decoded yet.</source>
         <translation>Тек шыртыл естіледі, Морзе тоны жоқ. Егер бұл телеграф кілті немесе клопфер болса: MorseDesk тонмен берілген Морзені (радио CW) декодтайды; кілт шыртылын әзірге декодтай алмайды.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="739" />
+        <location filename="../decode_page.py" line="768" />
         <source>Auto</source>
         <translation>Авто</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="740" />
+        <location filename="../decode_page.py" line="769" />
         <source>English</source>
         <translation>Ағылшын</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="741" />
+        <location filename="../decode_page.py" line="770" />
         <source>Russian</source>
         <translation>Орыс</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="742" />
+        <location filename="../decode_page.py" line="771" />
         <source>Kazakh</source>
         <translation>Қазақ</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="746" />
+        <location filename="../decode_page.py" line="775" />
         <source>Use language model</source>
         <translation>Тіл моделін қолдану</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="747" />
+        <location filename="../decode_page.py" line="776" />
         <source>Auto always uses the language model.</source>
         <translation>«Авто» режимі әрқашан тіл моделін пайдаланады.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="749" />
+        <location filename="../decode_page.py" line="778" />
         <source>Decode</source>
         <translation>Декодтау</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="750" />
+        <location filename="../decode_page.py" line="779" />
         <source>Cancel</source>
         <translation>Бас тарту</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="751" />
+        <location filename="../decode_page.py" line="780" />
         <source>Copy the decoded text</source>
         <translation>Декодталған мәтінді көшіру</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="752" />
+        <location filename="../decode_page.py" line="781" />
         <source>Copy</source>
         <translation>Көшіру</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="758" />
+        <location filename="../decode_page.py" line="787" />
         <source>Plain text</source>
         <translation>Қарапайым мәтін</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="761" />
+        <location filename="../decode_page.py" line="790" />
         <source>No file selected. Drop an audio file here.</source>
         <translation>Файл таңдалмаған. Аудиофайлды осында сүйреп апарыңыз.</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="762" />
+        <location filename="../decode_page.py" line="791" />
         <source>Sample</source>
         <translation>Үлгі</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="763" />
+        <location filename="../decode_page.py" line="792" />
         <source>Signal</source>
         <translation>Сигнал</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="764" />
+        <location filename="../decode_page.py" line="793" />
         <source>3D</source>
         <translation>3D</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="765" />
+        <location filename="../decode_page.py" line="794" />
         <source>Spectrogram</source>
         <translation>Спектрограмма</translation>
     </message>
     <message>
-        <location filename="../decode_page.py" line="766" />
+        <location filename="../decode_page.py" line="795" />
         <source>Open or drop an audio file to see its signal in 3D.</source>
         <translation>Сигналын 3D түрінде көру үшін аудиофайлды ашыңыз немесе осында сүйреңіз.</translation>
     </message>
@@ -464,190 +479,202 @@
 <context>
     <name>LivePage</name>
     <message>
-        <location filename="../live_page.py" line="183" />
+        <location filename="../live_page.py" line="205" />
         <source>No input device found. Plug in a sound card or check that PortAudio is installed.</source>
         <translation>Кіріс құрылғысы табылмады. Дыбыс картасын қосыңыз немесе PortAudio орнатылғанын тексеріңіз.</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="211" />
+        <location filename="../live_page.py" line="226" />
+        <source>{tone} Hz ± 250 Hz</source>
+        <translation>{tone} Гц ± 250 Гц</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="250" />
+        <location filename="../live_page.py" line="293" />
         <source>Hz</source>
         <translation>Гц</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="211" />
+        <location filename="../live_page.py" line="252" />
+        <source>{db:+.0f} dB above noise</source>
+        <translation>{db:+.0f} дБ шудан жоғары</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="253" />
+        <source>{t:.1f} s ago</source>
+        <translation>{t:.1f} с бұрын</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="293" />
         <source>dB</source>
         <translation>дБ</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="211" />
+        <location filename="../live_page.py" line="293" />
         <source>WPM</source>
         <translation>WPM</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="211" />
+        <location filename="../live_page.py" line="293" />
+        <location filename="../live_page.py" line="403" />
         <source>s</source>
         <translation>с</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="216" />
         <location filename="../live_page.py" line="298" />
+        <location filename="../live_page.py" line="389" />
         <source>English</source>
         <translation>Ағылшын</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="216" />
         <location filename="../live_page.py" line="298" />
+        <location filename="../live_page.py" line="389" />
         <source>Russian</source>
         <translation>Орыс</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="216" />
-        <location filename="../live_page.py" line="299" />
+        <location filename="../live_page.py" line="298" />
+        <location filename="../live_page.py" line="390" />
         <source>Kazakh</source>
         <translation>Қазақ</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="225" />
+        <location filename="../live_page.py" line="307" />
         <source>WPM {v:.1f}</source>
         <translation>Сөз/мин {v:.1f}</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="227" />
+        <location filename="../live_page.py" line="309" />
         <source>Tone {v:.0f} Hz</source>
         <translation>Тон {v:.0f} Гц</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="229" />
+        <location filename="../live_page.py" line="311" />
         <source>SNR {v:.1f} dB</source>
         <translation>СШҚ {v:.1f} дБ</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="232" />
+        <location filename="../live_page.py" line="314" />
         <source>Alphabet: {v}</source>
         <translation>Әліпби: {v}</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="233" />
+        <location filename="../live_page.py" line="315" />
         <source>{v:.0f} s heard</source>
         <translation>{v:.0f} с қабылданды</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="248" />
+        <location filename="../live_page.py" line="330" />
         <source>Listening failed: {detail}</source>
         <translation>Тыңдау сәтсіз аяқталды: {detail}</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="272" />
+        <location filename="../live_page.py" line="353" />
         <source>Only clicks were heard, no Morse tone. If this is a telegraph key or sounder: MorseDesk decodes Morse sent as a tone (radio CW); key clicks cannot be decoded yet.</source>
         <translation>Тек шыртыл естіледі, Морзе тоны жоқ. Егер бұл телеграф кілті немесе клопфер болса: MorseDesk тонмен берілген Морзені (радио CW) декодтайды; кілт шыртылын әзірге декодтай алмайды.</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="293" />
+        <location filename="../live_page.py" line="384" />
         <source>Input:</source>
         <translation>Кіріс:</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="294" />
+        <location filename="../live_page.py" line="385" />
         <source>Alphabet:</source>
         <translation>Әліпби:</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="296" />
+        <location filename="../live_page.py" line="387" />
         <source>Auto detects the alphabet from the message itself</source>
         <translation>«Авто» әліпбиді хабардың өзінен анықтайды</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="297" />
+        <location filename="../live_page.py" line="388" />
         <source>Refresh</source>
         <translation>Жаңарту</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="298" />
+        <location filename="../live_page.py" line="389" />
         <source>Auto</source>
         <translation>Авто</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="302" />
+        <location filename="../live_page.py" line="393" />
         <source>Look for newly plugged devices</source>
         <translation>Жаңа қосылған құрылғыларды іздеу</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="303" />
+        <location filename="../live_page.py" line="394" />
         <source>Stop</source>
         <translation>Тоқтату</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="303" />
+        <location filename="../live_page.py" line="394" />
         <source>Listen</source>
         <translation>Тыңдау</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="304" />
+        <location filename="../live_page.py" line="395" />
         <source>Input level</source>
         <translation>Кіріс сигналының деңгейі</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="305" />
+        <location filename="../live_page.py" line="396" />
         <source>Level</source>
         <translation>Деңгей</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="306" />
+        <location filename="../live_page.py" line="397" />
         <source>Alphabet</source>
         <translation>Әліпби</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="307" />
+        <location filename="../live_page.py" line="398" />
         <source>Tone</source>
         <translation>Тон</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="308" />
+        <location filename="../live_page.py" line="399" />
         <source>Speed</source>
         <translation>Жылдамдық</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="309" />
+        <location filename="../live_page.py" line="400" />
         <source>SNR</source>
         <translation>SNR</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="310" />
+        <location filename="../live_page.py" line="401" />
         <source>Heard</source>
         <translation>Тыңдалды</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="311" />
+        <location filename="../live_page.py" line="402" />
         <source>Press Listen to see the band live in 3D.</source>
         <translation>Жолақты нақты уақытта 3D түрінде көру үшін «Тыңдау» батырмасын басыңыз.</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="312" />
-        <source>0–2000 Hz, newest in front</source>
-        <translation>0–2000 Гц, ең жаңасы алдында</translation>
-    </message>
-    <message>
-        <location filename="../live_page.py" line="313" />
+        <location filename="../live_page.py" line="406" />
         <source>Grey words may still change. Underlined words are uncertain; point at any word for details.</source>
         <translation>Сұр сөздер әлі өзгеруі мүмкін. Асты сызылған сөздер күмәнді; толығырақ білу үшін сөзге меңзерді апарыңыз.</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="317" />
+        <location filename="../live_page.py" line="410" />
         <source>Copy the decoded text</source>
         <translation>Декодталған мәтінді көшіру</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="318" />
+        <location filename="../live_page.py" line="411" />
         <source>Copy</source>
         <translation>Көшіру</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="319" />
+        <location filename="../live_page.py" line="412" />
         <source>Clear the text and start over</source>
         <translation>Мәтінді тазалап, қайта бастау</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="320" />
+        <location filename="../live_page.py" line="413" />
         <source>Clear</source>
         <translation>Тазалау</translation>
     </message>
@@ -867,12 +894,12 @@
 <context>
     <name>SpectrogramView</name>
     <message>
-        <location filename="../widgets/spectrogram.py" line="50" />
+        <location filename="../widgets/spectrogram.py" line="68" />
         <source>s</source>
         <translation>с</translation>
     </message>
     <message>
-        <location filename="../widgets/spectrogram.py" line="51" />
+        <location filename="../widgets/spectrogram.py" line="69" />
         <source>Hz</source>
         <translation>Гц</translation>
     </message>

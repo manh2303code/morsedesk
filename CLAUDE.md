@@ -230,6 +230,12 @@ mình**. Trong một phiên đã có hai kết luận research không sống só
   trễ thiết bị), không từ đồng hồ riêng hay `sd.play`. Trang Tạo mã (25/09) dùng cùng cơ chế với
   karaoke trang Giải mã; dòng thời gian dấu ở `encode/timeline.py` dựng từ đúng `tokens_to_elements`.
 - Không dùng emoji cờ 🇬🇧 — Linux tối giản thiếu font vùng miền sẽ hiện ra chữ "GB".
+- **Cảnh 3D hai trang là MỘT cảnh** (ridge3d): ngang = thời gian, sâu = ±250 Hz quanh tone. Trang Nghe
+  quét trái sang phải (live_sweep, 25/09), không cuộn. Mốc thời gian trang Nghe = giây kể từ bấm Nghe,
+  trùng Word.start_s của StreamDecoder — nút Xóa giữa phiên KHÔNG được đặt lại mốc (`keep_time`).
+  Cảnh vẽ vào ảnh đệm; thứ gì đổi hình cảnh phải gọi `_invalidate()`, không chỉ `update()`.
+- **File sạch (khoảng lặng số 0) có nền -120 dB**: chuẩn hóa hình theo phân vị nền thì đuôi phổ cũng
+  thành núi — cảnh 3D kẹp dải động 30 dB (MAX_RANGE_DB), ô số đo kẹp "dB trên nền" 0–60.
 
 ### Test
 - **Test ghim hằng số phải tính theo hằng số đó**, đừng ghim số. Đổi `WINDOW_FRAMES` đã làm đỏ

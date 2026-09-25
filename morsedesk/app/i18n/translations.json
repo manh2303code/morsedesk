@@ -106,7 +106,6 @@
     "PDF files (*.pdf)": "Файлы PDF (*.pdf)",
     "Saved {path}": "Сохранено: {path}",
     "Could not save {path}": "Не удалось сохранить {path}",
-    "0–2000 Hz, newest in front": "0–2000 Гц, новое — спереди",
     "3D": "3D",
     "Acoustic model": "Акустическая модель",
     "Alphabet": "Алфавит",
@@ -184,7 +183,9 @@
     "Grey words may still change. Underlined words are uncertain; point at any word for details.": "Серые слова ещё могут измениться. Подчёркнутые слова сомнительны; наведите на слово, чтобы узнать подробности.",
     "Only clicks were heard, no Morse tone. If this is a telegraph key or sounder: MorseDesk decodes Morse sent as a tone (radio CW); key clicks cannot be decoded yet.": "Слышны только щелчки, тонального сигнала Морзе нет. Если это телеграфный ключ или клопфер: MorseDesk декодирует Морзе, переданную тоном (радио CW); щелчки ключа пока не декодируются.",
     "The key presses in time with the sound when you press Play.": "Ключ нажимается в такт звуку, когда вы нажимаете «Воспроизвести».",
-    "Click a letter to play from there.": "Щёлкните по букве, чтобы воспроизвести с этого места."
+    "Click a letter to play from there.": "Щёлкните по букве, чтобы воспроизвести с этого места.",
+    "{db:+.0f} dB above noise": "{db:+.0f} дБ над шумом",
+    "{t:.1f} s ago": "{t:.1f} с назад"
   },
   "kk": {
     "MorseDesk": "MorseDesk",
@@ -293,7 +294,6 @@
     "PDF files (*.pdf)": "PDF файлдары (*.pdf)",
     "Saved {path}": "Сақталды: {path}",
     "Could not save {path}": "{path} сақталмады",
-    "0–2000 Hz, newest in front": "0–2000 Гц, ең жаңасы алдында",
     "3D": "3D",
     "Acoustic model": "Акустикалық модель",
     "Alphabet": "Әліпби",
@@ -371,6 +371,8 @@
     "Grey words may still change. Underlined words are uncertain; point at any word for details.": "Сұр сөздер әлі өзгеруі мүмкін. Асты сызылған сөздер күмәнді; толығырақ білу үшін сөзге меңзерді апарыңыз.",
     "Only clicks were heard, no Morse tone. If this is a telegraph key or sounder: MorseDesk decodes Morse sent as a tone (radio CW); key clicks cannot be decoded yet.": "Тек шыртыл естіледі, Морзе тоны жоқ. Егер бұл телеграф кілті немесе клопфер болса: MorseDesk тонмен берілген Морзені (радио CW) декодтайды; кілт шыртылын әзірге декодтай алмайды.",
     "The key presses in time with the sound when you press Play.": "«Ойнату» басылғанда кілт дыбыспен бірге басылады.",
-    "Click a letter to play from there.": "Сол жерден ойнату үшін әріпті басыңыз."
+    "Click a letter to play from there.": "Сол жерден ойнату үшін әріпті басыңыз.",
+    "{db:+.0f} dB above noise": "{db:+.0f} дБ шудан жоғары",
+    "{t:.1f} s ago": "{t:.1f} с бұрын"
   }
 }

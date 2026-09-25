@@ -14,6 +14,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+import numpy as np
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
@@ -40,9 +41,10 @@ from morsedesk.app.settings import AppSettings
 from morsedesk.app.theme import mark_primary
 from morsedesk.app.widgets.banner import Banner
 from morsedesk.app.widgets.busy_overlay import BusyOverlay
+from morsedesk.app.widgets.hover_readout import Line
 from morsedesk.app.widgets.icons import icon_button, line_icon
 from morsedesk.app.widgets.player_bar import PlayerBar, format_time
-from morsedesk.app.widgets.ridge3d import WINDOW_S, Ridge3DView, band_window
+from morsedesk.app.widgets.ridge3d import WINDOW_S, Ridge3DView, band_window_scene
 from morsedesk.app.widgets.spectrogram import SpectrogramView
 from morsedesk.app.widgets.stats_bar import StatsBar
 from morsedesk.app.widgets.word_view import WordView
@@ -149,6 +151,10 @@ class DecodePage(QWidget):
         # ---- vùng tín hiệu: phong cảnh 3D hoặc phổ 2D ----
         self.ridge = Ridge3DView(parent=self)
         self.spectrogram = SpectrogramView(self)
+        # Rê chuột trên cả hai (người dùng 25/09): từ ở chỗ đó, tần số, mức trên nền, giây.
+        self._ridge_scene = None
+        self.ridge.describe = self._describe_ridge
+        self.spectrogram.describe = self._point_lines
         self.signal_stack = QStackedWidget(self)
         self.signal_stack.addWidget(self.ridge)
         self.signal_stack.addWidget(self.spectrogram)
@@ -510,6 +516,7 @@ class DecodePage(QWidget):
     def _update_ridge(self) -> None:
         """Dựng cảnh 3D cho cửa sổ 12 s bắt đầu ở `_window_t0`, tính thẳng từ âm thanh."""
         r = self.result
+        self._ridge_scene = None
         if r is None or r.tone_hz is None:
             self.ridge.clear()
             return
@@ -521,7 +528,9 @@ class DecodePage(QWidget):
         total_s = len(x) / sr
         span = min(WINDOW_S, total_s)
         self._window_span = span
-        self.ridge.set_surface(band_window(x, sr, r.tone_hz, self._window_t0, window_s=span))
+        self._ridge_scene = band_window_scene(x, sr, r.tone_hz, self._window_t0, window_s=span)
+        self.ridge.set_surface(self._ridge_scene.z if self._ridge_scene is not None
+                               else np.zeros((0, 0), np.float32))
         step = 1 if span <= 6 else (2 if span <= 12 else 5)
         first = int(self._window_t0 // step + (1 if self._window_t0 % step else 0)) * step
         ticks = []
@@ -532,6 +541,26 @@ class DecodePage(QWidget):
         self.ridge.front_ticks = ticks
         self.ridge.depth_label = self.tr("{tone} Hz ± 250 Hz").format(tone=f"{r.tone_hz:.0f}")
         self.ridge.update()
+
+    def _describe_ridge(self, row: int, col: int) -> list[Line]:
+        sc = self._ridge_scene
+        if sc is None:
+            return []
+        t = self._window_t0 + (col + 0.5) / sc.z.shape[1] * getattr(self, "_window_span", WINDOW_S)
+        return self._point_lines(t, float(sc.freqs_hz[row]), float(sc.rel_db[row, col]))
+
+    def _point_lines(self, t_s: float, hz: float, rel_db: float) -> list[Line]:
+        """Ô số đo khi rê chuột trên cảnh 3D hay phổ 2D: từ đã giải ở đó (nếu có), rồi số đo."""
+        lines: list[Line] = []
+        words = self.result.words if self.result is not None else []
+        word = next((w.text for w in words if w.start_s <= t_s <= w.end_s), "")
+        if word:
+            lines.append((word, "word"))
+        hz_u, sec = self.tr("Hz"), self.tr("s")
+        lines.append((f"{hz:.0f} {hz_u}", "value"))
+        lines.append((self.tr("{db:+.0f} dB above noise").format(db=rel_db), "value"))
+        lines.append((f"{t_s:.2f} {sec}", "muted"))
+        return lines
 
     def _play_from(self, t_s: float) -> None:
         """Bấm vào một từ thì nghe từ đúng chỗ đó."""
