@@ -292,161 +292,166 @@
 <context>
     <name>EncodePage</name>
     <message>
-        <location filename="../encode_page.py" line="357" />
+        <location filename="../encode_page.py" line="430" />
         <source>Estimated audio is {minutes} min long; the limit is {limit} min. Shorten the text or raise the speed.</source>
         <translation>Аудионың болжамды ұзақтығы {minutes} мин, шегі {limit} мин. Мәтінді қысқартыңыз немесе жылдамдықты арттырыңыз.</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="427" />
+        <location filename="../encode_page.py" line="500" />
         <source>Invalid timing settings: the Farnsworth speed must not exceed the speed in WPM.</source>
         <translation>Тайминг параметрлері қате: Фарнсворт жылдамдығы WPM жылдамдығынан аспауы тиіс.</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="430" />
+        <location filename="../encode_page.py" line="503" />
         <source>Could not build the audio.</source>
         <translation>Аудионы құру мүмкін болмады.</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="451" />
+        <location filename="../encode_page.py" line="571" />
         <source>Save audio</source>
         <translation>Аудионы сақтау</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="451" />
+        <location filename="../encode_page.py" line="571" />
         <source>Audio ({ext})</source>
         <translation>Аудио ({ext})</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="477" />
+        <location filename="../encode_page.py" line="598" />
         <source>Cannot write {path}: {detail}</source>
         <translation>{path} жазылмады: {detail}</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="486" />
+        <location filename="../encode_page.py" line="607" />
         <source>Text to encode</source>
         <translation>Кодталатын мәтін</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="487" />
+        <location filename="../encode_page.py" line="608" />
         <source>Morse code:</source>
         <translation>Морзе коды:</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="492" />
+        <location filename="../encode_page.py" line="613" />
         <source>Type text to see its Morse code.</source>
         <translation>Морзе кодын көру үшін мәтін теріңіз.</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="276" />
-        <location filename="../encode_page.py" line="493" />
+        <location filename="../encode_page.py" line="304" />
+        <location filename="../encode_page.py" line="614" />
         <source>English</source>
         <translation>Ағылшын</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="276" />
-        <location filename="../encode_page.py" line="494" />
+        <location filename="../encode_page.py" line="304" />
+        <location filename="../encode_page.py" line="615" />
         <source>Russian</source>
         <translation>Орыс</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="276" />
-        <location filename="../encode_page.py" line="494" />
+        <location filename="../encode_page.py" line="304" />
+        <location filename="../encode_page.py" line="615" />
         <source>Kazakh</source>
         <translation>Қазақ</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="278" />
+        <location filename="../encode_page.py" line="306" />
         <source>Detected alphabet: {name}</source>
         <translation>Анықталған әліпби: {name}</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="303" />
-        <location filename="../encode_page.py" line="421" />
+        <location filename="../encode_page.py" line="360" />
+        <location filename="../encode_page.py" line="494" />
         <source>Cannot encode {chars} — fix the text or switch alphabet before sending.</source>
         <translation>{chars} кодтау мүмкін емес — жіберер алдында мәтінді түзетіңіз немесе әліпбиді ауыстырыңыз.</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="342" />
+        <location filename="../encode_page.py" line="403" />
         <source>Length ≈ {t}</source>
         <translation>Ұзақтығы ≈ {t}</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="488" />
+        <location filename="../encode_page.py" line="609" />
         <source>The message appears here as signal-lamp marks.</source>
         <translation>Хабар осында сигнал шамдары түрінде көрінеді.</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="489" />
+        <location filename="../encode_page.py" line="610" />
         <source>Alphabet</source>
         <translation>Әліпби</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="489" />
+        <location filename="../encode_page.py" line="610" />
         <source>Timing</source>
         <translation>Тайминг</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="490" />
+        <location filename="../encode_page.py" line="611" />
         <source>Sound</source>
         <translation>Дыбыс</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="490" />
+        <location filename="../encode_page.py" line="611" />
         <source>File</source>
         <translation>Файл</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="493" />
+        <location filename="../encode_page.py" line="614" />
         <source>Auto</source>
         <translation>Авто</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="501" />
+        <location filename="../encode_page.py" line="622" />
         <source>Profile:</source>
         <translation>Профиль:</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="502" />
+        <location filename="../encode_page.py" line="623" />
         <source>Speed (WPM):</source>
         <translation>Жылдамдық (WPM):</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="503" />
+        <location filename="../encode_page.py" line="624" />
         <source>Farnsworth (WPM):</source>
         <translation>Фарнсворт (WPM):</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="504" />
+        <location filename="../encode_page.py" line="625" />
         <source>Weight:</source>
         <translation>Салмақ:</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="505" />
+        <location filename="../encode_page.py" line="626" />
         <source>Tone (Hz):</source>
         <translation>Тон (Гц):</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="506" />
+        <location filename="../encode_page.py" line="627" />
         <source>Add noise, SNR (dB):</source>
         <translation>Шу қосу, SNR (дБ):</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="507" />
+        <location filename="../encode_page.py" line="628" />
         <source>Format:</source>
         <translation>Пішім:</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="512" />
+        <location filename="../encode_page.py" line="633" />
         <source>Play</source>
         <translation>Ойнату</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="513" />
+        <location filename="../encode_page.py" line="634" />
+        <source>The key presses in time with the sound when you press Play.</source>
+        <translation>«Ойнату» басылғанда кілт дыбыспен бірге басылады.</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="637" />
         <source>Stop</source>
         <translation>Тоқтату</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="514" />
+        <location filename="../encode_page.py" line="638" />
         <source>Save…</source>
         <translation>Сақтау…</translation>
     </message>

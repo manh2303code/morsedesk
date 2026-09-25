@@ -82,6 +82,10 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
 
 ## Đã xong (phiên 24/09)
 
+- **Trang Tạo mã: hiệu ứng theo tiếng khi Nghe thử** (25/09): chữ đang phát có khung bo tròn, dấu
+  đang kêu to và sáng hơn; phím Morse động (vẽ bằng key_art như logo) nhấn đúng lúc tone vang. Thời
+  điểm từ encode/timeline.py (cùng tokens_to_elements với âm thanh, lệch < 6 ms), vị trí từ
+  AudioPlayback (giây đang ra loa).
 - **Trang Tạo mã với văn bản cực dài** (25/09): băng Morse trong khung cuộn (cửa sổ không còn bị kéo
   cao 22 624 px, xóa chữ không làm khung nhập chiếm cả trang), chỉ vẽ phần nhìn thấy, profile nạp một
   lần, gộp phím khi > 1 500 ký tự. Trễ mỗi phím: 200 ký tự 60 -> 7 ms; 6 000 ký tự 298 -> 29 ms (đo

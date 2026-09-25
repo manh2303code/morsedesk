@@ -226,6 +226,9 @@ mình**. Trong một phiên đã có hai kết luận research không sống só
   khung nhập chiếm cả trang (cửa sổ vẫn cao như cũ, phần dưới nằm ngoài màn hình) — 25/09, nay
   `MorseTapeView`. Cập nhật mỗi phím gõ phải rẻ: đừng gọi `load_profile` (đọc YAML) trong đường
   nóng; văn bản > DEBOUNCE_CHARS thì gộp phím (encode_page), khóa Play/Save trong lúc chờ.
+- **Hình chạy theo tiếng phải lấy vị trí từ `AudioPlayback.position_s`** (giây đang ra loa, đã trừ độ
+  trễ thiết bị), không từ đồng hồ riêng hay `sd.play`. Trang Tạo mã (25/09) dùng cùng cơ chế với
+  karaoke trang Giải mã; dòng thời gian dấu ở `encode/timeline.py` dựng từ đúng `tokens_to_elements`.
 - Không dùng emoji cờ 🇬🇧 — Linux tối giản thiếu font vùng miền sẽ hiện ra chữ "GB".
 
 ### Test

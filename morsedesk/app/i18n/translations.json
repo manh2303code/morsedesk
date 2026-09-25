@@ -182,7 +182,8 @@
     "Grey: not final yet. It may still change as more audio arrives.": "Серый: ещё не окончательно. Может измениться по мере поступления звука.",
     "{start}–{end} s": "{start}–{end} с",
     "Grey words may still change. Underlined words are uncertain; point at any word for details.": "Серые слова ещё могут измениться. Подчёркнутые слова сомнительны; наведите на слово, чтобы узнать подробности.",
-    "Only clicks were heard, no Morse tone. If this is a telegraph key or sounder: MorseDesk decodes Morse sent as a tone (radio CW); key clicks cannot be decoded yet.": "Слышны только щелчки, тонального сигнала Морзе нет. Если это телеграфный ключ или клопфер: MorseDesk декодирует Морзе, переданную тоном (радио CW); щелчки ключа пока не декодируются."
+    "Only clicks were heard, no Morse tone. If this is a telegraph key or sounder: MorseDesk decodes Morse sent as a tone (radio CW); key clicks cannot be decoded yet.": "Слышны только щелчки, тонального сигнала Морзе нет. Если это телеграфный ключ или клопфер: MorseDesk декодирует Морзе, переданную тоном (радио CW); щелчки ключа пока не декодируются.",
+    "The key presses in time with the sound when you press Play.": "Ключ нажимается в такт звуку, когда вы нажимаете «Воспроизвести»."
   },
   "kk": {
     "MorseDesk": "MorseDesk",
@@ -367,6 +368,7 @@
     "Grey: not final yet. It may still change as more audio arrives.": "Сұр: әлі түпкілікті емес. Дыбыс келген сайын өзгеруі мүмкін.",
     "{start}–{end} s": "{start}–{end} с",
     "Grey words may still change. Underlined words are uncertain; point at any word for details.": "Сұр сөздер әлі өзгеруі мүмкін. Асты сызылған сөздер күмәнді; толығырақ білу үшін сөзге меңзерді апарыңыз.",
-    "Only clicks were heard, no Morse tone. If this is a telegraph key or sounder: MorseDesk decodes Morse sent as a tone (radio CW); key clicks cannot be decoded yet.": "Тек шыртыл естіледі, Морзе тоны жоқ. Егер бұл телеграф кілті немесе клопфер болса: MorseDesk тонмен берілген Морзені (радио CW) декодтайды; кілт шыртылын әзірге декодтай алмайды."
+    "Only clicks were heard, no Morse tone. If this is a telegraph key or sounder: MorseDesk decodes Morse sent as a tone (radio CW); key clicks cannot be decoded yet.": "Тек шыртыл естіледі, Морзе тоны жоқ. Егер бұл телеграф кілті немесе клопфер болса: MorseDesk тонмен берілген Морзені (радио CW) декодтайды; кілт шыртылын әзірге декодтай алмайды.",
+    "The key presses in time with the sound when you press Play.": "«Ойнату» басылғанда кілт дыбыспен бірге басылады."
   }
 }

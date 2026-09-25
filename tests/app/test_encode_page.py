@@ -87,23 +87,81 @@ def test_farnsworth_and_noise_change_audio(qtbot, tmp_path):
     assert len(noisy) == len(base) and float(abs(noisy - base).mean()) > 0.01
 
 
-def test_play_and_stop_use_player(qtbot, tmp_path, fake_sounddevice):
+def test_play_and_stop_use_tracked_playback(qtbot, tmp_path, fake_sounddevice):
+    """Nghe thử phát qua AudioPlayback (biết giây ĐANG RA LOA) để băng và phím động chạy theo tiếng."""
     sd = fake_sounddevice
-    calls = sd.calls
     page = _page(qtbot, tmp_path)
     page.text_edit.setPlainText("E")
     page.play_button.click()
-    assert any(c[0] == "play" and c[2] == 8000 for c in calls) and page.banner.level is None
+    stream = sd.OutputStream.instances[-1]
+    assert stream.started and stream.kwargs["samplerate"] == 8000 and page.banner.level is None
+    assert page.playback.playing and page._anim_timer.isActive()
     page.stop_button.click()
-    assert calls[-1] == ("stop",)
+    assert not page.playback.playing and not page._anim_timer.isActive()
+    assert page.tape.tape.active() is None and not page.key_anim.pressed
 
-    def boom(x, sr, **kw):
-        raise sd.PortAudioError("no device")
+    class Boom:
+        def __init__(self, **kw):
+            raise sd.PortAudioError("no device")
 
-    sd.play = boom
+    sd.OutputStream = Boom
     page.play_button.click()
     assert page.banner.level == "warning" and "no device" in page.banner.text()
     assert wk.Player is Player
+
+
+def _fake_clock(monkeypatch, page):
+    """Giây đang ra loa do test đặt (AudioPlayback thật đã có test riêng ở tests/unit/test_playback)."""
+    from morsedesk.audio import playback as pb
+
+    clock = {"t": 0.0, "playing": True}
+    monkeypatch.setattr(pb.AudioPlayback, "position_s", property(lambda self: clock["t"]))
+    monkeypatch.setattr(pb.AudioPlayback, "playing", property(lambda self: clock["playing"]))
+    monkeypatch.setattr(pb.AudioPlayback, "play", lambda self, from_s=None: None)
+    return clock
+
+
+def test_playback_highlights_the_sounding_letter_and_mark(qtbot, tmp_path, monkeypatch):
+    """Yêu cầu người dùng 25/09: chữ đang phát có khung bo tròn, dấu đang kêu nổi lên; phím Morse động
+    nhấn xuống đúng lúc tone vang — theo giây đang ra loa, gồm cả phần đệm im lặng đầu bản tin."""
+    from morsedesk.app.encode_page import PAD_S
+
+    clock = _fake_clock(monkeypatch, page := _page(qtbot, tmp_path))
+    page.wpm_spin.setValue(20)                          # dit 60 ms
+    page.text_edit.setPlainText("AI")                   # A = .-   I = ..
+    page.play()
+    clock["t"] = PAD_S / 2                              # còn trong đệm đầu: chưa chữ nào
+    page._tick_playback()
+    assert page.tape.tape.active() is None and not page.key_anim.pressed
+    clock["t"] = PAD_S + 0.03                           # chấm của A đang kêu
+    page._tick_playback()
+    assert page.tape.tape.active() == (0, 0, True) and page.key_anim.pressed
+    assert page.key_anim.lit() == (1.0, 1.0, 0.22)      # chấm của logo sáng
+    clock["t"] = PAD_S + 0.09                           # khe trong chữ A: vẫn tô A, phím nhả
+    page._tick_playback()
+    assert page.tape.tape.active() == (0, 0, False) and not page.key_anim.pressed
+    clock["t"] = PAD_S + 0.15                           # gạch của A
+    page._tick_playback()
+    assert page.tape.tape.active() == (0, 1, True) and page.key_anim.lit() == (0.22, 0.22, 1.0)
+    clock["t"] = PAD_S + 0.50                           # chấm đầu của I
+    page._tick_playback()
+    assert page.tape.tape.active() == (1, 0, True)
+    clock["playing"] = False                            # phát xong: bỏ tô, phím về logo tĩnh
+    page._tick_playback()
+    assert page.tape.tape.active() is None and not page._anim_timer.isActive()
+    assert page.key_anim.lit() == (1.0, 1.0, 1.0)
+
+
+def test_editing_text_while_playing_drops_the_highlight(qtbot, tmp_path, monkeypatch):
+    """Sửa chữ giữa lúc phát: băng không còn khớp tiếng — bỏ tô chứ không tô nhầm chỗ."""
+    clock = _fake_clock(monkeypatch, page := _page(qtbot, tmp_path))
+    page.text_edit.setPlainText("SOS")
+    page.play()
+    clock["t"] = 0.35
+    page._tick_playback()
+    assert page.tape.tape.active() is not None
+    page.text_edit.setPlainText("SOS SOS")
+    assert page.tape.tape.active() is None and not page._anim_timer.isActive()
 
 
 def test_estimate_seconds_matches_built_audio(qtbot, tmp_path):
@@ -219,7 +277,7 @@ def test_long_text_typing_is_coalesced_and_play_flushes_it(qtbot, tmp_path, monk
     assert calls == [] and not page.play_button.isEnabled()      # đang gộp: chưa dựng, nút khóa
     built = []
     monkeypatch.setattr(page, "build_audio", lambda: built.append(1) or __import__("numpy").zeros(8))
-    monkeypatch.setattr(page.player, "play", lambda x, sr: None)
+    monkeypatch.setattr(page.playback, "play", lambda from_s=None: None)
     page.play()                                                  # phát: dựng NGAY phần đang chờ
     assert calls == [1] and page.morse_view.toPlainText().endswith(". . . . .")
     assert not page._refresh_timer.isActive()

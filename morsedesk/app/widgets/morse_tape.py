@@ -29,6 +29,10 @@ LETTER_GAP = 3         # đơn vị giữa hai chữ (ITU)
 WORD_GAP = 7
 LINE_H = 40.0
 TOP = 6.0
+# Chữ đang phát (Nghe thử ở trang Tạo mã): nền bo tròn + viền đèn; dấu đang kêu to và sáng hơn.
+ACTIVE_FILL = "#233457"
+ACTIVE_GLOW = "#FFF1CC"          # dấu đang kêu: trắng ấm, nổi hẳn trên vàng đèn
+POP = 1.45                        # dấu đang kêu phóng to chừng này
 
 
 class MorseTape(QWidget):
@@ -39,6 +43,7 @@ class MorseTape(QWidget):
         self._items: list[tuple[float, float, str, str]] = []   # (x, y, chữ, mẫu), theo thứ tự y
         self._item_ys: list[float] = []
         self._laid_width = -1
+        self._active: tuple[int, int, bool] | None = None      # (chữ, dấu, tone đang kêu)
         self.placeholder = ""
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setFixedHeight(int(LINE_H) + 12)
@@ -52,6 +57,7 @@ class MorseTape(QWidget):
         self._words = words
         self._units = [[self._char_units(p) for _, p in w] for w in words]
         self._laid_width = -1
+        self._active = None
         self._relayout()
 
     def words(self) -> list[list[tuple[str, str]]]:
@@ -76,6 +82,28 @@ class MorseTape(QWidget):
                 x += (u + (LETTER_GAP if i < last else 0)) * UNIT
             x += WORD_GAP * UNIT
         return out
+
+    def item_count(self) -> int:
+        return len(self._items)
+
+    def item_rect(self, i: int) -> QRectF:
+        """Khung của chữ thứ `i` (dấu + chữ cái bên dưới), kể cả phần nền khi được tô."""
+        x, y, _ch, pat = self._items[i]
+        span = self._char_units(pat) * UNIT
+        return QRectF(x - 9, y - 3, span + 18, LINE_H - 2)
+
+    def active(self) -> tuple[int, int, bool] | None:
+        return self._active
+
+    def set_active(self, letter: int | None, element: int = 0, on: bool = False) -> None:
+        """Tô chữ `letter` (None = bỏ tô); `on`: dấu `element` của nó đang kêu."""
+        new = None if letter is None or not (0 <= letter < len(self._items)) else (letter, element, on)
+        if new == self._active:
+            return
+        old, self._active = self._active, new
+        for a in (old, new):
+            if a is not None:
+                self.update(self.item_rect(a[0]).adjusted(-6, -6, 6, 6).toAlignedRect())
 
     def content_height(self) -> int:
         lines = 1 + (int((self._items[-1][1] - TOP) // LINE_H) if self._items else 0)
@@ -120,19 +148,35 @@ class MorseTape(QWidget):
         # Chỉ các dòng giao với vùng cần vẽ: bản tin dài có hàng nghìn nhóm, khung cuộn chỉ lộ vài dòng.
         lo = bisect_left(self._item_ys, clip.top() - LINE_H)
         hi = bisect_right(self._item_ys, clip.bottom() + 1)
-        for x, y, ch, pat in self._items[lo:hi]:
+        act = self._active
+        for idx in range(lo, hi):
+            x, y, ch, pat = self._items[idx]
+            is_active = act is not None and act[0] == idx
+            if is_active:
+                p.setPen(QColor(LAMP))
+                p.setBrush(QColor(ACTIVE_FILL))
+                p.drawRoundedRect(self.item_rect(idx), 9, 9)
             cx = x
-            p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(lamp)
-            for s in pat:
+            for k, s in enumerate(pat):
                 w = (3.0 if s == "-" else 1.0) * UNIT
+                sounding = is_active and act[1] == k and act[2]
+                h = MARK_H * (POP if sounding else 1.0)
+                cy = y + 4 + MARK_H / 2
+                if sounding:          # quầng sáng sau dấu đang kêu
+                    halo = QColor(LAMP)
+                    halo.setAlpha(80)
+                    p.setPen(Qt.PenStyle.NoPen)
+                    p.setBrush(halo)
+                    p.drawRoundedRect(QRectF(cx - 5, cy - h / 2 - 5, max(w, h) + 10, h + 10), h / 2 + 5, h / 2 + 5)
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QColor(ACTIVE_GLOW) if sounding else lamp)
                 if s == "-":
-                    p.drawRoundedRect(QRectF(cx, y + 4, w, MARK_H), MARK_H / 2, MARK_H / 2)
+                    p.drawRoundedRect(QRectF(cx, cy - h / 2, w, h), h / 2, h / 2)
                 else:
-                    p.drawEllipse(QRectF(cx + w / 2 - MARK_H / 2, y + 4, MARK_H, MARK_H))
+                    p.drawEllipse(QRectF(cx + w / 2 - h / 2, cy - h / 2, h, h))
                 cx += w + UNIT
             span = self._char_units(pat) * UNIT
-            p.setPen(text)
+            p.setPen(lamp if is_active else text)
             p.drawText(QRectF(x - 6, y + 14, span + 12, 18), Qt.AlignmentFlag.AlignHCenter, ch)
         p.end()
 
@@ -166,6 +210,14 @@ class MorseTapeView(QScrollArea):
 
     def words(self) -> list[list[tuple[str, str]]]:
         return self.tape.words()
+
+    def set_active(self, letter: int | None, element: int = 0, on: bool = False) -> None:
+        """Tô chữ đang phát và cuộn để nó luôn trong tầm nhìn."""
+        before = self.tape.active()
+        self.tape.set_active(letter, element, on)
+        if letter is not None and (before is None or before[0] != letter) and letter < self.tape.item_count():
+            r = self.tape.item_rect(letter)
+            self.ensureVisible(int(r.center().x()), int(r.center().y()), 20, int(LINE_H))
 
     @property
     def placeholder(self) -> str:

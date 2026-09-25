@@ -29,13 +29,16 @@ from morsedesk.app.theme import mark_primary
 from morsedesk.app.widgets.banner import Banner
 from morsedesk.app.widgets.charmap import CharMap
 from morsedesk.app.widgets.icons import line_icon
+from morsedesk.app.widgets.key_anim import KeyAnimation
 from morsedesk.app.widgets.morse_tape import MorseTapeView
 from morsedesk.app.widgets.player_bar import media_icon
 from morsedesk.app.worker import MAX_SECONDS, Player
 from morsedesk.audio.io import SUPPORTED_EXT, save_audio
+from morsedesk.audio.playback import AudioPlayback, PlaybackError
 from morsedesk.constants import SAMPLE_RATE
 from morsedesk.encode.detect import detect_profile
 from morsedesk.encode.text import normalize
+from morsedesk.encode.timeline import Timeline, mark_timeline
 from morsedesk.encode.timing import TimingParams, tokens_to_elements, total_seconds
 from morsedesk.lm.profile import Profile, load_profile
 from morsedesk.model.vocab import SPACE
@@ -48,6 +51,7 @@ PAD_S = 0.3         # `Encoder.to_audio` đệm im lặng PAD_S giây ở mỗi 
 # 7 ms ở 200 ký tự, 29 ms ở 6 000); văn bản ngắn vẫn cập nhật ngay từng phím.
 DEBOUNCE_CHARS = 1500
 REFRESH_DELAY_MS = 150
+ANIM_MS = 16            # ~60 hình/giây: chấm 20 WPM dài 60 ms, đủ 3–4 hình mỗi chấm
 # Đuôi được coi là "đuôi audio biết trước" khi đổi định dạng lưu; đuôi lạ thì nối thêm.
 AUDIO_SUFFIXES = frozenset(SUPPORTED_EXT) | {ext for _, ext in FORMATS}
 # Mục "Tự động" của combo bảng mã. Việc chọn là TẤT ĐỊNH, không phải đoán: xem
@@ -206,9 +210,12 @@ class EncodePage(QWidget):
         pl.addSpacing(10)
         pl.addWidget(self.length_label)
         pl.addLayout(buttons)
+        # Phím Morse động (giống logo) ở chỗ trống dưới cụm nút, nhấn theo tiếng khi Nghe thử.
+        self.key_anim = KeyAnimation(self)
         right = QVBoxLayout()
         right.addWidget(panel)
-        right.addStretch(1)
+        right.addSpacing(12)
+        right.addWidget(self.key_anim, 1)
 
         self.banner = Banner(self)
         body = QHBoxLayout()
@@ -219,6 +226,15 @@ class EncodePage(QWidget):
         lay.setContentsMargins(16, 14, 16, 12)
         lay.addWidget(self.banner)
         lay.addLayout(body, 1)
+
+        # Nghe thử có theo dõi vị trí ĐANG RA LOA (audio.playback): chữ trên băng và phím động chạy
+        # đúng theo tiếng. `Player` cũ (sd.play) không biết đang phát tới đâu.
+        self.playback = AudioPlayback()
+        self._timeline: Timeline | None = None
+        self._letters: list[tuple[str, str]] = []       # (chữ, mẫu) theo thứ tự ô trên băng
+        self._anim_timer = QTimer(self)
+        self._anim_timer.setInterval(ANIM_MS)
+        self._anim_timer.timeout.connect(self._tick_playback)
 
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
@@ -322,6 +338,8 @@ class EncodePage(QWidget):
         pid = self.effective_profile_id()
         profile = self._profiles[pid]
         text = self.current_text()
+        if self._timeline is not None:
+            self._end_animation()       # văn bản đổi giữa lúc phát: băng không còn khớp tiếng
         self.charmap.set_profile(pid)
         self._show_auto_choice(pid)
         tokens = Encoder(profile).to_tokens(text, strict=False) if text.strip() else []
@@ -493,12 +511,58 @@ class EncodePage(QWidget):
         x = self.audio_or_error()
         if x is None:
             return
-        err = self.player.play(x, SAMPLE_RATE)
-        if err:
-            self.banner.show_warning(err)
+        timeline = self._build_timeline()
+        try:
+            self.playback.load(x, SAMPLE_RATE)
+            self.playback.play()
+        except PlaybackError as e:
+            self._end_animation()
+            self.banner.show_warning(f"cannot play audio: {e}")
+            return
+        self._timeline = timeline
+        self._anim_timer.start()
+        self._tick_playback()
 
     def stop(self) -> None:
-        self.player.stop()
+        self.playback.stop()
+        self._end_animation()
+
+    # ---- hiệu ứng theo tiếng ----
+    def _build_timeline(self) -> Timeline | None:
+        """Dòng thời gian khớp âm thanh vừa dựng; None nếu không ghép được với các ô trên băng."""
+        text = self.current_text()
+        profile = self._profiles[self.effective_profile_id()]
+        tokens = Encoder(profile).to_tokens(text, strict=False)
+        self._letters = [pair for word in self.tape.words() for pair in word]
+        # Băng và âm thanh phải cùng một dãy mẫu (thứ tự ô = thứ tự chữ phát): khác thì thà không tô.
+        if [t for t in tokens if t != SPACE] != [pat for _ch, pat in self._letters]:
+            return None
+        try:
+            return Timeline(mark_timeline(tokens, self.timing_params(), offset_s=PAD_S))
+        except ValueError:
+            return None
+
+    def _tick_playback(self) -> None:
+        if not self.playback.playing:
+            self._end_animation()
+            return
+        if self._timeline is None:
+            self.key_anim.set_state(True)
+            return
+        m = self._timeline.at(self.playback.position_s)
+        if m.letter is None:
+            self.tape.set_active(None)
+            self.key_anim.set_state(True)
+            return
+        self.tape.set_active(m.letter, m.element, m.on)
+        ch, pat = self._letters[m.letter]
+        self.key_anim.set_state(True, m.on, m.symbol, ch, pat, m.element)
+
+    def _end_animation(self) -> None:
+        self._anim_timer.stop()
+        self._timeline = None
+        self.tape.set_active(None)
+        self.key_anim.set_state(False)
 
     def _save_dialog(self) -> None:
         ext = str(self.format_combo.currentData())
@@ -567,6 +631,9 @@ class EncodePage(QWidget):
         ):
             label.setText(text)
         self.play_button.setText(self.tr("Play"))
+        tip = self.tr("The key presses in time with the sound when you press Play.")
+        self.key_anim.setToolTip(tip)
+        self.key_anim.setAccessibleName(tip)
         self.stop_button.setText(self.tr("Stop"))
         self.save_button.setText(self.tr("Save…"))
         self.refresh_morse()
