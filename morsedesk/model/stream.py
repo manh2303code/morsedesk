@@ -47,7 +47,7 @@ CHUNK_S = 0.5               # mỗi lần giải mã lại tiến thêm chừng 
 
 _TIME_EPS = 0.05        # 50 ms: hai lần giải mã không bao giờ đặt mốc trùng nhau đến từng mẫu
 PIN_MIN_LETTERS = 50    # khóa ngôn ngữ phiên nghe khi đã chốt ngần này chữ (CP-03: 100 % từ 50)
-PIN_AGREEING = 3        # ... và ngần này lần giải mã liền nhau cùng một ngôn ngữ
+PIN_MARGIN = 0.15       # ... và ngôn ngữ dẫn đầu hơn ngôn ngữ thứ hai ngần này nat/chữ (= langid.MIN_MARGIN)
 
 
 def _agreeing_prefix(prev: list, cur: list) -> list:
@@ -130,7 +130,7 @@ class StreamDecoder:
     _tone_hz: float | None = field(default=None, init=False)
     _snr_db: float | None = field(default=None, init=False)
     _language: str = field(default="", init=False)
-    _recent_languages: list = field(default_factory=list, init=False)
+    _evidence: dict = field(default_factory=dict, init=False)    # pid -> (tổng điểm x chữ, tổng chữ)
     _pinned: str | None = field(default=None, init=False)
 
     @property
@@ -160,7 +160,7 @@ class StreamDecoder:
         self._prev_fresh = []
         self._tentative = ""
         self._reset_stats()
-        self._recent_languages = []
+        self._evidence = {}
         if self._pinned is not None and hasattr(self.decoder, "pin_language"):
             self.decoder.pin_language(None)
         self._pinned = None
@@ -206,20 +206,30 @@ class StreamDecoder:
             self._buf = self._buf[cut:]
             self._dropped_frames += cut
 
-    def _maybe_pin_language(self, language: str) -> None:
-        """Khóa ngôn ngữ khi đã chắc: đủ `PIN_MIN_LETTERS` chữ đã chốt và `PIN_AGREEING` lần giải
-        mã liền nhau cùng nói một ngôn ngữ. Một bản tin thật không đổi ngôn ngữ giữa chừng, nên từ
-        đó mọi chữ viết theo đúng một bảng chữ. Ngưỡng 50 chữ: đo CP-03, tự nhận đúng 100 % từ 50
-        ký tự (20 ký tự chỉ 71 %) — khóa sớm hơn thì khóa nhầm sẽ sai cho cả phiên."""
-        if self._pinned is not None or not language:
+    def _maybe_pin_language(self, scores: dict, new_letters: int) -> None:
+        """Khóa ngôn ngữ khi CẢ PHIÊN đã đủ chắc: đủ `PIN_MIN_LETTERS` chữ đã chốt và ngôn ngữ dẫn
+        đầu hơn ngôn ngữ thứ hai `PIN_MARGIN` nat/chữ. Một bản tin thật không đổi ngôn ngữ giữa chừng,
+        nên từ đó mọi chữ viết theo đúng một bảng chữ.
+
+        Bằng chứng là điểm LM mỗi chữ (`language_scores`) của từng lần giải mã, trọng số = số chữ
+        lần đó MỚI chốt — mỗi đoạn âm thanh góp đúng một lần, như langid chạy trên cả phần đã nghe.
+        Luật cũ ("3 lần giải mã liền nhau cùng một ngôn ngữ") chỉ nhìn bộ đệm ~9,5 s (~30 chữ), dưới
+        ngưỡng CP-03: đo 24/09 trên 54 bản tin 2 phút, 26/54 phiên khóa NHẦM (chủ yếu Nga/Kazakh bị
+        khóa sang Anh giữa chừng), CER 15–47 % so với 3,5–7 % khi biết trước ngôn ngữ."""
+        if self._pinned is not None or new_letters <= 0 or len(scores) < 2:
             return
-        self._recent_languages = (self._recent_languages + [language])[-PIN_AGREEING:]
+        for pid, sc in scores.items():
+            tot, n = self._evidence.get(pid, (0.0, 0))
+            self._evidence[pid] = (tot + float(sc) * new_letters, n + new_letters)
         letters = sum(1 for c in self._committed if not c.isspace())
-        if (letters >= PIN_MIN_LETTERS and len(self._recent_languages) == PIN_AGREEING
-                and len(set(self._recent_languages)) == 1):
-            pin = getattr(self.decoder, "pin_language", None)
-            if pin is not None and pin(language):
-                self._pinned = language
+        if letters < PIN_MIN_LETTERS or len(self._evidence) < 2:
+            return
+        ranked = sorted(((tot / n, pid) for pid, (tot, n) in self._evidence.items() if n > 0), reverse=True)
+        if len(ranked) < 2 or ranked[0][0] - ranked[1][0] < PIN_MARGIN:
+            return
+        pin = getattr(self.decoder, "pin_language", None)
+        if pin is not None and pin(ranked[0][1]):
+            self._pinned = ranked[0][1]
 
     def _snapshot(self, decoded: bool, words=None) -> StreamUpdate:
         return StreamUpdate(self._committed, self._tentative, decoded, self.audio_s,
@@ -234,7 +244,6 @@ class StreamDecoder:
         self._tone_hz = getattr(res, "tone_hz", None)
         self._snr_db = getattr(res, "snr_db", None)
         self._language = getattr(res, "language", "") or self._language
-        self._maybe_pin_language(getattr(res, "language", ""))
 
         # Quy về thời gian TUYỆT ĐỐI của phiên. Buffer chỉ giữ phần đuôi, nên mốc thời gian trong
         # kết quả là tương đối với đầu buffer; cộng số giây đã cắt bỏ mới so được giữa hai lần.
@@ -263,8 +272,11 @@ class StreamDecoder:
             rest = fresh[len(stable):]
 
         if stable:
-            self._committed = (self._committed + " " if self._committed else "") +                 " ".join(w[2] for w in stable)
+            self._committed = (self._committed + " " if self._committed else "") + \
+                " ".join(w[2] for w in stable)
             self._committed_until = stable[-1][1]
+            self._maybe_pin_language(getattr(res, "language_scores", None) or {},
+                                     sum(1 for w in stable for c in w[2] if not c.isspace()))
         self._tentative = (" " if self._committed and rest else "") + " ".join(w[2] for w in rest)
         # Ghép lại Word cho phần tạm: giao diện cần `confidence` để tô chip theo độ tin cậy.
         by_start = {round(w.start_s + offset, 3): w for w in res.words}

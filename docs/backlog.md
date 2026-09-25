@@ -5,8 +5,10 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
 
 ## Đang mở — ưu tiên cao
 
-1. **Chế độ nghe có thể dính cùng lỗi cửa sổ rỗng** như bản tin dài ở chế độ file (đã sửa 24/09,
-   xem "Đã xong"): bộ đệm live cắt giữa tín hiệu dày. Đo lại T3 và một phiên nghe dài vài phút.
+1. **Chế độ nghe: giá realtime 2–4 điểm.** Đo 24/09 (`long_random_eval --configs live,live-auto`, 54 bản
+   tin 2 phút, đúng cấu hình LiveWorker): không có cửa sổ rỗng; biết trước ngôn ngữ văn thật 4,4–5,2 %,
+   điện văn 3,5–11 % (file 1–2 %). Khóa nhầm ngôn ngữ đã sửa (xem "Đã xong"). Hướng: nhìn trước > 1 s
+   hoặc bộ đệm dài hơn — đo, đừng đoán.
 2. **Tự nhận ngôn ngữ yếu với tin ngắn / nhóm mã ngẫu nhiên.** T1 chế độ auto chỉ đúng ngôn ngữ
    338/500 clip, CER 24 % so với 7,78 % khi biết ngôn ngữ; tin Kazakh ngắn T2 đúng 8/15 (bị đọc thành
    Nga); nhóm mã Latin ngẫu nhiên có bản bị nhận là tiếng Nga -> 61–63 % CER. long_random_eval (24/09,
@@ -23,9 +25,30 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
 
 ## Đang mở — trung bình
 
-5. **Huấn luyện model âm học không dùng corpus thật.** tools/train.py không truyền `corpus` cho
-   SynthGenerator -> 60 % văn bản là chuỗi từ ghép từ danh sách dựng sẵn 51/40/40 từ. corpus/*.txt có
-   sẵn 1,2 triệu dòng. Thử huấn luyện lại với corpus (GPU ~3 h), đo T1/dev/T2 ghép cặp.
+5. **Model âm học có "LM ngầm" từ danh sách 51/40/40 từ (ĐANG HUẤN LUYỆN E17, 25/09).** 60 % văn bản
+   huấn luyện là từ bốc từ danh sách dựng sẵn (train.py không truyền corpus). Bằng chứng (model không LM,
+   bản tin 2 phút gõ máy 8 dB): lỗi chủ yếu là NUỐT DẤU CÁCH cạnh từ 1–2 chữ ("WHEN I GOT" -> WHENIGOT;
+   danh sách không có từ < 3 chữ) và I -> A ở WI/HI/PI (WILL -> WALL; danh sách không có cặp đó); nhóm
+   mã ngẫu nhiên cùng điều kiện gần như không lỗi. T1/dev có 48–53 % từ nằm trong chính danh sách nên
+   KHÔNG thấy lỗi này -> dựng **dev-OOV** (`make_t1.py --holdout-text --seed-base 700000`,
+   testdata/generated/t1oov): E16 10,13 % so với dev 8,07 %. E17 = E16 + `--text-corpus --ham-ratio 0.2
+   --random-ratio 0.2 --builtin-ratio 0.1 --group-len 1-8`. Quyết định bằng dev-OOV + long_random, KHÔNG
+   bằng T1 (research-acoustic §2.4). Kế hoạch tiếp P2–P7 ở .superpowers/sdd/research-acoustic-2026-09-24.md.
+5c. **LM làm nhóm mã và hô hiệu XẤU đi** (T1 −1,75 điểm có ý nghĩa; bịa CZWCI -> CQWCI, BS5MSB ->
+   BU5MSB). Hướng: chế độ "nhóm mã" (alpha thấp / tắt LM) + trạng thái "không chắc" cho auto khi mọi
+   LM > ~4,5 bit/ký tự; kiểm hô hiệu SAU khi giải và GẮN CỜ, không tự sửa (research-lm §8).
+5d. **Lỗi phụ thuộc vị trí trong cửa sổ**: cùng âm thanh, các cửa sổ chồng nhau đọc khác nhau
+   ("INTERESTEDM" / "INTERESTED ME" / "INTERESTEDME"). Gộp trung bình xác suất đã THỬ và BỊ BÁC (T2
+   +0,76). Nghi phạm gốc chưa thử: AGC khởi tạo mức nền từ 0,5 s đầu cửa sổ (`agc_init_s`).
+5e. **Frontend lọc quá rộng**: E16 cần 0 dB để còn ~2 % ở 12 WPM, DeepCW chỉ cần −4 dB (bin 31 Hz, lọc
+   200 Hz so với bin 12,5 Hz). Hướng P2: thêm kênh envelope băng hẹp 15/40/100 Hz, huấn luyện lại.
+5f. **Gõ TAY trên sóng thật là khoảng cách lớn nhất còn lại.** T4 (25/09): gõ máy thật en/ru đều < 1 %
+   (SRR ru 0,55 %, ARRL 0,05 %, K7QO/SKCC 0 %), nhưng SAQ Grimeton (gõ tay, VLF, QRN) 17–29 %: chèn
+   chữ ở xung nhiễu, lẫn chấm/gạch, mất dấu cách. Hướng: P4 (tay gõ VE3NEA, Rayleigh, nhiễu thu thật)
+   và mở rộng T4 phần on-air (USCG NMN, thêm bản thu SAQ, WebSDR). Chưa có ru/kk gõ tay thật (#3).
+5g. **T2 đọc đáp án ARRL sai**: byte 0x89 (BT `=`) / 0x83 (AS `&`) bị `errors="replace"` xóa trong
+   make_t2_manifest -> CER các file 5–15 WPM bị đội (file 5 WPM năm 2013 trong T4: 2,61 % -> 0,00 % khi
+   đọc đúng); `parse_wpm("_075WPM")` = 75. make_t4.py đã đọc đúng. Sửa T2 = đổi mốc T2 -> chạy lại mốc.
 6. **AppImage cần glibc >= 2.35**: chạy Ubuntu 22.04+/Debian 12+/Fedora 40, KHÔNG chạy Ubuntu 20.04/
    Debian 11 (`GLIBC_2.35 not found`). Nếu máy đích cũ: dựng lại trên nền glibc 2.28.
 7. **exe chưa ký số**: Smart App Control (Windows 11) chặn hẳn; SmartScreen cảnh báo khi có
@@ -52,6 +75,11 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
 
 ## Đã xong (phiên 24/09)
 
+- **Chế độ nghe khóa nhầm ngôn ngữ** (25/09): luật "3 lần giải mã liền nhau" thay bằng điểm LM tích lũy
+  cả phiên -> live-auto văn thật 15–17 % -> 5,0–6,9 %, điện văn 15–46 % -> 7,9–14 %.
+- **LM phạt dấu chấm giữa bản tin** (25/09): ranh giới câu trong beam; bản tin dài app 3,87 -> 3,69 %
+  [-0,31; -0,08], 11 tốt / 0 xấu; T1 7,78 -> 7,75; dev, dev-OOV, T2 không đổi.
+- **Bộ đo mới** (25/09): dev-OOV (t1oov, E16 10,13 %) và T4 bản ghi thật (tools/make_t4.py, 40 file).
 - **Bản tin DÀI mất cả cửa sổ** (0bc8dfc). Cửa sổ 12 s nằm giữa bản tin dày tín hiệu từ đầu
   tới cuối -> model trả RỖNG (26/60 cửa sổ); bản tin 2 phút sai 50 %, gõ tay 32–53 %. Sửa: đệm nhiễu
   nền 0,5 s ở mép giáp cửa sổ khác, CHỈ cửa sổ có tone đang được đánh phím (`key_down_fraction` < 0,9),

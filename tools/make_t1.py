@@ -66,10 +66,11 @@ def build_cells(full: bool) -> list[dict]:
     ]
 
 
-def generate_matrix(out_dir: Path, full: bool = False, clips: int = 1, seed_base: int = 1000) -> list[dict]:
+def generate_matrix(out_dir: Path, full: bool = False, clips: int = 1, seed_base: int = 1000,
+                    corpus: dict[str, Path] | None = None) -> list[dict]:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    gen = SynthGenerator(SynthConfig(min_seconds=5.0, max_seconds=8.0))
+    gen = SynthGenerator(SynthConfig(min_seconds=5.0, max_seconds=8.0, corpus=corpus))
     rows: list[dict] = []
     index = 0
     for cell in build_cells(full):
@@ -108,8 +109,16 @@ def main(argv: list[str] | None = None) -> int:
     # seed*1_000_000 trở lên và validation từ 2_000_000_000, nên 500_000 không đụng dải nào.
     ap.add_argument("--seed-base", type=int, default=1000,
                     help="seed của clip đầu tiên (T1 = 1000; bộ dev dùng 500000)")
+    # dev-OOV (24/09): T1/dev lấy 60 % văn bản từ CHÍNH danh sách 51/40/40 từ mà model âm học học
+    # thuộc (48–53 % số từ của chúng nằm trong danh sách), nên không nhìn thấy "LM ngầm" của model.
+    # --holdout-text thay phần đó bằng câu thật trong corpus/<lang>.holdout.txt — thứ cả model âm
+    # học lẫn LM chưa từng thấy. Dựng: --out testdata/generated/t1oov --seed-base 700000 --holdout-text
+    ap.add_argument("--holdout-text", action="store_true",
+                    help="văn bản từ corpus/<lang>.holdout.txt thay danh sách từ dựng sẵn (bộ dev-OOV)")
     a = ap.parse_args(argv)
-    rows = generate_matrix(a.out, a.full, a.clips, seed_base=a.seed_base)
+    corpus = ({"en": Path("corpus/en.holdout.txt"), "ru": Path("corpus/ru.holdout.txt"),
+               "kk-cyrl-ru": Path("corpus/kk.holdout.txt")} if a.holdout_text else None)
+    rows = generate_matrix(a.out, a.full, a.clips, seed_base=a.seed_base, corpus=corpus)
     print(f"{len(rows)} clip -> {a.out / 'manifest.jsonl'}")
     return 0
 

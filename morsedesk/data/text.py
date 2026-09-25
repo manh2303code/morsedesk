@@ -94,10 +94,21 @@ class TextSampler:
         corpus: dict[str, Path] | None = None,
         ham_ratio: float = 0.3,
         random_ratio: float = 0.1,
+        builtin_ratio: float = 0.0,
+        group_len: tuple[int, int] = (5, 5),
     ) -> None:
+        """`builtin_ratio`: phần văn bản lấy từ danh sách dựng sẵn BUILTIN_WORDS ngay cả khi có corpus
+        (không có corpus thì phần "từ" vốn đã là danh sách đó). `group_len`: độ dài nhóm mã ngẫu
+        nhiên (min, max). Mặc định giữ đúng hành vi cũ — T1/dev sinh lại y hệt.
+
+        Vì sao có hai tham số này (24/09): model E16 học 60 % văn bản từ danh sách 51/40/40 từ và
+        thành một "LM ngầm" — không có từ 1–2 chữ nên nuốt dấu cách ("WHEN I GOT" -> WHENIGOT), không
+        có WI/HI/PI nên đọc WILL thành WALL. Huấn luyện với câu thật + nhóm mã độ dài 1–8 để gỡ nó."""
         self.profiles = profiles
         self.ham_ratio = ham_ratio
         self.random_ratio = random_ratio
+        self.builtin_ratio = builtin_ratio
+        self.group_len = group_len
         self.corpus: dict[str, list[str]] = {}
         for pid, path in (corpus or {}).items():
             lines = [ln.strip() for ln in Path(path).read_text(encoding="utf-8").splitlines()]
@@ -105,9 +116,11 @@ class TextSampler:
 
     def _random_groups(self, profile: Profile, rng: np.random.Generator, n: int) -> str:
         letters = sorted(c for c in profile.letter_to_pattern if len(c) == 1)
+        lo, hi = self.group_len
         groups = []
         for _ in range(n):
-            groups.append("".join(letters[rng.integers(len(letters))] for _ in range(5)))
+            size = lo if lo == hi else int(rng.integers(lo, hi + 1))
+            groups.append("".join(letters[rng.integers(len(letters))] for _ in range(size)))
         return " ".join(groups)
 
     def _ham(self, profile: Profile, rng: np.random.Generator) -> str:
@@ -122,8 +135,9 @@ class TextSampler:
             s = translit_via_patterns(s, en, profile)
         return s
 
-    def _words(self, pid: str, profile: Profile, rng: np.random.Generator, n: int) -> str:
-        if pid in self.corpus and self.corpus[pid]:
+    def _words(self, pid: str, profile: Profile, rng: np.random.Generator, n: int,
+               builtin: bool = False) -> str:
+        if not builtin and pid in self.corpus and self.corpus[pid]:
             line = self.corpus[pid][rng.integers(len(self.corpus[pid]))]
             words = line.split()
             if len(words) > n:
@@ -141,6 +155,8 @@ class TextSampler:
             raw = self._random_groups(profile, rng, n)
         elif u < self.random_ratio + self.ham_ratio:
             raw = self._ham(profile, rng)
+        elif u < self.random_ratio + self.ham_ratio + self.builtin_ratio:
+            raw = self._words(profile_id, profile, rng, n, builtin=True)
         else:
             raw = self._words(profile_id, profile, rng, n)
         cleaned = keep_supported(raw, profile)

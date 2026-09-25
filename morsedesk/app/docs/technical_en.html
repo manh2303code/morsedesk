@@ -330,10 +330,13 @@ text that is at least 1&nbsp;s old, so the network has heard what comes after it
 committed by their absolute time in the stream, so repeated words such as CQ&nbsp;CQ are not
 merged. Windows without a tone are treated as silence, which stops the network reading background
 noise as letters.</p>
-<p>With the language set to automatic, each decode sees only the last few seconds and chooses the
-language again. Once about fifty characters have been committed and three decodes in a row agree,
-the session keeps that language until it is cleared, so the running text never switches alphabet
-part-way.</p>
+<p>With the language set to automatic, each decode sees only the last few seconds. Every decode
+also scores the text with all three language models, and these scores are added up over the whole
+session, each stretch of audio counted once. Once about fifty characters have been committed and one
+language leads the next by a clear margin, the session keeps that language until it is cleared, so
+the running text never switches alphabet part-way. An earlier rule (three decodes in a row agreeing)
+looked at only about 30 characters and locked the wrong language in 26 of 54 two-minute test
+messages.</p>
 <table class="data" width="100%" cellspacing="0" cellpadding="6">
 <tr><th>Measure (model 0.3.0)</th><th class="num">Value</th></tr>
 <tr><td>Delay behind the audio, 79.8 minutes of ARRL recordings</td><td class="num">1.29 s</td></tr>

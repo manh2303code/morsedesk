@@ -50,6 +50,8 @@ model tốt nhất dự án. Khi khâu suy luận còn một lỗi lớn chưa b
 | Đệm nhiễu 0,5 s hai đầu CẢ FILE (ngoài đệm mép trong cửa sổ) | T1 7,78 → 9,55 %, dev 8,07 → 9,83 % | 12 s | **có** |
 | Đệm mép trong CẢ cửa sổ không tone / sóng mang liên tục | nhiễu xung ra `R R TU DE`, sóng mang ra `A` (test §7 đỏ) | 12 s | **có** |
 | Chỉ đệm-lại cửa sổ model trả RỖNG hoàn toàn | bản tin 130 s 11,3 % so với 1,2 % khi đệm mọi cửa sổ có nhịp phím | 12 s | **có** |
+| Gộp cửa sổ bằng trung bình xác suất có trọng số tam giác (thay "cửa sổ tâm gần nhất") | bản tin dài: model-only −0,26 nhưng app/model+LM không có ý nghĩa; **T2 xấu +0,76** (2 file ru/kk) | 12 s | **có** |
+| Luật khóa ngôn ngữ live "3 lần giải mã liền nhau cùng ngôn ngữ" | 26/54 phiên 2 phút khóa NHẦM, CER 15–47 %; thay bằng điểm LM tích lũy cả phiên | 12 s | **có** |
 | Chỉnh lại trọng số beam cho E9 (33 cấu hình `alpha`/`char_bonus`/`beta`/`lexicon_bonus`, chọn trên dev, xác nhận trên T1) | không cấu hình nào tốt hơn chắc chắn; 14 cấu hình hạ `alpha` hoặc `char_bonus` **xấu hơn chắc chắn**; `lexicon_bonus` 0 xấu hơn | 12 s | **có** — giữ 0,3 / 1,25 |
 | Lexicon rộng hơn (1000/5000 từ) | 18,13 % / 18,23 % so với 18,19 % | 4 s | chưa đo lại |
 | Nới `min_prob` 1e-3 → 1e-4 | 0,15 điểm, gấp đôi thời gian | 4 s | chưa đo lại |
@@ -76,6 +78,10 @@ PYTHONUTF8=1 uv run pytest -p no:warnings          # ~558 test; -p no:warnings �
 PYTHONUTF8=1 uv run python -m morsedesk.cli bench --manifest <m> --engine onnx --out-dir runs/<tên>
                                                    # song song mọi lõi (mặc định); --workers 1 = nghiệm thu
 PYTHONUTF8=1 uv run python tools/long_random_eval.py   # bản tin ~2 phút x 3 ngôn ngữ, ~4 phút
+                              # --configs live,live-auto = chế độ NGHE đúng như LiveWorker (~20–45 phút)
+PYTHONUTF8=1 uv run python tools/make_t1.py --out testdata/generated/t1oov --seed-base 700000 --holdout-text
+                                                   # dev-OOV: văn bản model CHƯA thấy (xem Gotchas)
+PYTHONUTF8=1 uv run python tools/make_t4.py        # T4: bản ghi THẬT từ internet (SRR ru, ARRL, SAQ...)
 PYTHONUTF8=1 uv run ruff check .
 PYTHONUTF8=1 uv run python tools/build_i18n.py     # sau MỖI lần thêm/sửa chuỗi self.tr()
 PYTHONUTF8=1 uv run morsedesk-gui
@@ -136,6 +142,16 @@ audio → dò tone 14 ms → dither nếu SNR>25dB → đặc trưng 11 chiều,
   cửa sổ (`WINDOW_PAD_FRAMES`, `frontend.repad_window`) — CHỈ cửa sổ có tone đang được đánh phím
   (`key_down_fraction` < 0,9: Morse thật 0,41–0,63, sóng mang 1,00). Kiểm âm thanh dài bằng
   `tools/long_random_eval.py`, không chỉ T1/dev/T2.
+- **Model âm học có "LM ngầm" và T1/dev KHÔNG thấy nó.** E16 học 60 % văn bản từ danh sách 51/40/40 từ
+  (`data/text.py` BUILTIN_WORDS): trên văn thật nó nuốt dấu cách cạnh từ 1–2 chữ (WHENIGOT) và đọc WILL
+  thành WALL; nhóm mã ngẫu nhiên thì gần như không lỗi. T1/dev có ~50 % từ nằm trong chính danh sách đó
+  → quyết định mọi thay đổi văn bản huấn luyện bằng **dev-OOV** (t1oov) + long_random, không bằng T1.
+- **Lỗi của model phụ thuộc vị trí trong cửa sổ**: cùng âm thanh, các cửa sổ chồng nhau đọc khác nhau.
+  Nghi phạm: AGC khởi tạo mức nền từ 0,5 s đầu cửa sổ (`agc_init_s`). Gộp trung bình xác suất bị bác (bảng trên).
+- **LM ký tự không có OOV cứng nhưng làm HẠI nhóm mã và hô hiệu** (6,2–7,1 bit/ký tự, tệ hơn mô hình
+  đều; T1 nhóm mã −1,75 điểm; CZWCI → CQWCI). Corpus một câu một dòng → dấu chấm giữa bản tin bị phạt
+  3–4,6 nat; đã sửa bằng ranh giới câu trong beam (`BeamParams.sentence_breaks`, 25/09).
+  Chi tiết: .superpowers/sdd/research-lm-2026-09-24.md.
 - **Model hay phát ký tự ĐẦU TIÊN ngay khung đầu ra số 0** (BiGRU biết trước), bất kể ký tự nằm ở
   đâu — nên không được đệm rồi cắt ở đầu/cuối file.
 - **Mismatch giữa lúc huấn luyện và lúc chạy là mỏ vàng.** Hai thắng lợi lớn nhất đều từ đó:

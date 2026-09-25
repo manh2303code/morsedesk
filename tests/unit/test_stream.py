@@ -144,10 +144,12 @@ def test_empty_push_does_not_decode():
 
 
 class _LangDecoder:
-    """Bộ giải mã giả: mỗi lần trả một từ mới (thời gian tăng dần) với ngôn ngữ theo kịch bản."""
+    """Bộ giải mã giả: mỗi lần trả một từ mới (thời gian tăng dần) với ngôn ngữ và điểm LM theo kịch
+    bản (`scores`: pid -> nat/chữ, cao hơn là giống hơn)."""
 
-    def __init__(self, languages):
+    def __init__(self, languages, scores=None):
         self.languages = list(languages)
+        self.scores = list(scores or [{lang: -1.0, "zz": -2.0} for lang in languages])
         self.calls = 0
         self.pinned = []
 
@@ -159,18 +161,21 @@ class _LangDecoder:
         from types import SimpleNamespace
 
         lang = self.languages[min(self.calls, len(self.languages) - 1)]
+        scores = self.scores[min(self.calls, len(self.scores) - 1)]
         self.calls += 1
         dur = len(x) / sr
         word = SimpleNamespace(text="ABCDEFGHIJ", start_s=max(0.0, dur - 2.2), end_s=dur - 1.6,
                                confidence=0.9)
-        return SimpleNamespace(words=[word], wpm=20.0, tone_hz=700.0, snr_db=10.0, language=lang)
+        return SimpleNamespace(words=[word], wpm=20.0, tone_hz=700.0, snr_db=10.0, language=lang,
+                               language_scores=scores)
 
 
 def test_live_session_pins_its_language_once_certain_and_unpins_on_reset():
-    """Nghe trực tiếp: đủ 50 chữ đã chốt + 3 lần liền cùng ngôn ngữ -> khóa; reset -> mở khóa."""
+    """Nghe trực tiếp: đủ 50 chữ đã chốt + bằng chứng cả phiên rõ ràng -> khóa; reset -> mở khóa."""
     from morsedesk.model.stream import PIN_MIN_LETTERS, StreamDecoder
 
-    dec = _LangDecoder(["ru", "en"] + ["en"] * 40)
+    dec = _LangDecoder(["ru", "en"] + ["en"] * 40,
+                       [{"ru": -1.0, "en": -1.1}] + [{"en": -1.0, "ru": -1.5}] * 41)
     sd = StreamDecoder(dec, sample_rate=1000, chunk_s=0.5)
     block = np.zeros(500, dtype=np.float32)
     for _ in range(40):
@@ -182,3 +187,30 @@ def test_live_session_pins_its_language_once_certain_and_unpins_on_reset():
     sd.reset()
     assert sd.pinned_language is None and dec.pinned == ["en", None]
 
+
+
+def test_live_session_does_not_pin_on_a_short_run_that_contradicts_the_whole_session():
+    """Luật cũ khóa theo 3 lần giải mã liền nhau trên bộ đệm ~9,5 s: 26/54 bản tin 2 phút bị khóa
+    NHẦM (Nga/Kazakh sang Anh giữa chừng). Nay bằng chứng tích lũy cả phiên thắng một quãng ngắn."""
+    from morsedesk.model.stream import StreamDecoder
+
+    ru, en = {"ru": -1.0, "en": -1.6}, {"en": -1.0, "ru": -1.1}
+    # Mỗi bộ đệm ngắn tự chọn ngôn ngữ lúc Nga lúc Anh (nhưng Nga rõ hơn nhiều), rồi 3 lần liền Anh.
+    langs = ["ru", "en"] * 5 + ["en"] * 3 + ["ru"] * 30
+    dec = _LangDecoder(langs, [ru if lang == "ru" else en for lang in langs])
+    sd = StreamDecoder(dec, sample_rate=1000, chunk_s=0.5)
+    block = np.zeros(500, dtype=np.float32)
+    for _ in range(len(langs)):
+        sd.push(block)
+    assert sd.pinned_language == "ru" and dec.pinned == ["ru"]
+
+
+def test_live_session_waits_when_the_evidence_is_too_close():
+    from morsedesk.model.stream import StreamDecoder
+
+    dec = _LangDecoder(["ru"] * 40, [{"ru": -1.0, "kk-cyrl-ru": -1.05}] * 40)
+    sd = StreamDecoder(dec, sample_rate=1000, chunk_s=0.5)
+    block = np.zeros(500, dtype=np.float32)
+    for _ in range(40):
+        sd.push(block)
+    assert sd.pinned_language is None and dec.pinned == []

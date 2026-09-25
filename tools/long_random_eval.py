@@ -12,6 +12,9 @@ hai model làm được gì phải tắt nó đi. Bốn cách giải mã, ngôn 
 - `model+LM`: chỉ model âm học + LM (tắt bộ cổ điển);
 - `model`:   chỉ model âm học, không LM — so với cột trước là đúng phần đóng góp của LM;
 - `auto`:    sản phẩm ở chế độ tự nhận ngôn ngữ.
+Thêm `--configs live,live-auto`: chế độ NGHE TRỰC TIẾP đúng như LiveWorker (StreamDecoder, không bộ
+cổ điển, bỏ cửa sổ không tone), đẩy âm thanh vào từng khối 0,1 s rồi flush — biết trước ngôn ngữ
+và tự nhận. Chậm: mỗi nửa giây giải mã lại cả bộ đệm ~9,5 s.
 Ghi đủ ref/hyp ra runs/long_random/rows.json.
 
 Hai cột CER: theo CHỮ, và theo MẪU Morse (quy chữ Kazakh riêng, Ъ, Ё về chữ Nga cùng mã). Với
@@ -43,6 +46,7 @@ from morsedesk.encode.synth import elements_to_audio, tone_power  # noqa: E402
 from morsedesk.encode.timing import tokens_to_elements, total_seconds  # noqa: E402
 from morsedesk.lm.profile import load_profile  # noqa: E402
 from morsedesk.metrics import cer  # noqa: E402
+from morsedesk.model.stream import StreamDecoder  # noqa: E402
 from morsedesk.parallel import default_workers, map_parallel  # noqa: E402
 
 LANGS = {"en": "en", "ru": "ru", "kk": "kk-cyrl-ru"}
@@ -51,6 +55,8 @@ TARGET_CHARS = 200
 SNR_DB = 8.0
 KEYINGS = ("machine", "hand")
 CONFIGS = ("app", "model+LM", "model", "auto")
+LIVE_CONFIGS = ("live", "live-auto")
+LIVE_BLOCK = 800            # 0,1 s ở 8 kHz — cỡ khối card âm thanh đẩy vào LiveWorker
 _FLAT = str.maketrans("ӘҒҚҢӨҰҮҺІЪЁ", "АГКНОУУХИЬЕ")
 
 
@@ -116,8 +122,8 @@ def render(enc: Encoder, text: str, keying: str, wpm: float, seed: int) -> np.nd
     return apply_channel(x, clean(SNR_DB, 700.0), rng, 8000, tone_power(0.8)).astype(np.float32)
 
 
-def summary(rows: list[dict]) -> list[str]:
-    lines = ["CER % — theo chữ [theo mẫu Morse]:   " + "   ".join(f"{n:^17s}" for n in CONFIGS)]
+def summary(rows: list[dict], configs=CONFIGS) -> list[str]:
+    lines = ["CER % — theo chữ [theo mẫu Morse]:   " + "   ".join(f"{n:^17s}" for n in configs)]
     for lang, pid in LANGS.items():
         for kind in KINDS:
             for keying in (*KEYINGS, None):
@@ -126,14 +132,15 @@ def summary(rows: list[dict]) -> list[str]:
                 if not sel:
                     continue
                 cells = []
-                for n in CONFIGS:
+                for n in configs:
                     c = 100 * np.mean([r[n]["cer"] for r in sel])
                     f = 100 * np.mean([r[n]["cer_pattern"] for r in sel])
                     cells.append(f"{c:6.2f} [{f:6.2f}]")
-                wrong = sum(1 for r in sel if r["auto"]["language"] != pid)
+                auto = next((n for n in ("auto", "live-auto") if n in configs), None)
+                wrong = (f"   tự nhận sai ngôn ngữ {sum(1 for r in sel if r[auto]['language'] != pid)}"
+                         f"/{len(sel)}" if auto else "")
                 tag = "chung" if keying is None else keying
-                lines.append(f"  {lang} {kind:8s} {tag:6s}  " + "   ".join(cells)
-                             + f"   tự nhận sai ngôn ngữ {wrong}/{len(sel)}")
+                lines.append(f"  {lang} {kind:8s} {tag:6s}  " + "   ".join(cells) + wrong)
     return lines
 
 
@@ -148,22 +155,42 @@ def _decoders(pid: str) -> dict[str, Decoder]:
             "model+LM": Decoder(pid, engine="onnx", lm=True, fallback=False),
             "model": Decoder(pid, engine="onnx", lm=False, fallback=False),
             "auto": Decoder("auto", engine="onnx", lm=True),
+            # đúng cấu hình LiveWorker._ensure_decoder
+            "live": Decoder(pid, engine="onnx", lm=True, fallback=False, skip_silent_windows=True),
+            "live-auto": Decoder("auto", engine="onnx", lm=True, fallback=False, skip_silent_windows=True),
         }
     return _DECODERS[pid]
 
 
+def live_decode(dec: Decoder, x: np.ndarray) -> tuple[str, str]:
+    """Như một phiên nghe: đẩy từng khối, flush cuối phiên. Trả (văn bản, ngôn ngữ)."""
+    stream = StreamDecoder(decoder=dec)
+    try:
+        for i in range(0, len(x), LIVE_BLOCK):
+            stream.push(x[i:i + LIVE_BLOCK])
+        up = stream.flush()
+        return up.text, up.language
+    finally:
+        stream.reset()                      # gỡ khóa ngôn ngữ trước bản tin sau
+
+
 def run_job(job: tuple) -> dict:
-    lang, kind, keying, k, wpm = job
+    lang, kind, keying, k, wpm, configs = job
     pid = LANGS[lang]
     profile = load_profile(pid)
     seed = zlib.crc32(f"{lang}|{kind}|{keying}|{k}".encode())
     text = make_text(kind, lang, profile, np.random.default_rng(seed))
     x = render(Encoder(pid), text, keying, wpm, seed)
     row = {"lang": lang, "kind": kind, "keying": keying, "k": k, "seconds": len(x) / 8000, "ref": text}
-    for name, dec in _decoders(pid).items():
-        r = dec.decode_array(x, 8000)
-        row[name] = {"hyp": r.text, "cer": cer(text, r.text), "cer_pattern": cer_pattern(text, r.text),
-                     "language": r.language, "decoded_by": r.decoded_by}
+    for name in configs:
+        dec = _decoders(pid)[name]
+        if name in LIVE_CONFIGS:
+            hyp, language, by = *live_decode(dec, x), "live"
+        else:
+            r = dec.decode_array(x, 8000)
+            hyp, language, by = r.text, r.language, r.decoded_by
+        row[name] = {"hyp": hyp, "cer": cer(text, hyp), "cer_pattern": cer_pattern(text, hyp),
+                     "language": language, "decoded_by": by}
     return row
 
 
@@ -173,18 +200,25 @@ def main() -> int:
     ap.add_argument("--wpm", type=float, default=20.0)
     ap.add_argument("--workers", type=int, default=None, help="mặc định số lõi - 2")
     ap.add_argument("--out", default="runs/long_random")
+    ap.add_argument("--configs", default=",".join(CONFIGS),
+                    help=f"trong {', '.join(CONFIGS + LIVE_CONFIGS)}")
     a = ap.parse_args()
+    configs = tuple(c for c in a.configs.split(",") if c)
+    unknown = set(configs) - set(CONFIGS + LIVE_CONFIGS)
+    if unknown:
+        ap.error(f"cách giải mã không có: {', '.join(sorted(unknown))}")
     out_dir = Path(a.out)
     out_dir.mkdir(parents=True, exist_ok=True)
-    jobs = [(lang, kind, keying, k, a.wpm) for lang in LANGS for kind in KINDS for keying in KEYINGS
+    jobs = [(lang, kind, keying, k, a.wpm, configs) for lang in LANGS for kind in KINDS for keying in KEYINGS
             for k in range(a.per_cell)]
     t0 = time.time()
     rows = map_parallel(run_job, jobs, a.workers if a.workers is not None else default_workers())
     audio_min = sum(r["seconds"] for r in rows) / 60
     (out_dir / "rows.json").write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
-    text = chr(10).join(summary(rows))
+    text = chr(10).join(summary(rows, configs))
     (out_dir / "summary.txt").write_text(text + chr(10), encoding="utf-8")
-    print(f"{len(rows)} bản tin, {audio_min:.0f} phút âm thanh x 4 cách giải mã trong {time.time() - t0:.0f} s")
+    print(f"{len(rows)} bản tin, {audio_min:.0f} phút âm thanh x {len(configs)} cách giải mã"
+          f" trong {time.time() - t0:.0f} s")
     print(text)
     return 0
 

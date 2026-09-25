@@ -192,6 +192,15 @@ def main(argv: list[str] | None = None) -> int:
                     help="độ dài clip huấn luyện tối đa (mặc định 12 s như E3)")
     ap.add_argument("--agc-tau", type=float, default=1.0,
                     help="hằng số thời gian AGC (giây) dùng cả khi huấn luyện lẫn suy luận (E7)")
+    # Văn bản huấn luyện (24/09, P1 trong .superpowers/sdd/research-acoustic-2026-09-24.md). Mặc định
+    # = như E16: 60 % từ danh sách dựng sẵn, 30 % điện văn, 10 % nhóm 5 chữ, không corpus.
+    ap.add_argument("--text-corpus", action="store_true",
+                    help="lấy phần 'từ' từ corpus/{en,ru,kk}.txt (câu thật) thay danh sách dựng sẵn")
+    ap.add_argument("--ham-ratio", type=float, default=0.3)
+    ap.add_argument("--random-ratio", type=float, default=0.1)
+    ap.add_argument("--builtin-ratio", type=float, default=0.0,
+                    help="phần giữ danh sách dựng sẵn khi đã có corpus")
+    ap.add_argument("--group-len", default="5", help="độ dài nhóm mã ngẫu nhiên: '5' hoặc '1-8'")
     ap.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto",
                     help="auto = dùng CUDA nếu có (máy dev có RTX 5090); mô hình xuất ra vẫn là ONNX CPU")
     ap.add_argument("--resume", type=Path, default=None,
@@ -239,8 +248,13 @@ def main(argv: list[str] | None = None) -> int:
     # Độ dài clip huấn luyện phải so được với cửa sổ lúc suy luận: đo ngày 23/09 cho thấy
     # cửa sổ 4 s (ngắn hơn CẢ clip ngắn nhất từng thấy) là cấu hình tệ, và nới lên 8 s lấy
     # lại 6,44 điểm CER mà không cần huấn luyện lại. Hai cờ này để quét chiều ngược lại.
+    lo, _, hi = a.group_len.partition("-")
+    corpus = ({"en": Path("corpus/en.txt"), "ru": Path("corpus/ru.txt"), "kk-cyrl-ru": Path("corpus/kk.txt")}
+              if a.text_corpus else None)
     gen = SynthGenerator(SynthConfig(mp3_enabled=not a.no_mp3, channel_sampling=sampling_for(a.qsb_hard),
-                                     min_seconds=a.min_seconds, max_seconds=a.max_seconds))
+                                     min_seconds=a.min_seconds, max_seconds=a.max_seconds, corpus=corpus,
+                                     ham_ratio=a.ham_ratio, random_ratio=a.random_ratio,
+                                     builtin_ratio=a.builtin_ratio, group_len=(int(lo), int(hi or lo))))
     val_items = []
     for i in range(a.val_clips):
         ex = gen.generate(VAL_SEED_BASE + i)

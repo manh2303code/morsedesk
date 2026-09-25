@@ -56,6 +56,13 @@ class BeamParams:
     min_prob: float = 1e-3
     space_id: int = VOCAB.space_id
     blank_id: int = VOCAB.blank_id
+    # Dấu cách ngay sau . ? ! (có thể qua một dấu ngoặc kép) = hết câu: chấm P(</s>) rồi mở ngữ cảnh
+    # mới từ <s>. Corpus LM là MỘT CÂU MỘT DÒNG, nên LM chưa từng thấy ". " — P(" " | "…X.") ≈ e^-10
+    # (en) … e^-15 (ru), nhân alpha là phạt 3–4,6 nat mỗi dấu chấm giữa bản tin; beam né bằng cách
+    # đổi dấu chấm thành chữ (IMAGINE. -> IMAGINER, ЖЕНЩИНА. -> ЖЕНЩИНАЯ) hoặc nuốt dấu cách.
+    # (research-lm-2026-09-24.md §2.4). Đo 25/09 (so ghép cặp): 54 bản tin 2 phút app 3,87 -> 3,69 %
+    # [-0,31; -0,08], 11 tốt / 0 xấu; model+LM 4,36 -> 4,01, 20 / 0; dev, dev-OOV, T2 không đổi.
+    sentence_breaks: bool = True
 
 
 @dataclass
@@ -238,6 +245,8 @@ class BeamState:
         self.options = class_options(profile, self.alphabet)
         self.lexicon = set(profile.lexicon_bonus)
         self.ctx_len = max(0, lm.order - 1) if lm is not None else 0
+        self._enders = {self.alphabet.index[c] for c in ".?!" if c in self.alphabet.index}
+        self._quote = self.alphabet.index.get('"')
         self.t = 0
         self.n_shortcut = 0
         self._lm_cache: dict[tuple[tuple[int, ...], tuple[int, ...]], dict[int, float]] = {}
@@ -276,8 +285,12 @@ class BeamState:
                 ext.lm_logp += p.unk_logp
             return ext
         if self.lm is not None:
-            ext.lm_logp += lm_scores[lm_id]
-            ext.lm_ctx = (pre.lm_ctx + (lm_id,))[-self.ctx_len:] if self.ctx_len else ()
+            if tok == SPACE and self.params.sentence_breaks and self._ends_sentence(pre.lm_ctx):
+                ext.lm_logp += float(self.lm.score(pre.lm_ctx, self.alphabet.eos_id))
+                ext.lm_ctx = (self.alphabet.bos_id,)
+            else:
+                ext.lm_logp += lm_scores[lm_id]
+                ext.lm_ctx = (pre.lm_ctx + (lm_id,))[-self.ctx_len:] if self.ctx_len else ()
         if tok == SPACE:
             if pre.word:                                    # kết thúc một từ (rỗng: prosign/# vừa qua)
                 ext.n_words += 1
@@ -291,6 +304,13 @@ class BeamState:
             if self.lm is not None:         # thuần âm thanh: không cộng thưởng nào, như beta
                 ext.bonus += p.char_bonus   # bù xu hướng xóa ký tự khi tín hiệu yếu
         return ext
+
+    def _ends_sentence(self, ctx: tuple[int, ...]) -> bool:
+        if not ctx:
+            return False
+        if ctx[-1] in self._enders:
+            return True
+        return len(ctx) >= 2 and ctx[-1] == self._quote and ctx[-2] in self._enders
 
     # ---- một khung ----
     def _advance(self, lp: np.ndarray) -> None:

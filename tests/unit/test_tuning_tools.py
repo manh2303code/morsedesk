@@ -15,15 +15,18 @@ def test_seed_base_reaches_generator(monkeypatch, tmp_path):
     """Bộ dev phải khác seed T1 (1000-1499), nếu không 'chỉnh trên dev' chính là chỉnh trên T1."""
     seen = {}
 
-    def fake_generate(out_dir, full, clips, seed_base=1000):
-        seen["seed_base"] = seed_base
+    def fake_generate(out_dir, full, clips, seed_base=1000, corpus=None):
+        seen["seed_base"], seen["corpus"] = seed_base, corpus
         return []
 
     monkeypatch.setattr(make_t1, "generate_matrix", fake_generate)
     make_t1.main(["--out", str(tmp_path), "--seed-base", "500000"])
     assert seen["seed_base"] == 500000
     make_t1.main(["--out", str(tmp_path)])
-    assert seen["seed_base"] == 1000                 # mặc định vẫn là T1
+    assert seen["seed_base"] == 1000 and seen["corpus"] is None   # mặc định vẫn là T1
+    # dev-OOV: văn bản từ holdout (model âm học lẫn LM chưa thấy), không phải danh sách dựng sẵn
+    make_t1.main(["--out", str(tmp_path), "--seed-base", "700000", "--holdout-text"])
+    assert {p.name for p in seen["corpus"].values()} == {"en.holdout.txt", "ru.holdout.txt", "kk.holdout.txt"}
 
 
 def _write(tmp_path, name, params, hyps):

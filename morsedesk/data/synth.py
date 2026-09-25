@@ -63,6 +63,11 @@ class SynthConfig:
     pad_min_s: float = 0.2
     pad_max_s: float = 0.8
     corpus: dict[str, Path] | None = None
+    # tỉ lệ văn bản (TextSampler); mặc định = hành vi cũ
+    ham_ratio: float = 0.3
+    random_ratio: float = 0.1
+    builtin_ratio: float = 0.0
+    group_len: tuple[int, int] = (5, 5)
     mp3_enabled: bool = True
     channel_sampling: ChannelSampling | None = None
 
@@ -74,7 +79,9 @@ class SynthGenerator:
         self.cfg = cfg
         ids = set(cfg.profile_ids) | {"en"}
         self.profiles: dict[str, Profile] = {pid: load_profile(pid) for pid in ids}
-        self.text = TextSampler(self.profiles, cfg.corpus)
+        self.text = TextSampler(self.profiles, cfg.corpus, ham_ratio=cfg.ham_ratio,
+                                random_ratio=cfg.random_ratio, builtin_ratio=cfg.builtin_ratio,
+                                group_len=cfg.group_len)
         self._mp3 = cfg.mp3_enabled and ffmpeg_available()
         if cfg.mp3_enabled and not self._mp3:
             logging.getLogger(__name__).warning("không có ffmpeg: bỏ tăng cường MP3")
