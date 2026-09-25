@@ -27,6 +27,16 @@ PREFERENCE = ("en", "ru", "kk-cyrl-ru")
 
 UNSUPPORTED = None      # không bảng nào phủ hết văn bản
 
+_PROFILES: dict = {}
+
+
+def _profile(pid: str):
+    """Profile nạp MỘT lần. Trang Tạo mã gọi `detect_profile` ở mỗi phím gõ; `load_profile` đọc và
+    phân tích lại hai file YAML mỗi lần — đo 25/09: 6 lần đọc đĩa mỗi phím, phần lớn độ trễ khi gõ."""
+    if pid not in _PROFILES:
+        _PROFILES[pid] = load_profile(pid)
+    return _PROFILES[pid]
+
 
 def profiles_covering(text: str) -> list[str]:
     """Các profile mã hóa được TOÀN BỘ văn bản, theo thứ tự ưu tiên.
@@ -35,7 +45,7 @@ def profiles_covering(text: str) -> list[str]:
     """
     out: list[str] = []
     for pid in PREFERENCE:
-        profile = load_profile(pid)
+        profile = _profile(pid)
         norm = normalize(text, profile)
         if not norm:
             return []

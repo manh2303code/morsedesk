@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import QEvent
+from PySide6.QtCore import QEvent, QTimer
 from PySide6.QtGui import QFont, QFontDatabase
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -29,7 +29,7 @@ from morsedesk.app.theme import mark_primary
 from morsedesk.app.widgets.banner import Banner
 from morsedesk.app.widgets.charmap import CharMap
 from morsedesk.app.widgets.icons import line_icon
-from morsedesk.app.widgets.morse_tape import MorseTape
+from morsedesk.app.widgets.morse_tape import MorseTapeView
 from morsedesk.app.widgets.player_bar import media_icon
 from morsedesk.app.worker import MAX_SECONDS, Player
 from morsedesk.audio.io import SUPPORTED_EXT, save_audio
@@ -38,10 +38,16 @@ from morsedesk.encode.detect import detect_profile
 from morsedesk.encode.text import normalize
 from morsedesk.encode.timing import TimingParams, tokens_to_elements, total_seconds
 from morsedesk.lm.profile import Profile, load_profile
+from morsedesk.model.vocab import SPACE
 
 FORMATS = (("WAV", ".wav"), ("FLAC", ".flac"), ("OGG", ".ogg"))
 PROFILES = ("en", "ru", "kk-cyrl-ru")
 PAD_S = 0.3         # `Encoder.to_audio` đệm im lặng PAD_S giây ở mỗi đầu (mặc định của lõi)
+# Văn bản dài hơn ngần này thì gộp các phím gõ liên tiếp: dựng lại chuỗi Morse, băng và thời lượng
+# MỘT lần khi ngừng gõ REFRESH_DELAY_MS. Mỗi lần dựng tỉ lệ với độ dài văn bản (đo 25/09 sau tối ưu:
+# 7 ms ở 200 ký tự, 29 ms ở 6 000); văn bản ngắn vẫn cập nhật ngay từng phím.
+DEBOUNCE_CHARS = 1500
+REFRESH_DELAY_MS = 150
 # Đuôi được coi là "đuôi audio biết trước" khi đổi định dạng lưu; đuôi lạ thì nối thêm.
 AUDIO_SUFFIXES = frozenset(SUPPORTED_EXT) | {ext for _, ext in FORMATS}
 # Mục "Tự động" của combo bảng mã. Việc chọn là TẤT ĐỊNH, không phải đoán: xem
@@ -86,7 +92,9 @@ class EncodePage(QWidget):
         self.morse_label.setProperty("role", "section")
         # Băng Morse trực quan: dit/dah như đèn tín hiệu, chữ cái dưới từng nhóm — đọc soát dễ
         # hơn nhiều so với dãy `.` và `-` (chuỗi ASCII vẫn giữ bên dưới để sao chép).
-        self.tape = MorseTape(self)
+        # Trong KHUNG CUỘN: băng trần tự đòi chiều cao = số dòng x 40 px và từng kéo cửa sổ cao 22 624 px
+        # với bản tin 6 000 ký tự (xem widgets/morse_tape.py).
+        self.tape = MorseTapeView(self)
         self.morse_view = QPlainTextEdit(self)
         self.morse_view.setReadOnly(True)
         # Chuỗi chấm gạch luôn dài gấp năm sáu lần văn bản gốc, nên ô của nó không thể thấp hơn
@@ -115,7 +123,7 @@ class EncodePage(QWidget):
         left.addWidget(self.charmap)
         left.addSpacing(6)
         left.addWidget(self.morse_label)
-        left.addWidget(self.tape)
+        left.addWidget(self.tape, 3)
         left.addWidget(self.morse_view)
         left.addWidget(self.auto_label)
         left.addWidget(self.warn_label)
@@ -212,7 +220,11 @@ class EncodePage(QWidget):
         lay.addWidget(self.banner)
         lay.addLayout(body, 1)
 
-        self.text_edit.textChanged.connect(self.refresh_morse)
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.setSingleShot(True)
+        self._refresh_timer.setInterval(REFRESH_DELAY_MS)
+        self._refresh_timer.timeout.connect(self.refresh_morse)
+        self.text_edit.textChanged.connect(self._on_text_changed)
         self.profile_combo.currentIndexChanged.connect(self._on_profile)
         self.charmap.char_clicked.connect(self._insert_char)
         self.farnsworth_check.toggled.connect(self.farnsworth_spin.setEnabled)
@@ -283,17 +295,44 @@ class EncodePage(QWidget):
         self.text_edit.insertPlainText(ch)
         self.text_edit.setFocus()
 
+    def _on_text_changed(self) -> None:
+        """Văn bản ngắn: cập nhật ngay. Dài: khóa Nghe thử/Lưu NGAY (chuỗi Morse đang hiện đã cũ —
+        không được phát bản tin chưa cập nhật) rồi gộp các phím gõ, dựng lại khi ngừng gõ."""
+        if len(self.text_edit.document().toRawText()) <= DEBOUNCE_CHARS:
+            self._refresh_timer.stop()
+            self.refresh_morse()
+            return
+        self.play_button.setEnabled(False)
+        self.save_button.setEnabled(False)
+        self._refresh_timer.start()
+
+    def flush_refresh(self) -> None:
+        """Dựng lại NGAY nếu còn lần cập nhật đang chờ (trước khi phát hoặc lưu)."""
+        if self._refresh_timer.isActive():
+            self._refresh_timer.stop()
+            self.refresh_morse()
+
     def refresh_morse(self) -> None:
-        """Cập nhật chuỗi chấm gạch và cảnh báo ký tự không hỗ trợ mỗi khi văn bản đổi."""
+        """Cập nhật chuỗi chấm gạch và cảnh báo ký tự không hỗ trợ mỗi khi văn bản đổi.
+
+        Tính MỘT lượt: nhận bảng chữ, dựng token, ước lượng thời lượng — trước 25/09 mỗi phím gõ làm
+        việc đó 3–4 lần (effective_profile_id -> detect_profile trên cả văn bản ở mỗi lần gọi
+        `_encoder()`/`estimate_seconds()`), cộng vẽ lại toàn bộ băng: 60–300 ms mỗi phím.
+        """
         pid = self.effective_profile_id()
         profile = self._profiles[pid]
         text = self.current_text()
         self.charmap.set_profile(pid)
         self._show_auto_choice(pid)
-        morse = self._encoder().to_morse_string(text, strict=False) if text.strip() else ""
-        self.morse_view.setPlainText(morse)
-        self.tape.set_words(self._tape_words(text, profile) if morse else [])
-        self._show_length(bool(morse))
+        tokens = Encoder(profile).to_tokens(text, strict=False) if text.strip() else []
+        morse = " ".join("/" if t == SPACE else t for t in tokens)
+        if self.morse_view.toPlainText() != morse:
+            self.morse_view.setPlainText(morse)
+        cursor = self.text_edit.textCursor()
+        self.tape.set_words(self._tape_words(text, profile) if morse else [],
+                            follow_end=cursor.atEnd())
+        seconds = self._seconds_for(tokens)
+        self._show_length_seconds(seconds if morse else None)
         bad = unsupported_chars(text, profile)
         self._unsupported = list(bad)
         if bad:
@@ -307,7 +346,7 @@ class EncodePage(QWidget):
             self.warn_label.setText("")
             self.warn_label.hide()
         has = bool(morse)
-        over = has and self._over_limit_seconds() is not None
+        over = has and self._over_limit(seconds or 0.0) is not None
         ready = has and not over and not bad
         self.play_button.setEnabled(ready)
         self.save_button.setEnabled(ready)
@@ -329,17 +368,29 @@ class EncodePage(QWidget):
             words.append(pairs)
         return words
 
-    def _show_length(self, has_text: bool) -> None:
-        if not has_text:
-            self.length_label.setText("")
-            return
+    def _seconds_for(self, tokens: list[str]) -> float | None:
+        """Thời lượng audio (giây) của `tokens` với timing hiện tại; None nếu timing không hợp lệ."""
+        if not tokens:
+            return 0.0
         try:
-            seconds = self.estimate_seconds()
+            return total_seconds(tokens_to_elements(tokens, self.timing_params())) + 2 * PAD_S
         except ValueError:
+            return None
+
+    def _show_length_seconds(self, seconds: float | None) -> None:
+        if not seconds:
             self.length_label.setText("")
             return
         m, sec = divmod(int(round(seconds)), 60)
         self.length_label.setText(self.tr("Length ≈ {t}").format(t=f"{m}:{sec:02d}"))
+
+    def _show_length(self, has_text: bool) -> None:
+        """Như trước (bên gọi ngoài): tự tính thời lượng từ văn bản hiện tại."""
+        try:
+            seconds = self.estimate_seconds() if has_text else None
+        except ValueError:
+            seconds = None
+        self._show_length_seconds(seconds)
 
     def _over_limit_seconds(self) -> float | None:
         """Thời lượng ước tính nếu vượt `MAX_SECONDS` (và hiện banner), ngược lại `None`.
@@ -351,6 +402,10 @@ class EncodePage(QWidget):
             seconds = self.estimate_seconds()
         except ValueError:
             seconds = 0.0
+        return self._over_limit(seconds)
+
+    def _over_limit(self, seconds: float) -> float | None:
+        """Banner + trả `seconds` nếu vượt `MAX_SECONDS`, ngược lại xóa banner cũ và trả None."""
         if seconds > MAX_SECONDS:
             # Chuỗi tr() phải nằm trọn một dòng: tools/build_i18n.py trích bằng regex một dòng.
             self.banner.show_warning(
@@ -432,6 +487,7 @@ class EncodePage(QWidget):
         return None
 
     def play(self) -> None:
+        self.flush_refresh()
         self.banner.clear()
         self._limit_banner = False
         x = self.audio_or_error()
@@ -467,6 +523,7 @@ class EncodePage(QWidget):
         return path.with_suffix(ext) if path.suffix.lower() in AUDIO_SUFFIXES else path.with_name(path.name + ext)
 
     def save_to(self, path: Path) -> None:
+        self.flush_refresh()
         path = self.format_path(path)
         x = self.audio_or_error()
         if x is None:

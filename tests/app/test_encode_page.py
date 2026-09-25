@@ -128,8 +128,11 @@ def test_text_over_duration_limit_disables_audio_without_building_it(qtbot, tmp_
     page.wpm_spin.setValue(20)
     page.text_edit.setPlainText("PARIS " * 1400)          # ~ 70 phút ở 20 WPM, quá trần 60
     assert page.estimate_seconds() > MAX_SECONDS
+    # văn bản dài: nút khóa NGAY, banner tới khi lần dựng gộp chạy (encode_page.DEBOUNCE_CHARS)
     assert not page.play_button.isEnabled() and not page.save_button.isEnabled()
-    assert page.banner.level == "warning" and str(MAX_MINUTES) in page.banner.text()
+    qtbot.waitUntil(lambda: page.banner.level == "warning", timeout=2000)
+    assert str(MAX_MINUTES) in page.banner.text()
+    assert not page.play_button.isEnabled() and not page.save_button.isEnabled()
     page.play_button.click()
     page.save_button.click()
     assert calls == []
@@ -150,7 +153,8 @@ def test_duration_limit_follows_timing_controls(qtbot, tmp_path):
     page.wpm_spin.setValue(10)
     page.text_edit.setPlainText("PARIS " * 700)
     assert page.estimate_seconds() > MAX_SECONDS
-    assert not page.play_button.isEnabled() and page.banner.level == "warning"
+    assert not page.play_button.isEnabled()
+    qtbot.waitUntil(lambda: page.banner.level == "warning", timeout=2000)
     page.wpm_spin.setValue(60)                      # làm đúng lời khuyên trong banner
     assert page.estimate_seconds() < MAX_SECONDS
     assert page.play_button.isEnabled() and page.save_button.isEnabled()
@@ -192,3 +196,46 @@ def test_save_to_keeps_dots_in_file_names(qtbot, tmp_path):
     page.format_combo.setCurrentIndex(page.format_combo.findData(".flac"))
     assert page.format_path(tmp_path / "a.b.wav") == tmp_path / "a.b.flac"   # đuôi audio -> thay
     assert page.format_path(tmp_path / "toc do 1.5 wpm") == tmp_path / "toc do 1.5 wpm.flac"
+
+
+def test_long_text_typing_is_coalesced_and_play_flushes_it(qtbot, tmp_path, monkeypatch):
+    """Gõ nhanh trên văn bản dài: không dựng lại chuỗi Morse ở từng phím (ảnh người dùng 25/09: giật
+    rõ khi gõ, 60–300 ms mỗi phím) — gộp lại một lần; Nghe thử/Lưu thì dựng ngay phần đang chờ."""
+    from morsedesk.app import encode_page as mod
+
+    page = _page(qtbot, tmp_path)
+    page.text_edit.setPlainText("PARIS " * (mod.DEBOUNCE_CHARS // 6 + 10))
+    qtbot.waitUntil(lambda: not page._refresh_timer.isActive(), timeout=2000)
+    calls = []
+    real = page.refresh_morse
+    monkeypatch.setattr(page, "refresh_morse", lambda: (calls.append(1), real()))
+    page._refresh_timer.timeout.disconnect()
+    page._refresh_timer.timeout.connect(page.refresh_morse)
+    from PySide6.QtGui import QTextCursor
+
+    page.text_edit.moveCursor(QTextCursor.MoveOperation.End)       # gõ ở cuối như người dùng
+    for _ in range(25):
+        page.text_edit.insertPlainText("E")
+    assert calls == [] and not page.play_button.isEnabled()      # đang gộp: chưa dựng, nút khóa
+    built = []
+    monkeypatch.setattr(page, "build_audio", lambda: built.append(1) or __import__("numpy").zeros(8))
+    monkeypatch.setattr(page.player, "play", lambda x, sr: None)
+    page.play()                                                  # phát: dựng NGAY phần đang chờ
+    assert calls == [1] and page.morse_view.toPlainText().endswith(". . . . .")
+    assert not page._refresh_timer.isActive()
+
+
+def test_tape_scrolls_instead_of_growing_the_window(qtbot, tmp_path):
+    """Băng Morse nằm trong khung cuộn: bản tin dài KHÔNG được kéo chiều cao tối thiểu của trang
+    (ảnh người dùng 25/09: cửa sổ bị kéo cao tới 22 624 px, xóa chữ thì khung nhập chiếm cả trang)."""
+    page = _page(qtbot, tmp_path)
+    page.resize(1200, 800)
+    page.show()
+    short = page.minimumSizeHint().height()
+    page.text_edit.setPlainText("PARIS " * 900)
+    page.flush_refresh()
+    qtbot.wait(10)
+    assert page.minimumSizeHint().height() <= short + 60
+    assert page.tape.tape.height() > page.tape.viewport().height()     # nội dung dài hơn khung -> cuộn
+    page.text_edit.setPlainText("")
+    assert page.minimumSizeHint().height() <= short + 60

@@ -221,6 +221,11 @@ mình**. Trong một phiên đã có hai kết luận research không sống só
   `setSizes` lẫn `setMinimumHeight`.
 - Chuyển tab theo **widget** (`tabs.indexOf(page)`), không theo chỉ số cứng: chèn một tab vào giữa
   làm sai mọi chỉ số mà không test nào canh.
+- **Widget tự đặt chiều cao tối thiểu theo NỘI DUNG phải nằm trong khung cuộn.** Băng Morse trang Tạo
+  mã từng setMinimumHeight(số dòng x 40): bản tin 6 000 ký tự kéo cửa sổ cao 22 624 px, xóa chữ thì
+  khung nhập chiếm cả trang (cửa sổ vẫn cao như cũ, phần dưới nằm ngoài màn hình) — 25/09, nay
+  `MorseTapeView`. Cập nhật mỗi phím gõ phải rẻ: đừng gọi `load_profile` (đọc YAML) trong đường
+  nóng; văn bản > DEBOUNCE_CHARS thì gộp phím (encode_page), khóa Play/Save trong lúc chờ.
 - Không dùng emoji cờ 🇬🇧 — Linux tối giản thiếu font vùng miền sẽ hiện ra chữ "GB".
 
 ### Test

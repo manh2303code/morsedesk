@@ -82,6 +82,10 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
 
 ## Đã xong (phiên 24/09)
 
+- **Trang Tạo mã với văn bản cực dài** (25/09): băng Morse trong khung cuộn (cửa sổ không còn bị kéo
+  cao 22 624 px, xóa chữ không làm khung nhập chiếm cả trang), chỉ vẽ phần nhìn thấy, profile nạp một
+  lần, gộp phím khi > 1 500 ký tự. Trễ mỗi phím: 200 ký tự 60 -> 7 ms; 6 000 ký tự 298 -> 29 ms (đo
+  cả vẽ lại trang), và > 1 500 ký tự chỉ dựng lại một lần khi ngừng gõ.
 - **Chế độ nghe không bao giờ trộn bảng chữ** (25/09): chưa khóa ngôn ngữ thì chưa chốt, chữ tạm viết
   một bảng chữ. live-auto 11,94 -> 7,87 % [-6,64; -1,55], bản tin lẫn Latin+Kirin 31/54 -> 0/54.
 - **Tiếng click phím điện báo**: nhận ra, trả rỗng + KEY_CLICKS (dsp/clicks.py); T1/dev/dev-OOV/T2/T4
