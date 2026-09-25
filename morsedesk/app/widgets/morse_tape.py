@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
 
-from PySide6.QtCore import QRectF, QSize, Qt, QTimer
+from PySide6.QtCore import QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter
 from PySide6.QtWidgets import QFrame, QScrollArea, QSizePolicy, QWidget
 
@@ -31,13 +31,18 @@ LINE_H = 40.0
 TOP = 6.0
 # Chữ đang phát (Nghe thử ở trang Tạo mã): nền bo tròn + viền đèn; dấu đang kêu to và sáng hơn.
 ACTIVE_FILL = "#233457"
+HOVER_FILL = "#1B2A4A"            # rê chuột lên chữ: bấm để phát từ đây
 ACTIVE_GLOW = "#FFF1CC"          # dấu đang kêu: trắng ấm, nổi hẳn trên vàng đèn
 POP = 1.45                        # dấu đang kêu phóng to chừng này
 
 
 class MorseTape(QWidget):
+    letter_clicked = Signal(int)        # bấm vào chữ thứ i: phát từ chữ đó (trang Tạo mã)
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
+        self.setMouseTracking(True)
+        self._hover = -1
         self._words: list[list[tuple[str, str]]] = []
         self._units: list[list[float]] = []     # độ dài (đơn vị dit) từng chữ, tính một lần
         self._items: list[tuple[float, float, str, str]] = []   # (x, y, chữ, mẫu), theo thứ tự y
@@ -58,6 +63,7 @@ class MorseTape(QWidget):
         self._units = [[self._char_units(p) for _, p in w] for w in words]
         self._laid_width = -1
         self._active = None
+        self._hover = -1
         self._relayout()
 
     def words(self) -> list[list[tuple[str, str]]]:
@@ -91,6 +97,39 @@ class MorseTape(QWidget):
         x, y, _ch, pat = self._items[i]
         span = self._char_units(pat) * UNIT
         return QRectF(x - 9, y - 3, span + 18, LINE_H - 2)
+
+    def index_at(self, pos) -> int:
+        """Chỉ số chữ dưới điểm `pos` (tọa độ widget), -1 nếu không trúng chữ nào."""
+        y = pos.y()
+        lo = bisect_left(self._item_ys, y - LINE_H)
+        hi = bisect_right(self._item_ys, y)
+        for i in range(lo, hi):
+            if self.item_rect(i).contains(pos.x(), y):
+                return i
+        return -1
+
+    def mouseMoveEvent(self, event) -> None:
+        i = self.index_at(event.position())
+        if i != self._hover:
+            old, self._hover = self._hover, i
+            for k in (old, i):
+                if 0 <= k < len(self._items):
+                    self.update(self.item_rect(k).adjusted(-2, -2, 2, 2).toAlignedRect())
+            self.setCursor(Qt.CursorShape.PointingHandCursor if i >= 0 else Qt.CursorShape.ArrowCursor)
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        if 0 <= self._hover < len(self._items):
+            self.update(self.item_rect(self._hover).adjusted(-2, -2, 2, 2).toAlignedRect())
+        self._hover = -1
+        super().leaveEvent(event)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            i = self.index_at(event.position())
+            if i >= 0:
+                self.letter_clicked.emit(i)
+        super().mousePressEvent(event)
 
     def active(self) -> tuple[int, int, bool] | None:
         return self._active
@@ -156,6 +195,10 @@ class MorseTape(QWidget):
                 p.setPen(QColor(LAMP))
                 p.setBrush(QColor(ACTIVE_FILL))
                 p.drawRoundedRect(self.item_rect(idx), 9, 9)
+            elif idx == self._hover:
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QColor(HOVER_FILL))
+                p.drawRoundedRect(self.item_rect(idx), 9, 9)
             cx = x
             for k, s in enumerate(pat):
                 w = (3.0 if s == "-" else 1.0) * UNIT
@@ -184,9 +227,12 @@ class MorseTape(QWidget):
 class MorseTapeView(QScrollArea):
     """Băng Morse trong khung cuộn dọc: chiều cao do bố cục chia, không do độ dài bản tin."""
 
+    letter_clicked = Signal(int)
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.tape = MorseTape(self)
+        self.tape.letter_clicked.connect(self.letter_clicked)
         self.setWidget(self.tape)
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.Shape.NoFrame)

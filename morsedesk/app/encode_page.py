@@ -52,6 +52,7 @@ PAD_S = 0.3         # `Encoder.to_audio` đệm im lặng PAD_S giây ở mỗi 
 DEBOUNCE_CHARS = 1500
 REFRESH_DELAY_MS = 150
 ANIM_MS = 16            # ~60 hình/giây: chấm 20 WPM dài 60 ms, đủ 3–4 hình mỗi chấm
+LEAD_IN_S = 0.15        # bấm một chữ để phát từ đó: bắt đầu sớm chút để nghe trọn dấu đầu
 # Đuôi được coi là "đuôi audio biết trước" khi đổi định dạng lưu; đuôi lạ thì nối thêm.
 AUDIO_SUFFIXES = frozenset(SUPPORTED_EXT) | {ext for _, ext in FORMATS}
 # Mục "Tự động" của combo bảng mã. Việc chọn là TẤT ĐỊNH, không phải đoán: xem
@@ -241,6 +242,7 @@ class EncodePage(QWidget):
         self._refresh_timer.setInterval(REFRESH_DELAY_MS)
         self._refresh_timer.timeout.connect(self.refresh_morse)
         self.text_edit.textChanged.connect(self._on_text_changed)
+        self.tape.letter_clicked.connect(self.play_from_letter)
         self.profile_combo.currentIndexChanged.connect(self._on_profile)
         self.charmap.char_clicked.connect(self._insert_char)
         self.farnsworth_check.toggled.connect(self.farnsworth_spin.setEnabled)
@@ -504,7 +506,23 @@ class EncodePage(QWidget):
             self.banner.setToolTip(str(e))
         return None
 
-    def play(self) -> None:
+    def play_from_letter(self, letter: int) -> None:
+        """Bấm một chữ trên băng: phát từ ngay trước chữ đó (đang phát thì nhảy tới đó)."""
+        self.flush_refresh()
+        timeline = self._timeline if self._timeline is not None else self._build_timeline()
+        if timeline is None:
+            return
+        start = next((sp.start for sp in timeline.spans if sp.letter == letter), None)
+        if start is None:
+            return
+        at = max(0.0, start - LEAD_IN_S)
+        if self._timeline is not None and self.playback.playing:
+            self.playback.seek(at)
+            self._tick_playback()
+            return
+        self.play(from_s=at)
+
+    def play(self, from_s: float | None = None) -> None:
         self.flush_refresh()
         self.banner.clear()
         self._limit_banner = False
@@ -514,7 +532,7 @@ class EncodePage(QWidget):
         timeline = self._build_timeline()
         try:
             self.playback.load(x, SAMPLE_RATE)
-            self.playback.play()
+            self.playback.play(from_s)
         except PlaybackError as e:
             self._end_animation()
             self.banner.show_warning(f"cannot play audio: {e}")
@@ -631,6 +649,7 @@ class EncodePage(QWidget):
         ):
             label.setText(text)
         self.play_button.setText(self.tr("Play"))
+        self.tape.setToolTip(self.tr("Click a letter to play from there."))
         tip = self.tr("The key presses in time with the sound when you press Play.")
         self.key_anim.setToolTip(tip)
         self.key_anim.setAccessibleName(tip)

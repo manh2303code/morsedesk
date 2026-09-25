@@ -1,3 +1,4 @@
+import pytest
 from PySide6.QtCore import QSettings
 
 import morsedesk.app.worker as wk
@@ -136,20 +137,20 @@ def test_playback_highlights_the_sounding_letter_and_mark(qtbot, tmp_path, monke
     clock["t"] = PAD_S + 0.03                           # chấm của A đang kêu
     page._tick_playback()
     assert page.tape.tape.active() == (0, 0, True) and page.key_anim.pressed
-    assert page.key_anim.lit() == (1.0, 1.0, 0.22)      # chấm của logo sáng
+    assert page.key_anim.lit() == (1.0, 0.22)           # chỉ dấu CHẤM trên phím sáng (một chấm, không phải hai)
     clock["t"] = PAD_S + 0.09                           # khe trong chữ A: vẫn tô A, phím nhả
     page._tick_playback()
     assert page.tape.tape.active() == (0, 0, False) and not page.key_anim.pressed
     clock["t"] = PAD_S + 0.15                           # gạch của A
     page._tick_playback()
-    assert page.tape.tape.active() == (0, 1, True) and page.key_anim.lit() == (0.22, 0.22, 1.0)
+    assert page.tape.tape.active() == (0, 1, True) and page.key_anim.lit() == (0.22, 1.0)
     clock["t"] = PAD_S + 0.50                           # chấm đầu của I
     page._tick_playback()
     assert page.tape.tape.active() == (1, 0, True)
     clock["playing"] = False                            # phát xong: bỏ tô, phím về logo tĩnh
     page._tick_playback()
     assert page.tape.tape.active() is None and not page._anim_timer.isActive()
-    assert page.key_anim.lit() == (1.0, 1.0, 1.0)
+    assert page.key_anim.lit() == (1.0, 1.0)
 
 
 def test_editing_text_while_playing_drops_the_highlight(qtbot, tmp_path, monkeypatch):
@@ -297,3 +298,27 @@ def test_tape_scrolls_instead_of_growing_the_window(qtbot, tmp_path):
     assert page.tape.tape.height() > page.tape.viewport().height()     # nội dung dài hơn khung -> cuộn
     page.text_edit.setPlainText("")
     assert page.minimumSizeHint().height() <= short + 60
+
+
+def test_clicking_a_letter_plays_from_there(qtbot, tmp_path, monkeypatch):
+    """Bấm một chữ trên băng: phát từ ngay trước chữ đó; đang phát thì nhảy tới đó (người dùng 25/09)."""
+    from PySide6.QtCore import QPoint, Qt
+
+    from morsedesk.app.encode_page import LEAD_IN_S, PAD_S
+    from morsedesk.audio import playback as pb
+
+    clock = _fake_clock(monkeypatch, page := _page(qtbot, tmp_path))
+    started, seeks = [], []
+    monkeypatch.setattr(pb.AudioPlayback, "play", lambda self, from_s=None: started.append(from_s))
+    monkeypatch.setattr(pb.AudioPlayback, "seek", lambda self, sec: seeks.append(sec))
+    page.wpm_spin.setValue(20)
+    page.text_edit.setPlainText("AI")                   # I bắt đầu ở đệm + 0,48 s
+    tape = page.tape.tape                               # chưa phát (chưa có dòng thời gian)
+    qtbot.mouseClick(tape, Qt.MouseButton.LeftButton, pos=tape.item_rect(1).center().toPoint())
+    assert started == [pytest.approx(PAD_S + 0.48 - LEAD_IN_S, abs=0.002)]
+    assert page._anim_timer.isActive()
+    assert clock["playing"]                             # đang phát: bấm chữ khác thì chỉ nhảy tới
+    qtbot.mouseClick(tape, Qt.MouseButton.LeftButton, pos=tape.item_rect(0).center().toPoint())
+    assert seeks == [pytest.approx(PAD_S - LEAD_IN_S, abs=0.002)] and len(started) == 1
+    qtbot.mouseClick(tape, Qt.MouseButton.LeftButton, pos=QPoint(tape.width() - 5, tape.height() - 5))
+    assert len(started) == 1 and len(seeks) == 1        # bấm chỗ trống: không làm gì

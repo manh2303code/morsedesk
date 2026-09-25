@@ -21,13 +21,14 @@ def _lerp(a: QColor, b: QColor, t: float) -> QColor:
 
 
 def paint_logo(p: QPainter, rect: QRectF, lever_deg: float = 0.0, lit: tuple[float, ...] = (1, 1, 1),
-               tile: bool = True, spark: float = 0.0, dah_grows: bool = True) -> None:
+               tile: bool = True, spark: float = 0.0, dah_grows: bool = True, marks: bool = True) -> None:
     """Vẽ logo vào `rect` (vuông).
 
     lever_deg: góc nhấn cần gõ quanh trục (dương = núm đi xuống). lit: độ sáng 0..1 của từng dấu
     (dit, dit, dah); với dah, giá trị < 1 còn là phần đã "gõ" xong (thanh dài dần). spark: độ sáng
     tia lửa ở tiếp điểm khi đang nhấn. dah_grows=False: dah luôn đủ dài, `lit` chỉ là độ sáng (phím
-    động ở trang Tạo mã — dah mờ khi không kêu chứ không "đang gõ dở").
+    động ở trang Tạo mã — dah mờ khi không kêu chứ không "đang gõ dở"). marks=False: chỉ vẽ phím
+    (bên gọi tự vẽ dấu của mình).
     """
     s = rect.width()
     ox, oy = rect.x(), rect.y()
@@ -48,7 +49,7 @@ def paint_logo(p: QPainter, rect: QRectF, lever_deg: float = 0.0, lit: tuple[flo
 
     # ---- dấu · · – ----
     dim, lamp = QColor(LAMP_DIM), QColor(LAMP)
-    for i, shape in enumerate(LOGO_LARGE["marks"]):
+    for i, shape in enumerate(LOGO_LARGE["marks"] if marks else []):
         level = lit[i] if i < len(lit) else 1.0
         color = _lerp(dim, lamp, level)
         p.setPen(Qt.PenStyle.NoPen)
