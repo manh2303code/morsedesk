@@ -46,7 +46,7 @@ def tallest_cell(ridge):
     h = ridge.heights(z)
     r, c = divmod(int(h.argmax()), z.shape[1])
     left, width, base, amp = ridge._row_geometry(r / (z.shape[0] - 1))
-    return QPoint(int(left + width * c / (z.shape[1] - 1)), int(base - h[r, c] * amp * 0.6))
+    return QPoint(int(left + width * float(ridge.xs()[c])), int(base - h[r, c] * amp * 0.6))
 
 
 def main() -> int:
@@ -141,12 +141,52 @@ def main() -> int:
     win.decode_page.view_2d_button.click()
     pump(300)
     r = win.decode_page.result
-    if r is not None and r.words:
+    strip = win.decode_page.spectrogram
+    if r is not None and r.words and r.tone_hz:
+        from PySide6.QtCore import QPoint
+
         w = r.words[0]
-        win.decode_page.spectrogram.hover_at((w.start_s + w.end_s) / 2, r.tone_hz or 700.0)
+        frac = win.decode_page.signal_panel.timeline.frac((w.start_s + w.end_s) / 2)
+        pr = strip.plot_rect()
+        strip.hover_at(QPoint(int(pr.left() + frac * pr.width()),
+                              int(pr.bottom() - pr.height() * r.tone_hz / strip.max_hz)))
         pump(200)
         grab(win, "05e-mau-2d-rechuot")
-        win.decode_page.spectrogram.hover_at(None)
+        strip.hover_at(None)
+    win.decode_page.view_3d_button.click()
+
+    # Nghe lại một bản tin DÀI: khung 12 s bám con trỏ, đèn ở giữa (người dùng 25/09); rồi lướt đi.
+    import tempfile
+
+    from morsedesk.api import Encoder
+    from morsedesk.audio.io import save_audio
+
+    long_wav = Path(tempfile.mkdtemp()) / "ban-tin-dai.wav"
+    save_audio(long_wav, Encoder("en").to_audio(
+        "CQ CQ DE R1ABC R1ABC K QTH MOSCOW RST 599 NAME IVAN HW CPY BK TNX FER CALL 73 SK", wpm=18,
+        snr_db=15, seed=3), 8000)
+    old = win.decode_page.result
+    win.decode_page.load_file(long_wav)
+    for _ in range(60):
+        pump(500)
+        if win.decode_page.result is not old and win.decode_page.decode_button.isEnabled():
+            break
+    pump(400)
+    panel = win.decode_page.signal_panel
+    for t_s, name in ((3.0, "05f-phat-dau"), (26.0, "05g-phat-giua")):
+        panel.play_position(t_s, True)
+        win.decode_page.word_view.set_playhead(t_s)
+        panel.flush()
+        pump(200)
+        grab(win, name)
+    win.decode_page.view_2d_button.click()
+    pump(300)
+    grab(win, "05h-phat-giua-2d")
+    panel.timeline.pan(-7.0)
+    pump(300)
+    grab(win, "05i-luot-lui-2d")
+    panel.play_position(None, False)
+    win.decode_page.word_view.set_playhead(None)
     win.decode_page.view_3d_button.click()
 
     # Nghe trực tiếp: chụp cả trạng thái rỗng và trạng thái có chữ hai tầng
@@ -161,6 +201,7 @@ def main() -> int:
         from morsedesk.model.stream import StreamUpdate
 
         audio = Encoder("en").to_audio("CQ CQ DE R1ABC QTH MOSCOW R1A", wpm=20, snr_db=12, seed=5)
+        win.live_page.on_listening(True)
         for i in range(0, len(audio), 800):          # như LiveWorker: khối 100 ms
             win.live_page._on_block(audio[i:i + 800])
         win.live_page.on_text("CQ CQ DE R1ABC QTH MOSCOW", " R1A")
@@ -171,24 +212,29 @@ def main() -> int:
             words=[Word("R1A", 12.1, 12.9, 0.52)], wpm=20.3, tone_hz=700.0, snr_db=12.4, language="en",
             committed_words=committed))
         win.live_page.on_level(0.02)
+        win.live_page.signal_panel.flush()
         pump(300)
         grab(win, "07-nghe-haitang")
         grab_tooltip(win.live_page.word_view, 3, "07b-nghe-tooltip-vang")
         grab_tooltip(win.live_page.word_view, 6, "07c-nghe-tooltip-tam")
-        # Rê chuột: trên cảnh 3D (thác nước hiện dấu nối), rồi trên thác nước (cảnh 3D hiện dấu).
+        # Rê chuột trên cảnh 3D; phổ 2D đang nghe; lướt lùi (nút "Về trực tiếp"); dừng rồi nghe lại.
         cell = tallest_cell(win.live_page.ridge)
         if cell is not None:
             win.live_page.ridge.hover_at(cell)
             pump(200)
             grab(win, "07d-nghe-3d-rechuot")
             win.live_page.ridge.hover_at(None)
-        wf = win.live_page.waterfall
-        from PySide6.QtCore import QPoint
-
-        wf.hover_at(QPoint(int(wf.width() * 0.97), int(wf.height() * (1 - 700 / 2000))))
-        pump(200)
-        grab(win, "07e-nghe-2d-rechuot")
-        wf.hover_at(None)
+        lpanel = win.live_page.signal_panel
+        lpanel.view_2d_button.click()
+        pump(300)
+        grab(win, "07e-nghe-2d")
+        lpanel.timeline.pan(-5.0)
+        pump(300)
+        grab(win, "07f-nghe-luot-lui")
+        win.live_page.on_listening(False)
+        pump(300)
+        grab(win, "07g-nghe-da-dung")
+        lpanel.view_3d_button.click()
 
     # Cài đặt
     show(win.settings_page)

@@ -168,15 +168,15 @@ def test_stats_populate_words_tone_and_labels(qtbot, monkeypatch):
                       [Word("R1A", 3.0, 3.8, 0.55)], 21.5, 712.0, 9.5, "ru")
     worker.stats_ready.emit(up)
     assert page.word_view.texts() == ["R1A"]            # update cũ không có committed_words
-    assert page.waterfall._tone_hz == 712.0
+    assert page.signal_panel._decoder_tone == 712.0
     txt = page.stats_label.text()
     assert "21.5" in txt and "712" in txt and "9.5" in txt and "ru" in txt
 
 
-def test_waterfall_receives_audio_blocks(qtbot, monkeypatch):
+def test_signal_receives_audio_blocks(qtbot, monkeypatch):
     import numpy as np
 
     page, worker = _page(qtbot, monkeypatch)
-    before = float(page.waterfall._data.max())
+    assert page.signal_panel.source() is None
     worker.block_ready.emit(np.sin(2 * np.pi * 700 * np.arange(8000) / 8000).astype(np.float32))
-    assert float(page.waterfall._data.max()) > before
+    assert page.signal_panel.source() is page.columns and page.columns.written > 0

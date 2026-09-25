@@ -30,6 +30,10 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
 15. **Hiệu chuẩn độ tin cậy lại sau mỗi lần đổi model** (tools/calibrate_confidence.py). Chế độ nghe
     có ít từ dưới 0,9 (gộp thành một khoảng, đúng 61 %) — thêm dữ liệu live nếu muốn chia nhỏ.
 
+16. **Khối Tín hiệu trực tiếp trôi theo bước 100 ms** (mỗi khối thu một lần vẽ): mượt hơn cần nội suy
+    theo đồng hồ + vẽ ~25 hình/s = ~2x CPU cho 3D. Để nguyên vì người dùng đặt "hạn chế tài nguyên";
+    làm nếu người dùng thấy giật. Cũng chưa có bản đồ thu nhỏ cả file để nhảy xa (hiện dùng thanh phát).
+
 ## Đang mở — trung bình
 
 5. **Model âm học: hướng tiếp theo (P2–P7 trong .superpowers/sdd/research-acoustic-2026-09-24.md).**
@@ -86,13 +90,17 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
   tục pha, sườn raised-cosine 5 ms, khoảng lặng là số 0 tuyệt đối. Cả ba vẫn tự nhận đúng nguyên văn
   và ngôn ngữ (đi đường DSP, SNR đo 51 dB). Cảnh 3D: dải động hiển thị tối đa 30 dB (MAX_RANGE_DB) để
   file sạch không nhòe thành đồi; gai nhỏ còn lại ở mép dấu là dải biên thật của sườn 5 ms.
-- **Cảnh 3D trang Nghe quét trái sang phải** (25/09, người dùng): cùng cảnh với trang Giải mã (ngang =
-  thời gian, sâu = ±250 Hz quanh tone), đầu ghi đi 12 s/lượt như màn hình điện tim, lượt trước hạ còn
-  35 % + khe trống (widgets/live_sweep.py). Trước đó cuộn theo chiều sâu. Cột 32 ms (thác nước 64 ms).
-- **Rê chuột trên mọi biểu đồ tín hiệu** (25/09, người dùng): cảnh 3D (chọn điểm theo thứ tự che
-  khuất), thác nước, phổ 2D trang Giải mã — ô số đo: từ ở đó, Hz, dB trên nền (kẹp 0–60), thời điểm.
-  Trang Nghe nối điểm đang xem giữa 3D và thác nước. Cảnh 3D vẽ vào ảnh đệm: rê chuột 0,5 ms/khung
-  thay vì 8,7 ms.
+- **Khối Tín hiệu bám con trỏ, lướt được, bấm để nghe** (25/09, người dùng; thay bản "quét điện tim"
+  cùng ngày): hai trang cùng SignalPanel (3D hoặc phổ 2D, một khung 12 s). Nghe lại: đèn ghim giữa,
+  trừ nửa khung đầu/cuối; kéo/lăn để lướt, nút "Theo con trỏ"; bấm biểu đồ hay từ = nghe từ đó.
+  Nghe trực tiếp: đèn ở mép phải ("bây giờ"), xem lại 10 phút, "Về trực tiếp"; dừng rồi bấm để nghe
+  lại. Rê chuột: ô số đo (từ, Hz, dB trên nền, thời điểm). Đo (tools/signal_view_latency.py, cửa sổ
+  mặc định / toàn màn hình 1080p): nghe lại 3D 20 hình/s, CPU 22–25 % một lõi, trễ hình 9–26 ms sau
+  nhịp thanh phát (+~25 ms nửa nhịp); phổ 2D 20 hình/s, 4–9 % CPU, trễ 3 ms; trực tiếp 10 hình/s
+  (theo khối thu 100 ms), 3D 13–20 %, 2D 1–5 %. Nhịp thanh phát 33 ms bị bác: 3D không nhanh hơn
+  ở màn hình lớn (trễ 39 ms) mà CPU 32 %.
+- **Rê chuột trên mọi biểu đồ tín hiệu** (25/09): cảnh 3D chọn điểm theo thứ tự che khuất; cảnh vẽ
+  vào ảnh đệm nên rê chuột 3,3 ms/khung thay vì vẽ lại cả cảnh.
 
 - **Trang Tạo mã: hiệu ứng theo tiếng khi Nghe thử** (25/09): chữ đang phát có khung bo tròn, dấu
   đang kêu to và sáng hơn; phím Morse động (vẽ bằng key_art như logo) nhấn đúng lúc tone vang. Thời

@@ -10,21 +10,25 @@ Ba cái đầu lộ ra từ ảnh chụp GUI chạy trên Ubuntu qua Xvfb:
 import pytest
 from PySide6.QtWidgets import QApplication
 
-from morsedesk.app.widgets.spectrogram import MAX_FREQ_HZ, SpectrogramView
-
 
 @pytest.fixture(scope="module")
 def app():
     return QApplication.instance() or QApplication([])
 
 
-def test_frequency_axis_leaves_room_for_the_top_label(app):
-    """Trục phải cao hơn tần số lớn nhất một chút, nếu không nhãn trên cùng bị cắt."""
-    view = SpectrogramView()
-    lo, hi = view.getViewBox().viewRange()[1]
-    assert lo <= 0.0
-    assert hi > MAX_FREQ_HZ, (lo, hi)
-    assert hi <= MAX_FREQ_HZ * 1.15, "chừa quá nhiều thì biểu đồ tụt xuống"
+def test_time_labels_at_the_edges_are_not_cut(app):
+    """Nhãn vạch thời gian sát mép khung (0 s, 12 s) căn vào trong — ảnh chụp 25/09 cho thấy "0 s"
+    và "12 s" của phổ 2D bị cắt mất nửa khi căn giữa."""
+    from PySide6.QtCore import Qt
+
+    from morsedesk.app.widgets.signal_strip import EDGE_PX, edge_align, edge_label_rect
+
+    assert edge_align(0.0, 0.0, 800.0) == Qt.AlignmentFlag.AlignLeft
+    assert edge_align(800.0, 0.0, 800.0) == Qt.AlignmentFlag.AlignRight
+    assert edge_align(400.0, 0.0, 800.0) == Qt.AlignmentFlag.AlignHCenter
+    for x in (0.0, 10.0, 790.0, 800.0):
+        r = edge_label_rect(x, 0.0, 14.0, 0.0, 800.0)
+        assert r.left() >= 0.0 and r.right() <= 800.0 and r.width() == 2 * EDGE_PX
 
 
 def test_morse_view_is_monospaced_and_readable(qtbot, tmp_path):

@@ -92,6 +92,7 @@ PYTHONUTF8=1 uv run ruff check .
 PYTHONUTF8=1 uv run python tools/build_i18n.py     # sau MỖI lần thêm/sửa chuỗi self.tr()
 PYTHONUTF8=1 uv run morsedesk-gui
 PYTHONUTF8=1 uv run python packaging/shots.py <thư mục>   # chụp mọi trang giao diện
+PYTHONUTF8=1 uv run python tools/signal_view_latency.py   # hình/s, CPU, độ trễ của khối Tín hiệu
 ```
 
 Huấn luyện chạy trong WSL trên GPU (~0,05 s/bước, 30k bước ≈ 30 phút):
@@ -230,12 +231,21 @@ mình**. Trong một phiên đã có hai kết luận research không sống só
   trễ thiết bị), không từ đồng hồ riêng hay `sd.play`. Trang Tạo mã (25/09) dùng cùng cơ chế với
   karaoke trang Giải mã; dòng thời gian dấu ở `encode/timeline.py` dựng từ đúng `tokens_to_elements`.
 - Không dùng emoji cờ 🇬🇧 — Linux tối giản thiếu font vùng miền sẽ hiện ra chữ "GB".
-- **Cảnh 3D hai trang là MỘT cảnh** (ridge3d): ngang = thời gian, sâu = ±250 Hz quanh tone. Trang Nghe
-  quét trái sang phải (live_sweep, 25/09), không cuộn. Mốc thời gian trang Nghe = giây kể từ bấm Nghe,
-  trùng Word.start_s của StreamDecoder — nút Xóa giữa phiên KHÔNG được đặt lại mốc (`keep_time`).
-  Cảnh vẽ vào ảnh đệm; thứ gì đổi hình cảnh phải gọi `_invalidate()`, không chỉ `update()`.
+- **Khối Tín hiệu hai trang là MỘT khối** (widgets/signal_panel.py, 25/09): 3D hoặc phổ 2D, chung một
+  `signal_view.Timeline`. Khung 12 s bám con trỏ với đèn ở GIỮA (chỉ nửa khung đầu/cuối thì đèn đi từ
+  mép vào) — người dùng chốt; trang Nghe dùng đúng công thức với "cuối" = bây giờ (đèn ở mép phải).
+  Kéo/lăn = lướt và thôi bám; bấm phát / con trỏ nhảy > 0,75 s / bấm biểu đồ = bám lại. Trang Nghe
+  KHÔNG phát ra loa khi đang thu (micro thu lại → giải mã trùng); dừng rồi mới nghe lại (10 phút cuối).
+- Phổ theo cột (signal_columns): cột j = [j·32 ms, (j+1)·32 ms), file tính lười theo ô 12 s, trực tiếp
+  cùng lưới (test so hai đường ra cùng số). Mốc trang Nghe = giây kể từ bấm Nghe, trùng Word.start_s
+  của StreamDecoder — nút Xóa giữa phiên KHÔNG đặt lại mốc (`keep_time`).
+- **Vẽ 3D tốn theo SỐ ĐỈNH đa giác, không theo diện tích**: một đa giác 377 đỉnh/dải 28 ms/khung, cắt
+  mỗi dải thành khối 32 cột còn 11 ms (FILL_CHUNK_COLS). Đường khử răng cưa ~5 ms mỗi đường. Chỉ dựng
+  biểu đồ đang hiện, và giữ ngân sách vẽ 25 % một lõi khi con trỏ tự chạy (RENDER_DUTY). Đo bằng
+  `tools/signal_view_latency.py` sau mỗi thay đổi đồ họa. Cảnh 3D vẽ vào ảnh đệm: thứ gì đổi hình
+  cảnh phải gọi `_invalidate()`, không chỉ `update()`.
 - **File sạch (khoảng lặng số 0) có nền -120 dB**: chuẩn hóa hình theo phân vị nền thì đuôi phổ cũng
-  thành núi — cảnh 3D kẹp dải động 30 dB (MAX_RANGE_DB), ô số đo kẹp "dB trên nền" 0–60.
+  thành núi — cảnh 3D kẹp dải động 30 dB (RIDGE_RANGE_DB), ô số đo kẹp "dB trên nền" 0–60.
 
 ### Test
 - **Test ghim hằng số phải tính theo hằng số đó**, đừng ghim số. Đổi `WINDOW_FRAMES` đã làm đỏ

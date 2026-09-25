@@ -9,9 +9,13 @@ Từ 25/09 bản chép dùng CHÍNH widget của trang Giải mã (WordView): t�
 rê chuột hiện độ tin cậy, vì sao có màu đó và tỉ lệ đúng đo được ở mức ấy (người dùng yêu cầu hai
 trang đọc giống nhau). Chưa khóa được ngôn ngữ thì mọi chữ còn ở dạng tạm (model/stream.py).
 
-Cảnh 3D (25/09, người dùng): quét từ trái sang phải như cảnh 3D trang Giải mã khi nghe lại, thay vì
-cuộn ra sau (widgets/live_sweep.py). Rê chuột trên cảnh 3D hay thác nước đều hiện ô số đo; điểm đang
-xem ở biểu đồ này được đánh dấu luôn ở biểu đồ kia (cùng mốc giây kể từ lúc bấm Nghe).
+Khối Tín hiệu (25/09, người dùng: "thiết kế tương tự như Decode — chọn 3D hay spectrogram, view chạy
+theo con trỏ, lướt được về trước, bấm vào để nghe từ đó"): đúng khối `SignalPanel` của trang Giải
+mã. Đang nghe thì khung bám "bây giờ" (12 s đầu đèn đi trái sang phải, sau đó đứng ở mép phải và
+cảnh trôi sang trái); kéo/lăn để xem lại tới LIVE_KEEP_S giây trước. Bấm vào biểu đồ khi đang
+nghe chỉ dời khung tới đó — phát ra loa lúc đang thu bằng micro thì micro thu lại chính tiếng đó
+và giải mã trùng. Dừng nghe rồi thì phiên vừa thu nạp vào thanh phát: bấm chỗ nào nghe chỗ đó,
+khung bám con trỏ phát y như trang Giải mã.
 """
 
 from __future__ import annotations
@@ -33,13 +37,13 @@ from PySide6.QtWidgets import (
 from morsedesk.app.live_worker import LiveWorker, input_devices
 from morsedesk.app.theme import NIGHT, mark_primary
 from morsedesk.app.widgets.banner import Banner
-from morsedesk.app.widgets.hover_readout import Line
 from morsedesk.app.widgets.icons import icon_button
-from morsedesk.app.widgets.live_sweep import SWEEP_S, LiveSweep
-from morsedesk.app.widgets.ridge3d import Ridge3DView
+from morsedesk.app.widgets.player_bar import PlayerBar
+from morsedesk.app.widgets.signal_columns import LiveColumns
+from morsedesk.app.widgets.signal_panel import SignalPanel
 from morsedesk.app.widgets.stats_bar import Readout
-from morsedesk.app.widgets.waterfall import WaterfallView
 from morsedesk.app.widgets.word_view import TENTATIVE_TEXT, WordView
+from morsedesk.constants import SAMPLE_RATE
 from morsedesk.warnings import WarningCode
 
 # Cùng danh sách với trang Giải mã. `auto` đứng đầu và là mặc định: bắt người dùng chọn bảng mã
@@ -49,12 +53,8 @@ PROFILE_CHOICES = ("auto", "en", "ru", "kk-cyrl-ru")
 # Xám đủ nhạt để thấy ngay là "chưa chắc", vẫn đủ đậm để đọc trên nền đêm (5,1:1).
 TENTATIVE_COLOR = TENTATIVE_TEXT
 LEVEL_SCALE = 3000      # RMS 0..~0,33 trải hết vạch: tín hiệu Morse điển hình rất nhỏ
-# Cảnh 3D quét: lượt trước (phía trước đầu ghi) còn 35 % chiều cao — vẫn đọc được hình, rõ là cũ;
-# khe trống ~0,25 s ngay trước đầu ghi cho thấy ranh giới mới/cũ như màn hình điện tim.
-SWEEP_OLD = 0.35
-SWEEP_GAP = 0.02
-SWEEP_RISE = 0.004      # cột vừa ghi nổi đủ cao ngay (trang Giải mã: dốc 2 % cho hiệu ứng "nổi lên")
-TICK_EVERY_S = 2
+# Lịch sử xem lại / nghe lại của phiên nghe: 10 phút = ~2,4 MB phổ + 9,6 MB âm thanh (int16).
+LIVE_KEEP_S = 600.0
 
 
 class LivePage(QWidget):
@@ -66,10 +66,9 @@ class LivePage(QWidget):
         self._committed = ""
         self._tentative = ""
         self._clicks_warned = False     # banner "tiếng click phím" đang hiện
-        self._words: list = []          # Word đã chốt + tạm, mốc giây kể từ lúc bấm Nghe
-        self._heard_s = 0.0
-        self.sweep = LiveSweep()
-        self._scene = None
+        self._listening = False
+        self._rec_start = 0.0           # giây (kể từ lúc bấm Nghe) của mẫu đầu trong thanh phát
+        self.columns = LiveColumns(LIVE_KEEP_S)
 
         self.device_label = QLabel(self)
         self.device_combo = QComboBox(self)
@@ -123,17 +122,12 @@ class LivePage(QWidget):
                 rl.addWidget(sep)
             rl.addWidget(cell, 1)
         rl.addStretch(1)
-        # Tín hiệu như máy thu SDR: cảnh 3D quét trái sang phải (dải ±250 Hz quanh tone) trên thác
-        # nước phẳng cả dải 0–2000 Hz.
-        self.ridge = Ridge3DView(parent=self)
-        self.ridge.ahead_level = SWEEP_OLD
-        self.ridge.gap_width = SWEEP_GAP
-        self.ridge.rise_width = SWEEP_RISE
-        self.ridge.describe = self._describe_ridge
-        self.waterfall = WaterfallView(parent=self)
-        self.waterfall.describe = self._describe_waterfall
-        self.ridge.hover_changed.connect(self._on_ridge_hover)
-        self.waterfall.hover_changed.connect(self._on_waterfall_hover)
+        # Khối Tín hiệu: đúng khối của trang Giải mã (3D hoặc phổ 2D, một khung thời gian).
+        self.signal_panel = SignalPanel(live=True, parent=self)
+        self.ridge = self.signal_panel.ridge
+        self.spectrogram = self.signal_panel.strip
+        self.ridge.setMinimumHeight(180)
+        self.spectrogram.setMinimumHeight(180)
         # Bản chép: đúng widget trang Giải mã dùng (gạch chân theo độ tin cậy, tooltip), nên hai
         # trang đọc giống nhau và người dùng không phải học hai cách nhìn. Chữ tạm vẽ màu xám.
         self.word_view = WordView(self, live=True)
@@ -147,17 +141,16 @@ class LivePage(QWidget):
         # Cùng bộ nút biểu tượng với trang Giải mã: một cách nhìn cho cả ứng dụng.
         self.copy_button = icon_button("copy", self)
         self.clear_button = icon_button("clear", self)
+        # Nghe lại phiên vừa thu (chỉ khi đã dừng nghe): cùng thanh phát với trang Giải mã.
+        self.player = PlayerBar(self)
+        self.player.hide()
         bottom = QHBoxLayout()
         bottom.addWidget(self.legend, 1)
         bottom.addWidget(self.copy_button)
         bottom.addWidget(self.clear_button)
 
-        self.signal = QSplitter(Qt.Orientation.Vertical, self)
-        self.signal.addWidget(self.ridge)
-        self.signal.addWidget(self.waterfall)
-        self.signal.setSizes([230, 150])
         self.split = QSplitter(Qt.Orientation.Vertical, self)
-        self.split.addWidget(self.signal)
+        self.split.addWidget(self.signal_panel)
         self.split.addWidget(self.word_view)
         self.split.setSizes([380, 240])
         self.split.setChildrenCollapsible(False)
@@ -171,11 +164,16 @@ class LivePage(QWidget):
         lay.addWidget(self.split, 1)
         lay.addWidget(self.stats_label)
         lay.addLayout(bottom)
+        lay.addWidget(self.player)
 
         self.listen_button.clicked.connect(self._on_listen_clicked)
         self.refresh_button.clicked.connect(self.refresh_devices)
         self.copy_button.clicked.connect(self._copy)
         self.clear_button.clicked.connect(self.clear)
+        self.signal_panel.seek_requested.connect(self._go_to)
+        self.word_view.word_clicked.connect(self._go_to)
+        self.player.position_changed.connect(self._on_playhead)
+        self.player.error.connect(self.banner.show_warning)
         worker.text_ready.connect(self.on_text)
         worker.stats_ready.connect(self.on_stats)
         worker.block_ready.connect(self._on_block)
@@ -214,78 +212,20 @@ class LivePage(QWidget):
         return [self.alphabet_cell, self.tone_cell, self.speed_cell, self.snr_cell, self.heard_cell]
 
     def _on_block(self, block) -> None:
-        """Một khối audio: thác nước cả dải, cảnh 3D quét dải quanh tone (cột 32 ms, mịn gấp đôi thác
-        nước — dit 40 WPM chỉ dài 30 ms)."""
-        self._heard_s += len(block) / self.sweep.sample_rate
-        self.waterfall.push(block)
-        if self.sweep.push(block):
-            self._update_ridge()
-
-    def _update_ridge(self) -> None:
-        self._scene = self.sweep.scene()
-        self.ridge.depth_label = self.tr("{tone} Hz ± 250 Hz").format(tone=f"{self.sweep.center_hz():.0f}")
-        self.ridge.set_surface(self._scene.z)
-        self.ridge.set_playhead(self.sweep.playhead())
-        if self.ridge.hover() is not None:          # ô dưới chuột vừa bị ghi đè: dời dấu bên thác nước
-            self._on_ridge_hover(self.ridge.hover())
-
-    # ---- rê chuột: ô số đo + dấu nối hai biểu đồ ----
-    def _describe_ridge(self, row: int, col: int) -> list[Line]:
-        t = self.sweep.column_time(col)
-        if t is None or self._scene is None:
-            return []
-        rel = float(self._scene.rel_db[row, col])
-        if rel != rel:                              # NaN: ô đã bị nút Xóa làm trống
-            return []
-        return self._point_lines(t, float(self._scene.freqs_hz[row]), rel)
-
-    def _describe_waterfall(self, t_s: float, hz: float, rel_db: float) -> list[Line]:
-        return self._point_lines(t_s, hz, rel_db)
-
-    def _point_lines(self, t_s: float, hz: float, rel_db: float) -> list[Line]:
-        lines: list[Line] = []
-        word = self._word_at(t_s)
-        if word:
-            lines.append((word, "word"))
-        hz_u = self.tr("Hz")
-        lines.append((f"{hz:.0f} {hz_u}", "value"))
-        lines.append((self.tr("{db:+.0f} dB above noise").format(db=rel_db), "value"))
-        lines.append((self.tr("{t:.1f} s ago").format(t=max(0.0, self._heard_s - t_s)), "muted"))
-        return lines
-
-    def _word_at(self, t_s: float) -> str:
-        for w in self._words:
-            if w.start_s <= t_s <= w.end_s:
-                return w.text
-        return ""
-
-    def _on_ridge_hover(self, cell) -> None:
-        if cell is None or self._scene is None:
-            self.waterfall.set_marker(None)
-            return
-        row, col = cell
-        self.waterfall.set_marker(self.sweep.column_time(col), float(self._scene.freqs_hz[row]))
-
-    def _on_waterfall_hover(self, point) -> None:
-        if point is None or self._scene is None:
-            self.ridge.set_marker(None, None)
-            return
-        t_s, hz = point
-        near = abs(self._scene.freqs_hz - hz)
-        row = int(near.argmin()) if near.min() <= self.sweep.bin_hz / 2 else None
-        self.ridge.set_marker(row, self.sweep.column_of(t_s))
+        """Một khối audio (100 ms): thêm cột phổ; khối Tín hiệu vẽ lại nếu đang hiện."""
+        if self.signal_panel.source() is None:          # khối đầu của phiên
+            self.signal_panel.set_source(self.columns, fit=False)
+        if self.columns.push(block):
+            self.signal_panel.extend()
 
     def on_stats(self, update) -> None:
         """Thông số của lần giải mã gần nhất: từ (đã chốt + tạm), WPM, tone, SNR, ngôn ngữ."""
         committed = list(getattr(update, "committed_words", []) or [])
         tentative = list(getattr(update, "words", []) or [])
-        self._words = committed + tentative
         self.word_view.set_words(committed + tentative, tentative_from=len(committed))
+        self.signal_panel.set_words(committed + tentative)
         self._show_clicks_warning(WarningCode.KEY_CLICKS.value in (getattr(update, "warnings", []) or []))
-        self.waterfall.set_tone(getattr(update, "tone_hz", None))
-        self.sweep.set_tone(getattr(update, "tone_hz", None))
-        if self.sweep.written:
-            self._update_ridge()                    # tone mới: dải 3D dời theo ngay
+        self.signal_panel.set_tone(getattr(update, "tone_hz", None))
         self.stats_label.setText(self._stats_text(update))
         wpm = getattr(update, "wpm", None)
         tone = getattr(update, "tone_hz", None)
@@ -322,19 +262,63 @@ class LivePage(QWidget):
         self.listen_button.setChecked(flag)
         self.device_combo.setEnabled(not flag)
         self.refresh_button.setEnabled(not flag)
-        if not flag:
+        self._listening = flag
+        self.signal_panel.live_now = flag
+        if flag:
+            self.player.clear()
+            self.player.hide()
+        else:
             self.level_bar.setValue(0)
+            self.signal_panel.set_cursor(None)
+            self._load_recording()
         self.retranslate()
 
     def on_failed(self, message: str) -> None:
         self.banner.show_warning(self.tr("Listening failed: {detail}").format(detail=message))
         self.listen_button.setChecked(False)
 
+    # ---- xem lại / nghe lại ----
+    def _load_recording(self) -> None:
+        """Dừng nghe: nạp phần âm thanh còn giữ vào thanh phát để bấm chỗ nào nghe chỗ đó."""
+        start, audio = self.columns.recording()
+        if len(audio) < SAMPLE_RATE // 10:
+            self.player.hide()
+            return
+        self._rec_start = start
+        self.player.load(audio, SAMPLE_RATE)
+        self.player.setEnabled(True)
+        self.player.show()
+
+    def _go_to(self, t_s: float) -> None:
+        """Bấm một chỗ trên biểu đồ hay một từ. Đang nghe: chỉ dời khung tới đó (phát ra loa lúc đang
+        thu thì micro thu lại). Đã dừng: nghe lại từ đó."""
+        if self._listening or self.player.isHidden():
+            self.signal_panel.timeline.center_on(t_s)
+            return
+        pos = max(0.0, t_s - self._rec_start)
+        if pos >= self.player.playback.duration_s:
+            self.signal_panel.timeline.center_on(t_s)
+            return
+        self.player.seek(pos)
+        self.player.play()
+        self.signal_panel.timeline.set_follow(True)
+
+    def _on_playhead(self, pos: float) -> None:
+        duration = self.player.playback.duration_s
+        playing = self.player.playback.playing
+        t = self._rec_start + pos
+        active = playing or (duration > 0 and 0.01 < pos < duration - 0.05)
+        self.word_view.set_playhead(t if active else None)
+        self.signal_panel.play_position(t if active else None, playing)
+
     # ---- hành động ----
     def _on_listen_clicked(self) -> None:
         if self.listen_button.isChecked():
             self.banner.hide()
-            self._reset_signal(new_session=True)
+            self.player.clear()
+            self.player.hide()
+            self.columns.clear()
+            self.signal_panel.set_source(self.columns, fit=False)
             self.word_view.clear()
             self.worker.start_listening(self.device_combo.currentData(),
                                         self.profile_combo.currentData())
@@ -353,22 +337,18 @@ class LivePage(QWidget):
         return self.tr("Only clicks were heard, no Morse tone. If this is a telegraph key or sounder: "
                        "MorseDesk decodes Morse sent as a tone (radio CW); key clicks cannot be decoded yet.")
 
-    def _reset_signal(self, new_session: bool) -> None:
-        """Xóa hai biểu đồ. Mốc thời gian chỉ về 0 khi bắt đầu phiên nghe mới (cùng lúc StreamDecoder
-        reset); nút Xóa giữa phiên giữ mốc, nếu không từ mới về sau sẽ lệch khỏi chỗ của nó."""
-        self._words = []
-        self._scene = None
-        if new_session:
-            self._heard_s = 0.0
-        self.sweep.clear(keep_time=not new_session)
-        self.waterfall.clear(keep_time=not new_session)
-        self.ridge.clear()
-
     def clear(self) -> None:
+        """Xóa chữ và lịch sử tín hiệu. Giữa phiên nghe thì GIỮ mốc thời gian: bộ giải mã vẫn đếm
+        tiếp, đặt lại mốc thì từ mới về sau lệch khỏi chỗ của nó trên biểu đồ."""
         self._committed = self._tentative = ""
         self._show_clicks_warning(False)
         self.word_view.clear()
-        self._reset_signal(new_session=False)
+        self.signal_panel.set_words([])
+        self.columns.clear(keep_time=True)
+        self.player.clear()
+        self.player.hide()
+        if self.signal_panel.source() is not None:
+            self.signal_panel.extend()
         self.stats_label.clear()
         for c in self.live_cells():
             c.value.setText("–")
@@ -399,10 +379,10 @@ class LivePage(QWidget):
         self.speed_cell.caption.setText(self.tr("Speed"))
         self.snr_cell.caption.setText(self.tr("SNR"))
         self.heard_cell.caption.setText(self.tr("Heard"))
+        self.signal_panel.title.setText(self.tr("Signal"))
         self.ridge.placeholder = self.tr("Press Listen to see the band live in 3D.")
-        sec = self.tr("s")
-        self.ridge.front_ticks = [(k / SWEEP_S, f"{k} {sec}") for k in range(0, int(SWEEP_S) + 1, TICK_EVERY_S)]
-        self.ridge.update()
+        self.spectrogram.placeholder = self.tr("Press Listen to see the band live.")
+        self.signal_panel.retranslate()
         self.legend.setText(self.tr("Grey words may still change. Underlined words are uncertain; "
                                     "point at any word for details."))
         if self._clicks_warned:
@@ -411,6 +391,7 @@ class LivePage(QWidget):
         self.copy_button.setAccessibleName(self.tr("Copy"))
         self.clear_button.setToolTip(self.tr("Clear the text and start over"))
         self.clear_button.setAccessibleName(self.tr("Clear"))
+        self.player.retranslate()
 
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.Type.LanguageChange:

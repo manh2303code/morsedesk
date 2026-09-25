@@ -14,11 +14,9 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-import numpy as np
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QButtonGroup,
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -30,7 +28,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSplitter,
-    QStackedWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -41,11 +38,10 @@ from morsedesk.app.settings import AppSettings
 from morsedesk.app.theme import mark_primary
 from morsedesk.app.widgets.banner import Banner
 from morsedesk.app.widgets.busy_overlay import BusyOverlay
-from morsedesk.app.widgets.hover_readout import Line
 from morsedesk.app.widgets.icons import icon_button, line_icon
 from morsedesk.app.widgets.player_bar import PlayerBar, format_time
-from morsedesk.app.widgets.ridge3d import WINDOW_S, Ridge3DView, band_window_scene
-from morsedesk.app.widgets.spectrogram import SpectrogramView
+from morsedesk.app.widgets.signal_columns import FileColumns
+from morsedesk.app.widgets.signal_panel import SignalPanel
 from morsedesk.app.widgets.stats_bar import StatsBar
 from morsedesk.app.widgets.word_view import WordView
 from morsedesk.app.worker import MAX_SECONDS, DecodeRequest, DecoderWorker, Spectrogram
@@ -87,7 +83,6 @@ class DecodePage(QWidget):
         self._path: Path | None = None
         self._audio_loaded = False
         self._samples: tuple | None = None      # (x, sr) cho cảnh 3D, nạp một lần mỗi kết quả
-        self._window_t0 = 0.0                   # mốc đầu cửa sổ 12 s của cảnh 3D
         self._t0 = 0.0
         self._busy = False
         self._samples_enabled = False
@@ -148,39 +143,16 @@ class DecodePage(QWidget):
         self.banner = Banner(self)
         self.stats = StatsBar(self, show_progress=False)
 
-        # ---- vùng tín hiệu: phong cảnh 3D hoặc phổ 2D ----
-        self.ridge = Ridge3DView(parent=self)
-        self.spectrogram = SpectrogramView(self)
-        # Rê chuột trên cả hai (người dùng 25/09): từ ở chỗ đó, tần số, mức trên nền, giây.
-        self._ridge_scene = None
-        self.ridge.describe = self._describe_ridge
-        self.spectrogram.describe = self._point_lines
-        self.signal_stack = QStackedWidget(self)
-        self.signal_stack.addWidget(self.ridge)
-        self.signal_stack.addWidget(self.spectrogram)
-        self.signal_title = QLabel(self)
-        self.signal_title.setProperty("role", "section")
-        self.view_3d_button = QPushButton(self)
-        self.view_2d_button = QPushButton(self)
-        self._view_group = QButtonGroup(self)
-        for i, b in enumerate((self.view_3d_button, self.view_2d_button)):
-            b.setCheckable(True)
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.setStyleSheet("QPushButton { padding: 3px 12px; font-size: 9pt; }")
-            self._view_group.addButton(b, i)
-        self.view_3d_button.setChecked(True)
-        self._view_group.idClicked.connect(self.signal_stack.setCurrentIndex)
-        signal_head = QHBoxLayout()
-        signal_head.setContentsMargins(0, 0, 0, 4)
-        signal_head.addWidget(self.signal_title)
-        signal_head.addStretch(1)
-        signal_head.addWidget(self.view_3d_button)
-        signal_head.addWidget(self.view_2d_button)
-        self.signal_box = QWidget(self)
-        sb = QVBoxLayout(self.signal_box)
-        sb.setContentsMargins(0, 0, 0, 0)
-        sb.addLayout(signal_head)
-        sb.addWidget(self.signal_stack, 1)
+        # ---- vùng tín hiệu: phong cảnh 3D hoặc phổ 2D (widgets/signal_panel.py, chung với trang
+        # Nghe). Khung 12 s bám con trỏ phát với đèn ở giữa; kéo/lăn để lướt; bấm để nghe từ đó.
+        self.signal_panel = SignalPanel(live=False, parent=self)
+        self.signal_box = self.signal_panel
+        self.ridge = self.signal_panel.ridge
+        self.spectrogram = self.signal_panel.strip
+        self.signal_stack = self.signal_panel.stack
+        self.signal_title = self.signal_panel.title
+        self.view_3d_button = self.signal_panel.view_3d_button
+        self.view_2d_button = self.signal_panel.view_2d_button
 
         # ---- bản giải mã: khung "lời bài hát" là trọng tâm của trang ----
         self.word_view = WordView(self)
@@ -315,8 +287,8 @@ class DecodePage(QWidget):
         self.copy_button.clicked.connect(self._copy)
         self.export_txt_action.triggered.connect(lambda: self._export("txt"))
         self.export_json_action.triggered.connect(lambda: self._export("json"))
-        self.word_view.word_clicked.connect(self.spectrogram.set_cursor)
         self.word_view.word_clicked.connect(self._play_from)
+        self.signal_panel.seek_requested.connect(self._play_from)
         self.player.position_changed.connect(self._on_playhead)
         self.player.error.connect(self.banner.show_warning)
         self.player.ensure_loaded = self._ensure_audio
@@ -460,19 +432,13 @@ class DecodePage(QWidget):
         self.result = result
         self._audio_loaded = False          # nạp lười: chỉ đọc lại file khi người dùng bấm Nghe
         self._samples = None
-        self._window_t0 = 0.0
-        self.ridge.set_playhead(None)
-        self._update_ridge()
+        self._load_signal()
         self.player.clear()
         self.player.setEnabled(True)
         # có file để nạp -> bật nút ngay, audio nạp khi bấm; đồng hồ hiện luôn thời lượng file
         self.player.arm(audio_duration_s(self._path) if self._path is not None else None)
         self.word_view.set_words(result.words)
         self.text_view.setPlainText(result.text)
-        self.spectrogram.set_spectrogram(spec)
-        self.spectrogram.set_tone(result.tone_hz)
-        self.spectrogram.set_word_marks([w.start_s for w in result.words])
-        self.spectrogram.set_cursor(None)
         self.stats.set_result(result, time.perf_counter() - self._t0)
         if result.warning_codes:
             self.banner.show_warning("; ".join(self._warning_text(w) for w in result.warning_codes))
@@ -512,61 +478,24 @@ class DecodePage(QWidget):
                 return None
         return self._samples
 
-    # ---- cảnh 3D ----
-    def _update_ridge(self) -> None:
-        """Dựng cảnh 3D cho cửa sổ 12 s bắt đầu ở `_window_t0`, tính thẳng từ âm thanh."""
+    # ---- tín hiệu ----
+    def _load_signal(self) -> None:
+        """Nguồn cho khối Tín hiệu: phổ theo cột tính lười từ chính âm thanh của file."""
         r = self.result
-        self._ridge_scene = None
-        if r is None or r.tone_hz is None:
-            self.ridge.clear()
-            return
-        samples = self._load_samples()
+        samples = self._load_samples() if r is not None else None
         if samples is None:
-            self.ridge.clear()
+            self.signal_panel.set_source(None)
             return
-        x, sr = samples
-        total_s = len(x) / sr
-        span = min(WINDOW_S, total_s)
-        self._window_span = span
-        self._ridge_scene = band_window_scene(x, sr, r.tone_hz, self._window_t0, window_s=span)
-        self.ridge.set_surface(self._ridge_scene.z if self._ridge_scene is not None
-                               else np.zeros((0, 0), np.float32))
-        step = 1 if span <= 6 else (2 if span <= 12 else 5)
-        first = int(self._window_t0 // step + (1 if self._window_t0 % step else 0)) * step
-        ticks = []
-        t = first
-        while t <= self._window_t0 + span + 1e-6:
-            ticks.append(((t - self._window_t0) / span, f"{t:g} {self.tr('s')}"))
-            t += step
-        self.ridge.front_ticks = ticks
-        self.ridge.depth_label = self.tr("{tone} Hz ± 250 Hz").format(tone=f"{r.tone_hz:.0f}")
-        self.ridge.update()
-
-    def _describe_ridge(self, row: int, col: int) -> list[Line]:
-        sc = self._ridge_scene
-        if sc is None:
-            return []
-        t = self._window_t0 + (col + 0.5) / sc.z.shape[1] * getattr(self, "_window_span", WINDOW_S)
-        return self._point_lines(t, float(sc.freqs_hz[row]), float(sc.rel_db[row, col]))
-
-    def _point_lines(self, t_s: float, hz: float, rel_db: float) -> list[Line]:
-        """Ô số đo khi rê chuột trên cảnh 3D hay phổ 2D: từ đã giải ở đó (nếu có), rồi số đo."""
-        lines: list[Line] = []
-        words = self.result.words if self.result is not None else []
-        word = next((w.text for w in words if w.start_s <= t_s <= w.end_s), "")
-        if word:
-            lines.append((word, "word"))
-        hz_u, sec = self.tr("Hz"), self.tr("s")
-        lines.append((f"{hz:.0f} {hz_u}", "value"))
-        lines.append((self.tr("{db:+.0f} dB above noise").format(db=rel_db), "value"))
-        lines.append((f"{t_s:.2f} {sec}", "muted"))
-        return lines
+        self.signal_panel.set_source(FileColumns(samples[0], samples[1]), fit=True)
+        self.signal_panel.set_tone(r.tone_hz)
+        self.signal_panel.set_words(r.words)
 
     def _play_from(self, t_s: float) -> None:
-        """Bấm vào một từ thì nghe từ đúng chỗ đó."""
+        """Bấm vào một từ hay một chỗ trên biểu đồ: nghe từ đúng chỗ đó, khung bám theo lại."""
         self._ensure_audio()
         self.player.seek(t_s)
         self.player.play()
+        self.signal_panel.timeline.set_follow(True)
 
     def _on_playhead(self, t_s: float) -> None:
         # Karaoke chỉ khi đang nghe (hoặc tạm dừng giữa chừng): lúc audio vừa nạp con trỏ ở 0 và
@@ -574,20 +503,9 @@ class DecodePage(QWidget):
         duration = self.player.playback.duration_s
         listening = self.player.playback.playing or (duration > 0 and 0.01 < t_s < duration - 0.05)
         self.word_view.set_playhead(t_s if listening else None)
-        self.spectrogram.set_cursor(t_s if self.player.playback.playing else None)
-        # File dài hơn cửa sổ 3D: cảnh đi theo con trỏ phát, đoạn đang nghe luôn ở giữa.
-        playing = self.player.playback.playing
-        if playing and not (self._window_t0 <= t_s < self._window_t0 + WINDOW_S):
-            self._window_t0 = max(0.0, t_s - WINDOW_S / 2)
-            self._update_ridge()
-        # Quét 3D theo tiếng: phần đã nghe nổi lên, phần chưa tới chìm, luồng sáng đi theo con trỏ.
-        # Tạm dừng thì giữ nguyên chỗ đã quét; về đầu hoặc nghe hết thì hiện đủ cả cảnh.
-        duration = self.player.playback.duration_s
-        span = getattr(self, "_window_span", 0.0)
-        if playing and span > 0:
-            self.ridge.set_playhead((t_s - self._window_t0) / span)
-        elif t_s <= 0.01 or (duration > 0 and t_s >= duration - 0.05):
-            self.ridge.set_playhead(None)
+        # Khung tín hiệu bám con trỏ, đèn ở giữa (trừ nửa khung đầu/cuối file); tạm dừng thì giữ
+        # nguyên chỗ; về đầu hoặc nghe hết thì hiện đủ cả cảnh, không còn phần chìm.
+        self.signal_panel.play_position(t_s if listening else None, self.player.playback.playing)
 
     def _fallback_caption(self, decoded_by: str, text: str) -> str:
         """Nhãn cho dòng dự phòng, nói đúng nguồn của nó.
@@ -661,8 +579,7 @@ class DecodePage(QWidget):
         self.result = None
         self.word_view.clear()
         self.text_view.clear()
-        self.spectrogram.clear()
-        self.ridge.clear()
+        self.signal_panel.set_source(None)
         self.stats.set_result(None, None)
         self._show_fallback(None)
         self.banner.show_error(self.failure_message(code, detail))
@@ -790,12 +707,9 @@ class DecodePage(QWidget):
             self.path_label.setText(self.tr("No file selected. Drop an audio file here."))
         self.sample_badge.setText(self.tr("Sample"))
         self.signal_title.setText(self.tr("Signal"))
-        self.view_3d_button.setText(self.tr("3D"))
-        self.view_2d_button.setText(self.tr("Spectrogram"))
         self.ridge.placeholder = self.tr("Open or drop an audio file to see its signal in 3D.")
+        self.spectrogram.placeholder = self.tr("Open or drop an audio file to see its spectrogram.")
         self.overlay.retranslate()
-        if self.result is not None:
-            self._update_ridge()
         if self.result is not None and self.result.fallback_text is not None:
             self._show_fallback(self._fallback_caption(getattr(self.result, "decoded_by", "model"),
                                                        self.result.fallback_text))

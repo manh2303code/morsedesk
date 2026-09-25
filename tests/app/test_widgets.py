@@ -1,11 +1,10 @@
-import numpy as np
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import QApplication
 
 from morsedesk.api import DecodeResult, Encoder, Word
 from morsedesk.app.widgets.banner import Banner
 from morsedesk.app.widgets.charmap import CYRILLIC, KAZAKH_EXTRA, CharMap
-from morsedesk.app.widgets.spectrogram import SpectrogramView
+from morsedesk.app.widgets.signal_panel import SignalPanel
 from morsedesk.app.widgets.stats_bar import StatsBar
 from morsedesk.app.widgets.word_view import (
     ACTIVE_BG,
@@ -20,7 +19,6 @@ from morsedesk.app.widgets.word_view import (
     WordView,
     confidence_color,
 )
-from morsedesk.app.worker import Spectrogram
 
 
 def test_banner_levels_and_close(qtbot):
@@ -104,27 +102,27 @@ def test_charmap_groups_and_click(qtbot):
     assert c.isHidden()
 
 
-def test_spectrogram_view_sets_image_tone_marks(qtbot):
-    v = SpectrogramView()
-    qtbot.addWidget(v)
-    spec = Spectrogram.from_audio(Encoder("en").to_audio("PARIS", wpm=20))
-    v.set_spectrogram(spec)
-    assert v.image.image is not None and v.image.image.shape == (spec.power_db.shape[1], spec.power_db.shape[0])
-    v.set_tone(700.0)
-    assert v.tone_line.isVisible() and abs(v.tone_line.value() - 700.0) < 1e-6
-    v.set_tone(None)
-    assert not v.tone_line.isVisible()
-    v.set_word_marks([0.5, 1.2])
-    assert len(v.word_lines) == 2
-    v.set_cursor(0.7)
-    assert v.cursor_line.isVisible() and abs(v.cursor_line.value() - 0.7) < 1e-6
-    v.clear()
-    assert v.image.image is None and v.word_lines == [] and not v.cursor_line.isVisible()
-    v.set_spectrogram(Spectrogram.from_audio(np.zeros(0, np.float32)))   # rỗng không lỗi
+def test_signal_panel_2d_shows_image_tone_and_words(qtbot):
+    """Phổ 2D của khối Tín hiệu: ảnh, vạch tone, tên từ trong khung; nguồn None thì trống."""
+    from morsedesk.api import Word
+    from morsedesk.app.widgets.signal_columns import FileColumns
+
+    p = SignalPanel()
+    qtbot.addWidget(p)
+    p.resize(900, 300)
+    p.show()
+    p.view_2d_button.click()
+    p.set_source(FileColumns(Encoder("en").to_audio("PARIS PARIS", wpm=20)), fit=True)
+    p.set_tone(700.0)
+    p.set_words([Word("PARIS", 0.3, 1.5, 0.9)])
+    s = p.strip
+    assert s.has_image() and s.tone_hz == 700.0 and [w for _, w in s.words] == ["PARIS"]
+    p.set_source(None)
+    assert not s.has_image() and not p.ridge.surface().size
 
 
 def test_language_change_event_triggers_retranslate(qtbot):
-    widgets = [WordView(), StatsBar(), SpectrogramView()]
+    widgets = [WordView(), StatsBar(), SignalPanel()]
     calls: dict[str, int] = {}
     for w in widgets:
         qtbot.addWidget(w)
@@ -137,9 +135,7 @@ def test_language_change_event_triggers_retranslate(qtbot):
 
         w.retranslate = counted
         QApplication.sendEvent(w, QEvent(QEvent.Type.LanguageChange))
-    assert calls == {"WordView": 1, "StatsBar": 1, "SpectrogramView": 1}
-    view = widgets[2]
-    assert view.getAxis("bottom").labelText == "s" and view.getAxis("left").labelText == "Hz"
+    assert calls == {"WordView": 1, "StatsBar": 1, "SignalPanel": 1}
 
 
 def _relative_luminance(hex_color: str) -> float:

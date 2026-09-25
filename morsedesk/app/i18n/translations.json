@@ -185,7 +185,16 @@
     "The key presses in time with the sound when you press Play.": "Ключ нажимается в такт звуку, когда вы нажимаете «Воспроизвести».",
     "Click a letter to play from there.": "Щёлкните по букве, чтобы воспроизвести с этого места.",
     "{db:+.0f} dB above noise": "{db:+.0f} дБ над шумом",
-    "{t:.1f} s ago": "{t:.1f} с назад"
+    "{t:.1f} s ago": "{t:.1f} с назад",
+    "Back to live": "К прямому эфиру",
+    "Follow playback": "Следовать за звуком",
+    "Show the signal as a 3D landscape": "Показать сигнал в виде 3D-рельефа",
+    "Show the signal as a spectrogram": "Показать сигнал в виде спектрограммы",
+    "The view follows the sound again": "Вид снова следует за звуком",
+    "Drag or scroll to move, click to listen from there": "Тяните или прокручивайте, чтобы перемещаться; щёлкните, чтобы слушать отсюда",
+    "Drag or scroll to look back; click to replay after you stop": "Тяните или прокручивайте, чтобы вернуться назад; после остановки щелчок проигрывает запись",
+    "Open or drop an audio file to see its spectrogram.": "Откройте или перетащите аудиофайл, чтобы увидеть его спектрограмму.",
+    "Press Listen to see the band live.": "Нажмите «Слушать», чтобы видеть диапазон в реальном времени."
   },
   "kk": {
     "MorseDesk": "MorseDesk",
@@ -373,6 +382,15 @@
     "The key presses in time with the sound when you press Play.": "«Ойнату» басылғанда кілт дыбыспен бірге басылады.",
     "Click a letter to play from there.": "Сол жерден ойнату үшін әріпті басыңыз.",
     "{db:+.0f} dB above noise": "{db:+.0f} дБ шудан жоғары",
-    "{t:.1f} s ago": "{t:.1f} с бұрын"
+    "{t:.1f} s ago": "{t:.1f} с бұрын",
+    "Back to live": "Тікелей эфирге",
+    "Follow playback": "Дыбысқа ілесу",
+    "Show the signal as a 3D landscape": "Сигналды 3D бедер түрінде көрсету",
+    "Show the signal as a spectrogram": "Сигналды спектрограмма түрінде көрсету",
+    "The view follows the sound again": "Көрініс қайтадан дыбысқа ілеседі",
+    "Drag or scroll to move, click to listen from there": "Жылжу үшін сүйреңіз не айналдырыңыз; сол жерден тыңдау үшін басыңыз",
+    "Drag or scroll to look back; click to replay after you stop": "Артқа қарау үшін сүйреңіз не айналдырыңыз; тоқтатқаннан кейін басып, қайта тыңдаңыз",
+    "Open or drop an audio file to see its spectrogram.": "Спектрограммасын көру үшін аудиофайлды ашыңыз немесе осында сүйреңіз.",
+    "Press Listen to see the band live.": "Жолақты нақты уақытта көру үшін «Тыңдау» батырмасын басыңыз."
   }
 }

@@ -41,7 +41,10 @@ def test_load_file_decodes_and_fills_widgets(qtbot, tiny_lm_dir, tmp_path, wav_c
         assert page.result.text == "CQ DE K"
         assert page.word_view.texts() == ["CQ", "DE", "K"]
         assert "WPM" in page.stats.text() and page.stats.language_label("en") in page.stats.text()
-        assert page.spectrogram.image.image is not None and page.spectrogram.tone_line.isVisible()
+        assert page.signal_panel.source() is not None and page.ridge.surface().size
+        page.view_2d_button.click()
+        assert page.spectrogram.has_image() and page.spectrogram.tone_hz
+        page.view_3d_button.click()
         assert page.decode_button.isEnabled() and page.banner.isHidden()
         assert page.path_label.text().endswith("cq.wav")
         assert page.settings.last_dir == str(wav_cq.parent)

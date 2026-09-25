@@ -184,12 +184,13 @@ class PlayerBar(QWidget):
         if self.ensure_loaded is not None:
             self.play_button.setEnabled(True)
             self.slider.setEnabled(True)
-        if duration_s and self.playback.duration_s <= 0:
-            self.time_label.setText(f"{format_time(0.0)} / {format_time(duration_s)}")
+        self._armed_s = duration_s or 0.0
+        self._update_labels()
 
     def clear(self) -> None:
         self.playback.stop()
         self._timer.stop()
+        self._armed_s = 0.0
         self.playback.load([], self.playback.sample_rate)
         self.play_button.setEnabled(False)
         self.slider.setEnabled(False)
@@ -295,7 +296,10 @@ class PlayerBar(QWidget):
 
     def _update_labels(self, pos: float | None = None) -> None:
         p = self.playback.position_s if pos is None else pos
-        self.time_label.setText(f"{format_time(p)} / {format_time(self.playback.duration_s)}")
+        # Chưa nạp audio (nạp lười) thì ghi thời lượng đọc từ đầu file: đổi ngôn ngữ giao diện gọi lại
+        # hàm này, và trước 25/09 nó xóa mất thời lượng đó (ảnh chụp tiếng Kazakh: "0:00 / 0:00").
+        dur = self.playback.duration_s if self.playback.duration_s > 0 else getattr(self, "_armed_s", 0.0)
+        self.time_label.setText(f"{format_time(p)} / {format_time(dur)}")
 
     def retranslate(self) -> None:
         playing = self.playback.playing

@@ -129,6 +129,10 @@ def test_arm_shows_the_file_length_before_audio_is_loaded(qtbot, fake_sounddevic
     bar.ensure_loaded = lambda: None
     bar.arm(4.2)
     assert bar.time_label.text() == "0:00 / 0:04"
+    bar.retranslate()                           # đổi ngôn ngữ giao diện: không được xóa thời lượng
+    assert bar.time_label.text() == "0:00 / 0:04"
+    bar.clear()
+    assert bar.time_label.text() == "0:00 / 0:00"
 
 
 def test_speed_menu_and_volume_controls(qtbot):
