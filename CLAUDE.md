@@ -18,6 +18,10 @@ Dự án này đã nhiều lần đi ngược trực giác, và lần nào cũng
    dùng CHÍNH danh sách từ lúc huấn luyện: không phải phép thử độc lập.
 3. Chỉ CER trên T1/T2 mới dùng để quyết định. **Chỉnh tham số thì chỉnh trên bộ dev** (xem mục
    "Nhiễu đo" cuối file), T1 chỉ để xác nhận.
+4. **Ngoại lệ (25/09): thay đổi VĂN BẢN huấn luyện** quyết định bằng **dev-OOV + T4 (bản ghi thật) +
+   long_random**, không bằng T1/dev: ~50 % từ của T1/dev nằm trong chính danh sách 51 từ mà E16 học
+   thuộc, nên model "thuộc bài" luôn trông tốt hơn trên chúng (E17: T4 −0,60, dev-OOV −1,15 nhưng
+   dev +1,15). Người dùng đặt thước đo: file thật, dài, từ internet.
 
 ```bash
 PYTHONUTF8=1 uv run python tools/eval_run.py --run runs/E9 --name <tên>        # T1
@@ -129,7 +133,7 @@ audio → dò tone 14 ms → dither nếu SNR>25dB → đặc trưng 11 chiều,
 
 | | Là gì | Ghi chú |
 |---|---|---|
-| `models/acoustic.onnx` | CTC 65 lớp, hidden 384, 4,5 MB, 1 119 425 tham số (E16 v0.4.0) | 65 lớp là **cả ký tự** (`.-`, `-...`), không phải từng chấm gạch |
+| `models/acoustic.onnx` | CTC 65 lớp, BiGRU 1 lớp hai chiều × 384, 4,5 MB, 1 119 425 tham số (E17 v0.5.0, văn bản corpus thật) | 65 lớp là **cả ký tự** (`.-`, `-...`), không phải từng chấm gạch |
 | `models/lm/{en,ru,kk}.bin` | n-gram ký tự bậc 6, 41 MB | **bảng đếm thống kê, không phải nơ-ron**; chấm cùng đáp án gốc thì đáng ~3,9 điểm CER (T1 13,57 → 9,70 %), riêng Kazakh ~8,5 điểm |
 | `models/deepcw/model.onnx` | model ngoài, 15 MB | chỉ profile `en`, dùng đối chứng |
 
@@ -257,14 +261,17 @@ mình**. Trong một phiên đã có hai kết luận research không sống só
 
 ## Hiện trạng
 
-Model **E16 v0.4.0** (hidden 384, 1 119 425 tham số, fading nặng; thay E9 ngày 23/09 — thắng chắc chắn trên dev và T1, không xấu trên T2), cửa sổ 12 s, beam `alpha` 0,3 / `char_bonus` 1,25. Hai bộ tổng hợp cùng ma trận:
+Model **E17 v0.5.0** (như E16 — hidden 384, 1 119 425 tham số, fading nặng — nhưng văn bản huấn luyện là câu thật từ corpus thay danh sách 51 từ; thay E16 ngày 25/09, xem 03-model-experiments), cửa sổ 12 s, beam `alpha` 0,3 / `char_bonus` 1,25 + ranh giới câu. Ba bộ tổng hợp cùng ma trận:
 
 | | tổng | clean | mp3 | qrm | qrn | qsb |
 |---|---|---|---|---|---|---|
-| T1 (seed 1000) | **7,78 %** | 1,64 | 1,44 | 1,69 | 1,54 | 32,61 |
-| dev (seed 500000) | **8,07 %** | 2,56 | 3,05 | 2,70 | 2,73 | 29,31 |
+| T1 (seed 1000) | **8,39 %** | 1,71 | 1,80 | 1,39 | 1,42 | 35,61 |
+| dev (seed 500000) | **9,21 %** | 2,76 | 2,90 | 2,55 | 2,51 | 35,33 |
+| dev-OOV (seed 700000, văn bản chưa thấy) | **8,95 %** | 2,24 | 1,10 | 3,57 | 2,16 | 35,67 |
 
-T2 **1,62 %** (bản ghi ARRL thật 0,95 %, 18–40 WPM không sai ký tự nào; trước 23/09 báo 3,93 % vì đáp án Kazakh bị viết phẳng — xem 02-baseline-numbers). **Không kênh nào qua cổng 2 % một cách chắc chắn** — trên T1 bốn kênh
+**T4 (bản ghi thật từ internet, 40 file) 1,34 %**: đề thi SRR tiếng Nga 0,55 %, ARRL 0,05 %, K7QO/SKCC
+0 %, VK6FLAB 0,79 %, **SAQ gõ tay on-air 16,21 %** (khoảng cách lớn nhất còn lại). Không có bản ghi
+Kazakh thật nào. T2 **1,84 %** (bản ghi ARRL thật 0,95 %, 18–40 WPM không sai ký tự nào; trước 23/09 báo 3,93 % vì đáp án Kazakh bị viết phẳng — xem 02-baseline-numbers). **Không kênh nào qua cổng 2 % một cách chắc chắn** — trên T1 bốn kênh
 chạm dưới 2 % nhưng dev độc lập cho 2,6–3,1 %.
 
 ### Nhiễu đo — đọc trước khi tin một con số

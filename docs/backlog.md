@@ -25,15 +25,11 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
 
 ## Đang mở — trung bình
 
-5. **Model âm học có "LM ngầm" từ danh sách 51/40/40 từ (ĐANG HUẤN LUYỆN E17, 25/09).** 60 % văn bản
-   huấn luyện là từ bốc từ danh sách dựng sẵn (train.py không truyền corpus). Bằng chứng (model không LM,
-   bản tin 2 phút gõ máy 8 dB): lỗi chủ yếu là NUỐT DẤU CÁCH cạnh từ 1–2 chữ ("WHEN I GOT" -> WHENIGOT;
-   danh sách không có từ < 3 chữ) và I -> A ở WI/HI/PI (WILL -> WALL; danh sách không có cặp đó); nhóm
-   mã ngẫu nhiên cùng điều kiện gần như không lỗi. T1/dev có 48–53 % từ nằm trong chính danh sách nên
-   KHÔNG thấy lỗi này -> dựng **dev-OOV** (`make_t1.py --holdout-text --seed-base 700000`,
-   testdata/generated/t1oov): E16 10,13 % so với dev 8,07 %. E17 = E16 + `--text-corpus --ham-ratio 0.2
-   --random-ratio 0.2 --builtin-ratio 0.1 --group-len 1-8`. Quyết định bằng dev-OOV + long_random, KHÔNG
-   bằng T1 (research-acoustic §2.4). Kế hoạch tiếp P2–P7 ở .superpowers/sdd/research-acoustic-2026-09-24.md.
+5. **Model âm học: hướng tiếp theo (P2–P7 trong .superpowers/sdd/research-acoustic-2026-09-24.md).**
+   E17 (v0.5.0) đã gỡ phần lớn "LM ngầm" (xem Đã xong). Còn: frontend băng hẹp (5e), cửa sổ liên tục +
+   mẫu nhiễu thuần, fading Rayleigh + tay gõ theo thống kê VE3NEA + nhiễu thu thật (nhắm SAQ 16 %),
+   BiGRU 2 lớp (CPU x3). E17 kém E16 ở fading rất sâu 0–3 dB kể cả trên dev-OOV (0 dB 66,5 -> 71,9) —
+   theo dõi. Mỗi lượt quyết định bằng dev-OOV + T4 + long_random (CLAUDE.md quy tắc 4).
 5c. **LM làm nhóm mã và hô hiệu XẤU đi** (T1 −1,75 điểm có ý nghĩa; bịa CZWCI -> CQWCI, BS5MSB ->
    BU5MSB). Hướng: chế độ "nhóm mã" (alpha thấp / tắt LM) + trạng thái "không chắc" cho auto khi mọi
    LM > ~4,5 bit/ký tự; kiểm hô hiệu SAU khi giải và GẮN CỜ, không tự sửa (research-lm §8).
@@ -75,6 +71,11 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
 
 ## Đã xong (phiên 24/09)
 
+- **Model v0.5.0 = E17** (25/09): như E16 nhưng văn bản huấn luyện là câu thật từ corpus (50 %), nhóm
+  mã 1–8 chữ (20 %), điện văn (20 %), danh sách cũ (10 %). T4 1,94 -> 1,34 % (SAQ gõ tay on-air 22,9 ->
+  16,2), dev-OOV 10,10 -> 8,95, bản tin dài 3,69 -> 3,26 (văn thật chế độ file 0,29 %), chế độ nghe 6,93
+  -> 5,56; dev xấu 8,06 -> 9,21 và T1 8,39 (văn bản từ danh sách cũ + fading 0–3 dB). E16 ở
+  models/archive/acoustic-0.4.0-E16.onnx.
 - **Chế độ nghe khóa nhầm ngôn ngữ** (25/09): luật "3 lần giải mã liền nhau" thay bằng điểm LM tích lũy
   cả phiên -> live-auto văn thật 15–17 % -> 5,0–6,9 %, điện văn 15–46 % -> 7,9–14 %.
 - **LM phạt dấu chấm giữa bản tin** (25/09): ranh giới câu trong beam; bản tin dài app 3,87 -> 3,69 %

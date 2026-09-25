@@ -34,7 +34,7 @@ MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
 
 def model_parameters(hidden: int, feat_dim: int = 11, n_classes: int = 65) -> int:
     """Số tham số của MorseNet (3 Conv1d + BiGRU + Linear) theo `hidden` — đúng công thức của
-    tools/net_torch.py, kiểm bằng test với con số 1 119 425 của model 0.4.0."""
+    tools/net_torch.py, kiểm bằng test với con số 1 119 425 của model 0.4.0 và 0.5.0 (cùng kiến trúc)."""
     conv = (feat_dim * 32 * 5 + 32) + (32 * 64 * 5 + 64) + (64 * 64 * 5 + 64)
     gru = 2 * 3 * (hidden * 64 + hidden * hidden + 2 * hidden)
     linear = 2 * hidden * n_classes + n_classes

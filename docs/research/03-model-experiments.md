@@ -395,3 +395,54 @@ Theo ngôn ngữ (T1 / dev): en 7,94→7,73 / 8,86→6,76; ru 9,18→7,23 / 9,63
 **Đã chọn E16 làm `models/acoustic.onnx` v0.4.0.** E9 lưu ở `models/archive/` (gitignored).
 Giá phải trả: file model 2,2 → 4,5 MB; model từ ~2 % lên vài phần trăm thời gian giải mã (beam +
 LM vẫn chiếm phần lớn).
+
+## E17: văn bản huấn luyện thật thay danh sách 51 từ — model v0.5.0 (2026-09-25)
+
+**Vì sao.** Đo trên bản tin 2 phút (tools/long_random_eval.py) lộ ra E16 có "LM ngầm": 60 % văn bản
+huấn luyện là từ bốc từ danh sách dựng sẵn 51/40/40 từ, nên trên văn thật model-only nuốt dấu cách
+cạnh từ 1–2 chữ (WHENIGOT; danh sách không có từ < 3 chữ) và đọc WILL thành WALL (không có WI/HI/PI),
+trong khi nhóm mã ngẫu nhiên gần như không lỗi. Wan 2020 (CVPR) mô tả đúng hiện tượng này ở OCR.
+Chi tiết: .superpowers/sdd/research-acoustic-2026-09-24.md §2.
+
+**Thay đổi DUY NHẤT so với E16** (cùng seed 23, 60 000 bước, hidden 384, qsb-hard, lr, lịch):
+`--text-corpus --ham-ratio 0.2 --random-ratio 0.2 --builtin-ratio 0.1 --group-len 1-8` — 50 % câu
+thật từ corpus/{en,ru,kk}.txt (không chứa dòng holdout), 20 % nhóm mã độ dài 1–8, 20 % điện văn, 10 %
+danh sách cũ. 2,2 giờ trên RTX 5090. TER validation 21,89 % (tập validation khác văn bản — KHÔNG so).
+
+**Bộ đo mới, vì T1/dev mù với lỗi này**: ~50 % từ của T1/dev nằm trong chính danh sách 51 từ.
+dev-OOV = cùng ma trận nhiễu, seed 700 000, văn bản từ corpus/*.holdout.txt (`make_t1.py
+--holdout-text`); T4 = 40 bản ghi thật tải từ internet (`make_t4.py`).
+
+So ghép cặp, cùng mã (ranh giới câu trong beam đã bật), bootstrap 5 000 lần:
+
+| Bộ | E16 (0.4.0) | E17 | Hiệu [khoảng 95 %] | Kết luận |
+|---|---|---|---|---|
+| **T4 bản ghi thật (40)** | 1,94 % | **1,34 %** | −0,60 [−1,31; −0,07] | tốt hơn chắc chắn; 4 tốt / 0 xấu |
+| **dev-OOV** | 10,10 % | **8,95 %** | −1,15 [−2,03; −0,20] | tốt hơn chắc chắn |
+| **bản tin 2 phút, app** | 3,69 % | **3,26 %** | −0,43 [−0,80; −0,12] | tốt hơn chắc chắn |
+| bản tin 2 phút, model-only | 7,34 % | 5,53 % | −1,81 [−2,40; −1,24] | LM ngầm giảm rõ |
+| T2 | 1,51 % | 1,84 % | +0,33 [0,00; +0,98] | 1 file kk TỰ SINH từ danh sách từ xấu đi; ARRL y hệt |
+| T1 | 7,75 % | 8,39 % | +0,64 [−0,11; +1,34] | không phân biệt được |
+| dev | 8,06 % | 9,21 % | +1,15 [+0,37; +1,96] | **xấu hơn chắc chắn** |
+
+T4 theo nguồn: SAQ gõ tay on-air 22,88 → **16,21 %**, Fedyai ru 5,44 → 1,90 %, SRR ru / ARRL / K7QO /
+SKCC / VK6FLAB giữ nguyên (0,55 / 0,05 / 0 / 0 / 0,79 %).
+
+Theo kênh (T1 / dev / dev-OOV): clean 1,64→1,71 / 2,56→2,76 / **4,54→2,24**; mp3 1,44→1,80 /
+2,94→2,90 / **2,80→1,10**; qrm 1,69→1,39 / 2,70→2,55 / 3,69→3,57; qrn 1,54→1,42 / 2,73→2,51 /
+**3,62→2,16**; qsb 32,43→35,61 / 29,37→35,33 / 35,84→35,67.
+
+qsb theo SNR 0–3–6–10–20 dB: T1 59,43/46,28/32,77/18,92/4,74 → 63,72/51,51/34,57/24,23/4,03; dev
+50,19/35,29/32,27/23,42/5,68 → 63,18/43,72/40,13/24,98/4,62; dev-OOV 66,53/48,47/41,86/18,30/4,03 →
+71,86/52,34/35,97/16,51/1,65.
+
+**Đọc kết quả.** E17 thua ở đúng hai chỗ: (1) văn bản lấy từ danh sách cũ (T1, dev, kk tự sinh
+trong T2) — E16 "thuộc bài" nên đoán được chữ fading nuốt; trên dev-OOV cùng kênh qsb hai model
+ngang nhau (35,84 vs 35,67); (2) fading rất sâu 0–3 dB, cả trên dev-OOV (0 dB 66,5 → 71,9) — vùng mà
+cả hai đều sai quá nửa, tiên nghiệm mạnh của E16 lấp được nhiều hơn. Ở mọi chỗ văn bản thật và tín
+hiệu dùng được (T4, dev-OOV sạch/mp3/qrn, bản tin dài, qsb ≥ 10 dB trên dev-OOV) E17 thắng.
+Test §7 (nhiễu trắng / sóng mang / nhiễu xung / im lặng không ra chữ) qua với E17.
+
+**Đã chọn E17 làm `models/acoustic.onnx` v0.5.0**, theo đúng thước đo người dùng đặt ra (bản ghi
+thật, dài, từ internet). E16 lưu ở `models/archive/acoustic-0.4.0-E16.onnx`. Quy tắc "T1 quyết định"
+của CLAUDE.md KHÔNG áp dụng cho thay đổi văn bản huấn luyện — xem CLAUDE.md.

@@ -145,19 +145,22 @@ def summary(rows: list[dict], configs=CONFIGS) -> list[str]:
 
 
 _DECODERS: dict[str, dict[str, Decoder]] = {}
+_MODEL: str | None = None       # --model: đường dẫn ONNX khác models/acoustic.onnx (vd model đang thử)
 
 
 def _decoders(pid: str) -> dict[str, Decoder]:
     """Bốn cách giải mã của một ngôn ngữ; mỗi tiến trình dựng một lần."""
     if pid not in _DECODERS:
         _DECODERS[pid] = {
-            "app": Decoder(pid, engine="onnx", lm=True),
-            "model+LM": Decoder(pid, engine="onnx", lm=True, fallback=False),
-            "model": Decoder(pid, engine="onnx", lm=False, fallback=False),
-            "auto": Decoder("auto", engine="onnx", lm=True),
+            "app": Decoder(pid, engine="onnx", model_path=_MODEL, lm=True),
+            "model+LM": Decoder(pid, engine="onnx", model_path=_MODEL, lm=True, fallback=False),
+            "model": Decoder(pid, engine="onnx", model_path=_MODEL, lm=False, fallback=False),
+            "auto": Decoder("auto", engine="onnx", model_path=_MODEL, lm=True),
             # đúng cấu hình LiveWorker._ensure_decoder
-            "live": Decoder(pid, engine="onnx", lm=True, fallback=False, skip_silent_windows=True),
-            "live-auto": Decoder("auto", engine="onnx", lm=True, fallback=False, skip_silent_windows=True),
+            "live": Decoder(pid, engine="onnx", model_path=_MODEL, lm=True, fallback=False,
+                            skip_silent_windows=True),
+            "live-auto": Decoder("auto", engine="onnx", model_path=_MODEL, lm=True, fallback=False,
+                                 skip_silent_windows=True),
         }
     return _DECODERS[pid]
 
@@ -175,7 +178,8 @@ def live_decode(dec: Decoder, x: np.ndarray) -> tuple[str, str]:
 
 
 def run_job(job: tuple) -> dict:
-    lang, kind, keying, k, wpm, configs = job
+    global _MODEL
+    lang, kind, keying, k, wpm, configs, _MODEL = job
     pid = LANGS[lang]
     profile = load_profile(pid)
     seed = zlib.crc32(f"{lang}|{kind}|{keying}|{k}".encode())
@@ -200,6 +204,7 @@ def main() -> int:
     ap.add_argument("--wpm", type=float, default=20.0)
     ap.add_argument("--workers", type=int, default=None, help="mặc định số lõi - 2")
     ap.add_argument("--out", default="runs/long_random")
+    ap.add_argument("--model", default=None, help="ONNX model âm học (mặc định models/acoustic.onnx)")
     ap.add_argument("--configs", default=",".join(CONFIGS),
                     help=f"trong {', '.join(CONFIGS + LIVE_CONFIGS)}")
     a = ap.parse_args()
@@ -209,7 +214,7 @@ def main() -> int:
         ap.error(f"cách giải mã không có: {', '.join(sorted(unknown))}")
     out_dir = Path(a.out)
     out_dir.mkdir(parents=True, exist_ok=True)
-    jobs = [(lang, kind, keying, k, a.wpm, configs) for lang in LANGS for kind in KINDS for keying in KEYINGS
+    jobs = [(lang, kind, keying, k, a.wpm, configs, a.model) for lang in LANGS for kind in KINDS for keying in KEYINGS
             for k in range(a.per_cell)]
     t0 = time.time()
     rows = map_parallel(run_job, jobs, a.workers if a.workers is not None else default_workers())
