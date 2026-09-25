@@ -58,6 +58,7 @@ datas = (
     + tree("morsedesk/app/icons", "morsedesk/app/icons")      # logo cửa sổ và thanh tác vụ
     + tree("morsedesk/app/docs", "morsedesk/app/docs")        # trang Giới thiệu, tài liệu kỹ thuật
     + tree("morsedesk/app/samples", "morsedesk/app/samples")  # "Xin chào" nạp sẵn theo ngôn ngữ
+    + tree("morsedesk/app/data", "morsedesk/app/data")        # bảng hiệu chuẩn độ tin cậy (tooltip)
     # Chỉ hai file này: glob `acoustic.*` còn bắt cả `acoustic.golden.npz` (2,6 MB fixture so
     # sánh bit-exact của bộ kiểm thử), thứ người dùng cuối không bao giờ đọc tới.
     + [(str(ROOT / "models" / n), "models") for n in ("acoustic.onnx", "acoustic.json")

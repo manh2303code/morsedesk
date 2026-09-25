@@ -590,6 +590,10 @@ class DecodePage(QWidget):
             WarningCode.LOW_CONFIDENCE_WITH_DSP.value: self.tr(
                 "Low confidence; the DSP decoder result is shown too."
             ),
+            WarningCode.KEY_CLICKS.value: self.tr(
+                "Only clicks were heard, no Morse tone. If this is a telegraph key or sounder: "
+                "MorseDesk decodes Morse sent as a tone (radio CW); key clicks cannot be decoded yet."
+            ),
         }
 
     def _warning_text(self, w: DecodeWarning) -> str:

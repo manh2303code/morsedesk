@@ -9,7 +9,7 @@ from __future__ import annotations
 from PySide6.QtCore import QObject, Signal
 
 from morsedesk.app import live_page as live_page_mod
-from morsedesk.app.live_page import TENTATIVE_COLOR, LivePage
+from morsedesk.app.live_page import LivePage
 
 
 class FakeLiveWorker(QObject):
@@ -58,28 +58,53 @@ def test_stop_asks_worker_to_stop(qtbot, monkeypatch):
     assert worker.stopped == 1
 
 
-def test_two_tier_text_marks_tentative_grey(qtbot, monkeypatch):
-    """Chữ đã chốt in thường, chữ tạm in xám — đây là điểm cốt lõi của trang."""
+def _update(committed_words, tentative_words, warnings=(), language="en"):
+    from morsedesk.model.stream import StreamUpdate
+
+    committed = " ".join(w.text for w in committed_words)
+    tentative = " ".join(w.text for w in tentative_words)
+    return StreamUpdate(committed=committed, tentative=(" " + tentative) if tentative and committed else tentative,
+                        decoded=True, audio_s=12.0, words=list(tentative_words), wpm=20.0, tone_hz=700.0,
+                        snr_db=10.0, language=language, committed_words=list(committed_words),
+                        warnings=list(warnings))
+
+
+def test_two_tier_words_show_tentative_grey_with_confidence(qtbot, monkeypatch):
+    """Chữ đã chốt và chữ tạm cùng nằm trong MỘT khung WordView (như trang Giải mã): gạch chân theo
+    độ tin cậy, chữ tạm vẽ xám và tooltip nói rõ là chưa chốt."""
+    from morsedesk.api import Word
+
     page, worker = _page(qtbot, monkeypatch)
-    worker.text_ready.emit("CQ CQ DE", " R1AB")
-    html = page.view.toHtml()
-    assert "CQ CQ DE" in page.view.toPlainText()
-    assert "R1AB" in page.view.toPlainText()
-    assert TENTATIVE_COLOR.lstrip("#").lower() in html.lower()   # phần tạm có màu riêng
+    committed = [Word("CQ", 0.0, 0.5, 0.99), Word("DE", 0.6, 1.0, 0.85)]
+    tentative = [Word("R1AB", 1.2, 2.0, 0.3)]
+    worker.text_ready.emit("CQ DE", " R1AB")
+    worker.stats_ready.emit(_update(committed, tentative))
+    v = page.word_view
+    assert v.texts() == ["CQ", "DE", "R1AB"]
+    assert [v.is_tentative(i) for i in range(3)] == [False, False, True]
+    assert "Grey" in v.tooltip_for(2) and "Grey" not in v.tooltip_for(0)
+    assert "Yellow" in v.tooltip_for(1) and "Red" in v.tooltip_for(2)
 
 
-def test_committed_text_has_no_colour_when_nothing_tentative(qtbot, monkeypatch):
+def test_copy_takes_committed_and_tentative_text(qtbot, monkeypatch):
+    from PySide6.QtGui import QGuiApplication
+
     page, worker = _page(qtbot, monkeypatch)
-    worker.text_ready.emit("CQ DE K", "")
-    assert page.view.toPlainText().strip() == "CQ DE K"
-    assert TENTATIVE_COLOR.lstrip("#").lower() not in page.view.toHtml().lower()
+    worker.text_ready.emit("<AR> & <SK>", " CQ")
+    page._copy()
+    assert QGuiApplication.clipboard().text() == "<AR> & <SK> CQ"     # nguyên văn, kể cả < > &
 
 
-def test_html_special_characters_are_escaped(qtbot, monkeypatch):
-    """Bản tin Morse có `<` `>` (prosign viết dạng <AR>): không được để nó thành thẻ HTML."""
+def test_key_clicks_warning_shows_and_clears(qtbot, monkeypatch):
+    """Tiếng click của phím (bản ghi 1930 của người dùng): nói thật trên banner, không để khung trống
+    mà không lời giải thích; tín hiệu tone trở lại thì banner tắt."""
+    from morsedesk.warnings import WarningCode
+
     page, worker = _page(qtbot, monkeypatch)
-    worker.text_ready.emit("<AR> & <SK>", "")
-    assert page.view.toPlainText().strip() == "<AR> & <SK>"
+    worker.stats_ready.emit(_update([], [], warnings=[WarningCode.KEY_CLICKS.value]))
+    assert "telegraph key" in page.banner.text()
+    worker.stats_ready.emit(_update([], []))
+    assert not page.banner.isVisible() or "telegraph key" not in page.banner.text()
 
 
 def test_level_bar_follows_rms(qtbot, monkeypatch):
@@ -115,10 +140,13 @@ def test_failure_message_reaches_banner(qtbot, monkeypatch):
 
 
 def test_clear_empties_both_tiers(qtbot, monkeypatch):
+    from morsedesk.api import Word
+
     page, worker = _page(qtbot, monkeypatch)
     worker.text_ready.emit("CQ", " DE")
+    worker.stats_ready.emit(_update([Word("CQ", 0.0, 0.5, 0.9)], [Word("DE", 0.6, 1.0, 0.9)]))
     page.clear()
-    assert page.view.toPlainText().strip() == ""
+    assert page.word_view.texts() == [] and page._committed == page._tentative == ""
 
 
 def test_alphabet_defaults_to_auto_and_is_passed_through(qtbot, monkeypatch):
@@ -139,7 +167,7 @@ def test_stats_populate_words_tone_and_labels(qtbot, monkeypatch):
     up = StreamUpdate("CQ DE", " R1A", True, 12.0,
                       [Word("R1A", 3.0, 3.8, 0.55)], 21.5, 712.0, 9.5, "ru")
     worker.stats_ready.emit(up)
-    assert page.word_view.texts() == ["R1A"]
+    assert page.word_view.texts() == ["R1A"]            # update cũ không có committed_words
     assert page.waterfall._tone_hz == 712.0
     txt = page.stats_label.text()
     assert "21.5" in txt and "712" in txt and "9.5" in txt and "ru" in txt

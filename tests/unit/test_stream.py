@@ -147,6 +147,8 @@ class _LangDecoder:
     """Bộ giải mã giả: mỗi lần trả một từ mới (thời gian tăng dần) với ngôn ngữ và điểm LM theo kịch
     bản (`scores`: pid -> nat/chữ, cao hơn là giống hơn)."""
 
+    auto = True                         # như Decoder("auto") chưa khóa
+
     def __init__(self, languages, scores=None):
         self.languages = list(languages)
         self.scores = list(scores or [{lang: -1.0, "zz": -2.0} for lang in languages])
@@ -205,12 +207,66 @@ def test_live_session_does_not_pin_on_a_short_run_that_contradicts_the_whole_ses
     assert sd.pinned_language == "ru" and dec.pinned == ["ru"]
 
 
-def test_live_session_waits_when_the_evidence_is_too_close():
-    from morsedesk.model.stream import StreamDecoder
+def test_live_session_waits_when_the_evidence_is_too_close_then_takes_the_leader():
+    """Bằng chứng quá sát (nhóm mã, tiếng Nga với Kazakh): chờ — chữ vẫn ở dạng tạm, KHÔNG chốt; quá
+    PIN_FORCE_LETTERS thì khóa theo ngôn ngữ dẫn đầu để phiên không treo ở dạng tạm mãi."""
+    from morsedesk.model.stream import PIN_FORCE_LETTERS, StreamDecoder
 
-    dec = _LangDecoder(["ru"] * 40, [{"ru": -1.0, "kk-cyrl-ru": -1.05}] * 40)
+    dec = _LangDecoder(["ru"] * 60, [{"ru": -1.0, "kk-cyrl-ru": -1.05}] * 60)
     sd = StreamDecoder(dec, sample_rate=1000, chunk_s=0.5)
     block = np.zeros(500, dtype=np.float32)
-    for _ in range(40):
+    letters = 0
+    while letters + 10 < PIN_FORCE_LETTERS:
+        up = sd.push(block)
+        letters = sum(1 for w in up.words for c in w.text if not c.isspace())
+    assert sd.pinned_language is None and dec.pinned == [] and sd.committed == ""
+    for _ in range(6):
         sd.push(block)
-    assert sd.pinned_language is None and dec.pinned == []
+    assert sd.pinned_language == "ru" and dec.pinned == ["ru"] and sd.committed
+
+
+def test_live_session_never_mixes_alphabets_while_choosing():
+    """Trước khi khóa, mỗi lần giải bộ đệm ngắn có thể ra ngôn ngữ khác — nhưng dòng chữ hiện ra
+    (tạm) và phần chốt sau đó đều chỉ dùng MỘT bảng chữ (bản ghi phím 1930 của người dùng, 25/09)."""
+    from types import SimpleNamespace
+
+    from morsedesk.model.stream import StreamDecoder
+
+    class Flipping(_LangDecoder):
+        """Lần chẵn giải ra chữ Latin (en), lần lẻ ra chữ Kirin (ru) — cùng một mẫu Morse."""
+
+        def decode_array(self, x, sr):
+            lang = "en" if self.calls % 2 == 0 else "ru"
+            self.calls += 1
+            dur = len(x) / sr
+            text = "CQ" if lang == "en" else "ЦЩ"
+            word = SimpleNamespace(text=text, start_s=max(0.0, dur - 2.2), end_s=dur - 1.6, confidence=0.9)
+            return SimpleNamespace(words=[word], wpm=20.0, tone_hz=700.0, snr_db=10.0, language=lang,
+                                   language_scores={"ru": -1.0, "en": -1.6})
+
+    dec = Flipping([])
+    sd = StreamDecoder(dec, sample_rate=1000, chunk_s=0.5)
+    block = np.zeros(500, dtype=np.float32)
+    for _ in range(10):
+        up = sd.push(block)
+        shown = (up.committed + " " + up.tentative).replace(" ", "")
+        assert not (any("A" <= c <= "Z" for c in shown) and any("А" <= c <= "Я" for c in shown)), shown
+    final = sd.flush()
+    assert final.text.replace(" ", "") and set(final.text.replace(" ", "")) <= set("ЦЩ")
+
+
+def test_update_carries_words_with_confidence_and_the_shown_language():
+    """Trang Nghe gạch chân từng từ theo độ tin cậy: cả phần chốt lẫn phần tạm phải là Word (mốc
+    tuyệt đối), và `language` là chuỗi tên ngôn ngữ (từng bị lệch trường thành danh sách từ)."""
+    from morsedesk.model.stream import StreamDecoder
+
+    dec = _LangDecoder(["en"] * 40, [{"en": -1.0, "ru": -2.0}] * 40)
+    sd = StreamDecoder(dec, sample_rate=1000, chunk_s=0.5)
+    block = np.zeros(500, dtype=np.float32)
+    for _ in range(12):
+        up = sd.push(block)
+    assert up.language == "en" and isinstance(up.wpm, float)
+    assert up.committed_words and all(hasattr(w, "confidence") for w in up.committed_words)
+    assert " ".join(w.text for w in up.committed_words) == up.committed
+    starts = [w.start_s for w in up.committed_words]
+    assert starts == sorted(starts) and starts[-1] > 2.0            # thời gian TUYỆT ĐỐI của phiên

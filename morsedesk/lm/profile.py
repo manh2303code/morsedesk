@@ -57,6 +57,18 @@ class Profile:
             return [self.prosigns[pattern]]
         return [UNK]
 
+    def retarget(self, text: str, dst: Profile) -> str:
+        """Viết lại `text` (chữ của bảng này) bằng bảng `dst`, qua đúng mẫu Morse đã nghe: CQ -> ЦЩ.
+        Chữ không có trong bảng (`#`, khoảng trắng) giữ nguyên. Cùng bảng thì trả nguyên văn — giữ
+        lựa chọn của LM giữa các chữ dùng chung mẫu (Қ/К)."""
+        if dst.id == self.id:
+            return text
+        out = []
+        for ch in text:
+            pattern = self.letter_to_pattern.get(ch)
+            out.append(dst.render([pattern]) if pattern is not None else ch)
+        return "".join(out)
+
     def render(self, tokens: list[str]) -> str:
         """Chuỗi token (mẫu hoặc SPACE) -> văn bản, chọn chữ đầu tiên của mỗi mẫu."""
         out: list[str] = []

@@ -18,6 +18,24 @@ def grab(widget, name: str) -> None:
     print(f"  {name}.png", flush=True)
 
 
+def grab_tooltip(view, index: int, name: str) -> None:
+    """Hiện tooltip của từ thứ `index` trong một WordView rồi chụp chính cửa sổ tooltip (Qt vẽ nó
+    thành cửa sổ riêng, grab() của trang không thấy)."""
+    from PySide6.QtCore import QEventLoop, QTimer
+    from PySide6.QtWidgets import QApplication, QToolTip
+
+    canvas = view.canvas()
+    r = view.word_rect(index)
+    QToolTip.showText(canvas.mapToGlobal(r.center()), view.tooltip_for(index), canvas)
+    loop = QEventLoop()
+    QTimer.singleShot(400, loop.quit)
+    loop.exec()
+    tips = [w for w in QApplication.topLevelWidgets() if w.inherits("QTipLabel") and w.isVisible()]
+    if tips:
+        grab(tips[0], name)
+    QToolTip.hideText()
+
+
 def main() -> int:
     from PySide6.QtCore import QCoreApplication, QEventLoop, QTimer
     from PySide6.QtWidgets import QApplication
@@ -87,6 +105,7 @@ def main() -> int:
                 break
         pump(600)
         grab(win, "05-decode-ketqua")
+        grab_tooltip(win.decode_page.word_view, 0, "05b-giaima-tooltip")
 
     # Nghe trực tiếp: chụp cả trạng thái rỗng và trạng thái có chữ hai tầng
     if win.live_page is not None:
@@ -102,13 +121,18 @@ def main() -> int:
         audio = Encoder("en").to_audio("CQ CQ DE R1ABC R1A", wpm=20, snr_db=12, seed=5)
         for i in range(0, len(audio), 1600):
             win.live_page.waterfall.push(audio[i:i + 1600])
-        win.live_page.on_text("CQ CQ DE R1ABC", " R1A")
+        win.live_page.on_text("CQ CQ DE R1ABC QTH MOSCOW", " R1A")
+        committed = [Word("CQ", 1.0, 1.9, 0.97), Word("CQ", 2.4, 3.3, 0.95), Word("DE", 3.8, 4.5, 0.93),
+                     Word("R1ABC", 5.0, 7.6, 0.71), Word("QTH", 8.1, 9.3, 0.9), Word("MOSCOW", 9.8, 11.7, 0.42)]
         win.live_page.on_stats(StreamUpdate(
-            "CQ CQ DE R1ABC", " R1A", True, 14.0,
-            [Word("R1A", 12.1, 12.9, 0.52)], 20.3, 700.0, 12.4, "en"))
+            committed="CQ CQ DE R1ABC QTH MOSCOW", tentative=" R1A", decoded=True, audio_s=14.0,
+            words=[Word("R1A", 12.1, 12.9, 0.52)], wpm=20.3, tone_hz=700.0, snr_db=12.4, language="en",
+            committed_words=committed))
         win.live_page.on_level(0.02)
         pump(300)
         grab(win, "07-nghe-haitang")
+        grab_tooltip(win.live_page.word_view, 3, "07b-nghe-tooltip-vang")
+        grab_tooltip(win.live_page.word_view, 6, "07c-nghe-tooltip-tam")
 
     # Cài đặt
     show(win.settings_page)

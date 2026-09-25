@@ -35,6 +35,7 @@ audio rồi đẩy vào `push()`.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from dataclasses import replace as _replace
 
 import numpy as np
 
@@ -48,6 +49,7 @@ CHUNK_S = 0.5               # mỗi lần giải mã lại tiến thêm chừng 
 _TIME_EPS = 0.05        # 50 ms: hai lần giải mã không bao giờ đặt mốc trùng nhau đến từng mẫu
 PIN_MIN_LETTERS = 50    # khóa ngôn ngữ phiên nghe khi đã chốt ngần này chữ (CP-03: 100 % từ 50)
 PIN_MARGIN = 0.15       # ... và ngôn ngữ dẫn đầu hơn ngôn ngữ thứ hai ngần này nat/chữ (= langid.MIN_MARGIN)
+PIN_FORCE_LETTERS = 150  # quá ngần này chữ mà vẫn chưa đủ chắc (nhóm mã): khóa theo ngôn ngữ dẫn đầu
 
 
 def _agreeing_prefix(prev: list, cur: list) -> list:
@@ -62,6 +64,20 @@ def _agreeing_prefix(prev: list, cur: list) -> list:
             break
         out.append(b)
     return out
+
+
+def _with(word, **changes):
+    """Bản sao của Word với vài trường đổi (không sửa kết quả của Decoder)."""
+    try:
+        return _replace(word, **changes)
+    except TypeError:                   # bộ giải mã giả trong test trả SimpleNamespace
+        from types import SimpleNamespace
+        return SimpleNamespace(**{**vars(word), **changes})
+
+
+def _shift(word, offset: float):
+    """Word với mốc thời gian dời thêm `offset` giây."""
+    return _with(word, start_s=word.start_s + offset, end_s=word.end_s + offset)
 
 
 def longest_common_prefix(a: str, b: str) -> str:
@@ -80,6 +96,8 @@ class StreamUpdate:
     `committed` là phần đã chốt và sẽ KHÔNG bao giờ đổi nữa — giao diện in nó bằng màu thường.
     `tentative` là phần còn có thể bị viết lại — in xám. Người vận hành chép tay theo chữ thường
     thì không bao giờ phải tẩy, đó là lý do hai tầng này tồn tại chứ không phải để cho đẹp.
+    `committed_words` / `tentative_words`: cùng nội dung dưới dạng Word (mốc thời gian TUYỆT ĐỐI
+    của phiên, độ tin cậy) để giao diện gạch chân từng từ như trang Giải mã.
     """
 
     committed: str = ""
@@ -89,15 +107,21 @@ class StreamUpdate:
     # Thông số của lần giải mã gần nhất, để trang Nghe hiện đúng những gì trang Giải mã hiện.
     # Không có chúng thì chế độ nghe chỉ là một ô chữ trần, người vận hành không biết máy đang
     # bắt được tone nào, tốc độ bao nhiêu, và có nên tin con chữ trước mắt hay không.
-    words: list = field(default_factory=list)   # Word của phần TẠM, kèm độ tin cậy
+    words: list = field(default_factory=list)   # Word của phần TẠM, kèm độ tin cậy (= tentative_words)
     wpm: float | None = None
     tone_hz: float | None = None
     snr_db: float | None = None
     language: str = ""
+    committed_words: list = field(default_factory=list)   # Word của phần ĐÃ CHỐT
+    warnings: list = field(default_factory=list)          # mã cảnh báo của lần giải gần nhất (vd key_clicks)
 
     @property
     def text(self) -> str:
         return self.committed + self.tentative
+
+    @property
+    def tentative_words(self) -> list:
+        return self.words
 
 
 @dataclass
@@ -122,20 +146,33 @@ class StreamDecoder:
     _total_frames: int = field(default=0, init=False)       # tổng mẫu đã nhận, kể cả đã bỏ
     _dropped_frames: int = field(default=0, init=False)      # số mẫu đã cắt khỏi đầu buffer
     _since_decode: int = field(default=0, init=False)
-    _committed: str = field(default="", init=False)
+    _committed_words: list = field(default_factory=list, init=False)
     _committed_until: float = field(default=0.0, init=False)  # giây tuyệt đối đã chốt tới
     _prev_fresh: list = field(default_factory=list, init=False)   # phần chưa chốt của lần trước
-    _tentative: str = field(default="", init=False)
+    # Tự nhận ngôn ngữ, CHƯA khóa: từ đủ "chín" để chốt nhưng còn chờ biết bảng chữ — (Word, ngôn ngữ
+    # của lần giải ra nó). Hiện ở dạng tạm, quy về MỘT bảng chữ; khóa xong mới chốt tất cả.
+    _pending: list = field(default_factory=list, init=False)
+    _tentative_words: list = field(default_factory=list, init=False)
     _wpm: float | None = field(default=None, init=False)
     _tone_hz: float | None = field(default=None, init=False)
     _snr_db: float | None = field(default=None, init=False)
     _language: str = field(default="", init=False)
     _evidence: dict = field(default_factory=dict, init=False)    # pid -> (tổng điểm x chữ, tổng chữ)
     _pinned: str | None = field(default=None, init=False)
+    _warnings: list = field(default_factory=list, init=False)
 
     @property
     def committed(self) -> str:
-        return self._committed
+        return " ".join(w.text for w in self._committed_words)
+
+    @property
+    def _committed(self) -> str:
+        return self.committed
+
+    @property
+    def _tentative(self) -> str:
+        text = " ".join(w.text for w in self._tentative_words)
+        return (" " + text) if (text and self._committed_words) else text
 
     @property
     def pinned_language(self) -> str | None:
@@ -155,10 +192,11 @@ class StreamDecoder:
         self._total_frames = 0
         self._dropped_frames = 0
         self._since_decode = 0
-        self._committed = ""
+        self._committed_words = []
         self._committed_until = 0.0
         self._prev_fresh = []
-        self._tentative = ""
+        self._pending = []
+        self._tentative_words = []
         self._reset_stats()
         self._evidence = {}
         if self._pinned is not None and hasattr(self.decoder, "pin_language"):
@@ -188,8 +226,7 @@ class StreamDecoder:
         Lúc này không còn tương lai để chờ nên `lookahead` hết ý nghĩa — cái gì đọc được thì chốt.
         """
         self._since_decode = 0
-        up = self._decode(final=True)
-        self._committed, self._tentative = up.text.strip(), ""
+        self._decode(final=True)
         return self._snapshot(True)
 
     # ---- nội bộ ----
@@ -206,6 +243,38 @@ class StreamDecoder:
             self._buf = self._buf[cut:]
             self._dropped_frames += cut
 
+    def _choosing(self) -> bool:
+        """Đang tự nhận ngôn ngữ và CHƯA khóa: chữ chưa được chốt (xem `_pending`)."""
+        return (self._pinned is None and hasattr(self.decoder, "pin_language")
+                and bool(getattr(self.decoder, "auto", True)))
+
+    def _leader(self) -> str | None:
+        ranked = sorted(((tot / n, pid) for pid, (tot, n) in self._evidence.items() if n > 0), reverse=True)
+        return ranked[0][1] if ranked else None
+
+    def _profile(self, pid: str):
+        profiles = getattr(self.decoder, "_profiles", None) or {}
+        if pid in profiles:
+            return profiles[pid]
+        from morsedesk.lm.profile import load_profile
+        try:
+            return load_profile(pid)
+        except Exception:
+            return None
+
+    def _in_alphabet(self, word, src: str, dst: str | None):
+        """Word viết lại bằng bảng `dst` (không đổi nếu thiếu thông tin hoặc cùng bảng)."""
+        if not dst or not src or src == dst:
+            return word
+        a, b = self._profile(src), self._profile(dst)
+        if a is None or b is None:
+            return word
+        return _with(word, text=a.retarget(word.text, b))
+
+    def _commit_pending(self, language: str) -> None:
+        self._committed_words += [self._in_alphabet(w, src, language) for w, src in self._pending]
+        self._pending = []
+
     def _maybe_pin_language(self, scores: dict, new_letters: int) -> None:
         """Khóa ngôn ngữ khi CẢ PHIÊN đã đủ chắc: đủ `PIN_MIN_LETTERS` chữ đã chốt và ngôn ngữ dẫn
         đầu hơn ngôn ngữ thứ hai `PIN_MARGIN` nat/chữ. Một bản tin thật không đổi ngôn ngữ giữa chừng,
@@ -221,20 +290,29 @@ class StreamDecoder:
         for pid, sc in scores.items():
             tot, n = self._evidence.get(pid, (0.0, 0))
             self._evidence[pid] = (tot + float(sc) * new_letters, n + new_letters)
-        letters = sum(1 for c in self._committed if not c.isspace())
+        letters = sum(1 for c in self.committed if not c.isspace()) + \
+            sum(1 for w, _ in self._pending for c in w.text if not c.isspace())
         if letters < PIN_MIN_LETTERS or len(self._evidence) < 2:
             return
         ranked = sorted(((tot / n, pid) for pid, (tot, n) in self._evidence.items() if n > 0), reverse=True)
-        if len(ranked) < 2 or ranked[0][0] - ranked[1][0] < PIN_MARGIN:
+        sure = len(ranked) >= 2 and ranked[0][0] - ranked[1][0] >= PIN_MARGIN
+        if not sure and letters < PIN_FORCE_LETTERS:
             return
-        pin = getattr(self.decoder, "pin_language", None)
-        if pin is not None and pin(ranked[0][1]):
-            self._pinned = ranked[0][1]
+        self._pin(ranked[0][1])
 
-    def _snapshot(self, decoded: bool, words=None) -> StreamUpdate:
-        return StreamUpdate(self._committed, self._tentative, decoded, self.audio_s,
-                            list(words or []), self._wpm, self._tone_hz, self._snr_db,
-                            self._language)
+    def _pin(self, language: str) -> None:
+        pin = getattr(self.decoder, "pin_language", None)
+        if pin is not None and pin(language):
+            self._pinned = language
+        # Chốt mọi chữ đã chờ, viết bằng đúng bảng chữ vừa khóa — kể cả khi bộ giải mã không nhận
+        # khóa (bộ giả trong test): chữ đã chín thì không giữ mãi ở dạng tạm.
+        self._commit_pending(language)
+
+    def _snapshot(self, decoded: bool) -> StreamUpdate:
+        return StreamUpdate(committed=self.committed, tentative=self._tentative, decoded=decoded,
+                            audio_s=self.audio_s, words=list(self._tentative_words), wpm=self._wpm,
+                            tone_hz=self._tone_hz, snr_db=self._snr_db, language=self._language,
+                            committed_words=list(self._committed_words), warnings=list(self._warnings))
 
     def _decode(self, final: bool = False) -> StreamUpdate:
         if len(self._buf) == 0:
@@ -243,12 +321,18 @@ class StreamDecoder:
         self._wpm = getattr(res, "wpm", None)
         self._tone_hz = getattr(res, "tone_hz", None)
         self._snr_db = getattr(res, "snr_db", None)
-        self._language = getattr(res, "language", "") or self._language
+        decoded_in = getattr(res, "language", "") or self._language
+        self._language = decoded_in
+        self._warnings = [getattr(w, "code", str(w)) for w in (getattr(res, "warning_codes", None) or [])]
 
         # Quy về thời gian TUYỆT ĐỐI của phiên. Buffer chỉ giữ phần đuôi, nên mốc thời gian trong
         # kết quả là tương đối với đầu buffer; cộng số giây đã cắt bỏ mới so được giữa hai lần.
         offset = self._dropped_frames / self.sample_rate
-        words = [(w.start_s + offset, w.end_s + offset, w.text) for w in res.words if w.text]
+        shifted = {}
+        for w in res.words:
+            if w.text:
+                shifted[round(w.start_s + offset, 3)] = _shift(w, offset)
+        words = [(w.start_s, w.end_s, w.text) for w in shifted.values()]
 
         # Chỉ xét phần CHƯA chốt. So khớp theo chuỗi ký tự thì hỏng ngay khi bản tin có từ lặp
         # ("CQ CQ DE"): mối nối tìm nhầm chỗ và chữ bị nhân đôi. Mốc thời gian không có vấn đề đó.
@@ -271,14 +355,25 @@ class StreamDecoder:
             stable = [w for w in fresh if w[1] <= edge]
             rest = fresh[len(stable):]
 
-        if stable:
-            self._committed = (self._committed + " " if self._committed else "") + \
-                " ".join(w[2] for w in stable)
-            self._committed_until = stable[-1][1]
-            self._maybe_pin_language(getattr(res, "language_scores", None) or {},
-                                     sum(1 for w in stable for c in w[2] if not c.isspace()))
-        self._tentative = (" " if self._committed and rest else "") + " ".join(w[2] for w in rest)
-        # Ghép lại Word cho phần tạm: giao diện cần `confidence` để tô chip theo độ tin cậy.
-        by_start = {round(w.start_s + offset, 3): w for w in res.words}
-        rest_words = [by_start[k] for k in (round(r[0], 3) for r in rest) if k in by_start]
-        return self._snapshot(True, rest_words)
+        stable_words = [shifted[round(w[0], 3)] for w in stable]
+        rest_words = [shifted[round(w[0], 3)] for w in rest]
+        if stable_words:
+            self._committed_until = stable_words[-1].end_s
+            if self._choosing():
+                # Chưa biết chắc bảng chữ: CHƯA chốt. Mỗi lần giải bộ đệm ngắn tự chọn ngôn ngữ riêng,
+                # chốt ngay thì dòng chữ lẫn Latin với Kirin (bản ghi phím 1930 của người dùng, 25/09:
+                # "TENE УО ТЕКЕТАРТТА … MORE EEL TO ЕЕ НЕ SERAI НА НЕ").
+                self._pending += [(w, decoded_in) for w in stable_words]
+                self._maybe_pin_language(getattr(res, "language_scores", None) or {},
+                                         sum(1 for w in stable_words for c in w.text if not c.isspace()))
+            else:
+                self._committed_words += [self._in_alphabet(w, decoded_in, self._pinned) for w in stable_words]
+        if final and self._pending:
+            # Hết phiên: khóa theo ngôn ngữ dẫn đầu (hoặc ngôn ngữ vừa giải) rồi chốt tất cả.
+            self._pin(self._leader() or decoded_in)
+        shown = self._pinned or self._leader() or decoded_in
+        if shown:
+            self._language = shown
+        self._tentative_words = ([self._in_alphabet(w, src, shown) for w, src in self._pending]
+                                 + [self._in_alphabet(w, decoded_in, shown) for w in rest_words])
+        return self._snapshot(True)

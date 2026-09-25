@@ -4,12 +4,16 @@ Hai tầng hiển thị, và đây là điểm quan trọng nhất của trang n
 **đã chốt** in màu thường và sẽ không bao giờ đổi nữa; chữ **tạm** in xám và có thể bị viết lại
 khi nghe thêm. Người vận hành chép tay theo phần màu thường thì không bao giờ phải tẩy — rủi ro
 thật của một máy thu tự sửa chữ là người ta đã chép xuống giấy rồi mới thấy nó đổi.
+
+Từ 25/09 bản chép dùng CHÍNH widget của trang Giải mã (WordView): từ đáng ngờ gạch chân vàng/đỏ,
+rê chuột hiện độ tin cậy, vì sao có màu đó và tỉ lệ đúng đo được ở mức ấy (người dùng yêu cầu hai
+trang đọc giống nhau). Chưa khóa được ngôn ngữ thì mọi chữ còn ở dạng tạm (model/stream.py).
 """
 
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QGuiApplication, QTextCursor
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
@@ -18,7 +22,6 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QSplitter,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -30,14 +33,15 @@ from morsedesk.app.widgets.icons import icon_button
 from morsedesk.app.widgets.ridge3d import Ridge3DView
 from morsedesk.app.widgets.stats_bar import Readout
 from morsedesk.app.widgets.waterfall import MAX_HZ, WaterfallView
-from morsedesk.app.widgets.word_view import WordView
+from morsedesk.app.widgets.word_view import TENTATIVE_TEXT, WordView
+from morsedesk.warnings import WarningCode
 
 # Cùng danh sách với trang Giải mã. `auto` đứng đầu và là mặc định: bắt người dùng chọn bảng mã
 # trước khi nghe là bắt họ đoán thứ mà chính bản tin sẽ nói ra.
 PROFILE_CHOICES = ("auto", "en", "ru", "kk-cyrl-ru")
 
 # Xám đủ nhạt để thấy ngay là "chưa chắc", vẫn đủ đậm để đọc trên nền đêm (5,1:1).
-TENTATIVE_COLOR = "#7F8BA6"
+TENTATIVE_COLOR = TENTATIVE_TEXT
 RIDGE_EVERY = 2         # cột thác nước / hàng cảnh 3D: ~7,8 hàng/s, 48 hàng = ~6 s lịch sử
 LEVEL_SCALE = 3000      # RMS 0..~0,33 trải hết vạch: tín hiệu Morse điển hình rất nhỏ
 
@@ -50,6 +54,7 @@ class LivePage(QWidget):
         self.worker = worker
         self._committed = ""
         self._tentative = ""
+        self._clicks_warned = False     # banner "tiếng click phím" đang hiện
 
         self.device_label = QLabel(self)
         self.device_combo = QComboBox(self)
@@ -107,14 +112,11 @@ class LivePage(QWidget):
         self.ridge = Ridge3DView(rows=48, cols=160, parent=self)
         self.ridge.front_ticks = [(hz / MAX_HZ, f"{hz}") for hz in (0, 500, 1000, 1500, 2000)]
         self.waterfall = WaterfallView(parent=self)
-        # Chip từng từ, nền theo độ tin cậy — đúng widget trang Giải mã dùng, nên hai trang đọc
-        # giống nhau và người dùng không phải học hai cách nhìn.
+        # Bản chép: đúng widget trang Giải mã dùng (gạch chân theo độ tin cậy, tooltip), nên hai
+        # trang đọc giống nhau và người dùng không phải học hai cách nhìn. Chữ tạm vẽ màu xám.
         self.word_view = WordView(self, live=True)
-        self.word_view.set_background(NIGHT)            # dải chữ tạm nằm thẳng trên nền trang
-        self.word_view.setMinimumHeight(self.word_view.line_height() + 2)   # một dòng trọn, không cuộn
-        self.view = QTextEdit(self)
-        self.view.setReadOnly(True)
-        self.view.setStyleSheet("QTextEdit { font-size: 17pt; }")
+        self.word_view.set_background(NIGHT)
+        self.word_view.setMinimumHeight(2 * self.word_view.line_height())
         # Chuỗi số đo một dòng: giữ cho sao chép/nhật ký, không hiện (dải ô ở trên thay nó).
         self.stats_label = QLabel(self)
         self.stats_label.hide()
@@ -135,8 +137,7 @@ class LivePage(QWidget):
         self.split = QSplitter(Qt.Orientation.Vertical, self)
         self.split.addWidget(self.signal)
         self.split.addWidget(self.word_view)
-        self.split.addWidget(self.view)
-        self.split.setSizes([380, 80, 160])
+        self.split.setSizes([380, 240])
         self.split.setChildrenCollapsible(False)
 
         lay = QVBoxLayout(self)
@@ -184,8 +185,8 @@ class LivePage(QWidget):
 
     # ---- slot của worker ----
     def on_text(self, committed: str, tentative: str) -> None:
+        """Chuỗi cho nút sao chép; bản chép tự vẽ từ `on_stats` (có độ tin cậy từng từ)."""
         self._committed, self._tentative = committed, tentative
-        self._render()
 
     def live_cells(self) -> list[Readout]:
         return [self.alphabet_cell, self.tone_cell, self.speed_cell, self.snr_cell, self.heard_cell]
@@ -197,8 +198,11 @@ class LivePage(QWidget):
             self.ridge.push_row(cols[:, i])
 
     def on_stats(self, update) -> None:
-        """Thông số của lần giải mã gần nhất: chip từ, WPM, tone, SNR, ngôn ngữ nhận ra."""
-        self.word_view.set_words(list(getattr(update, "words", []) or []))
+        """Thông số của lần giải mã gần nhất: từ (đã chốt + tạm), WPM, tone, SNR, ngôn ngữ."""
+        committed = list(getattr(update, "committed_words", []) or [])
+        tentative = list(getattr(update, "words", []) or [])
+        self.word_view.set_words(committed + tentative, tentative_from=len(committed))
+        self._show_clicks_warning(WarningCode.KEY_CLICKS.value in (getattr(update, "warnings", []) or []))
         self.waterfall.set_tone(getattr(update, "tone_hz", None))
         self.stats_label.setText(self._stats_text(update))
         wpm = getattr(update, "wpm", None)
@@ -256,39 +260,34 @@ class LivePage(QWidget):
         else:
             self.worker.stop_listening()
 
+    def _show_clicks_warning(self, on: bool) -> None:
+        """Tiếng click của phím (không có tone): nói thật thay vì để trống không lời giải thích."""
+        if on and not self._clicks_warned:
+            self.banner.show_warning(self._clicks_text())
+        elif not on and self._clicks_warned:
+            self.banner.hide()
+        self._clicks_warned = on
+
+    def _clicks_text(self) -> str:
+        return self.tr("Only clicks were heard, no Morse tone. If this is a telegraph key or sounder: "
+                       "MorseDesk decodes Morse sent as a tone (radio CW); key clicks cannot be decoded yet.")
+
     def clear(self) -> None:
         self._committed = self._tentative = ""
+        self._show_clicks_warning(False)
         self.word_view.clear()
         self.waterfall.clear()
         self.ridge.clear()
         self.stats_label.clear()
         for c in self.live_cells():
             c.value.setText("–")
-        self._render()
 
     def _copy(self) -> None:
         """Chép cả phần tạm: người vận hành cần nguyên văn những gì đang thấy."""
-        text = (self._committed + " " + self._tentative).strip()
+        text = " ".join(part.strip() for part in (self._committed, self._tentative) if part.strip())
         if text:
             QGuiApplication.clipboard().setText(text)
 
-    def _render(self) -> None:
-        import html
-
-        parts = []
-        if self._committed:
-            parts.append(html.escape(self._committed))
-        if self._tentative.strip():
-            parts.append(f'<span style="color:{TENTATIVE_COLOR}">'
-                         f"{html.escape(self._tentative.strip())}</span>")
-        self.view.setHtml(" ".join(parts))
-        # Luôn dán mắt vào cuối: chữ mới nằm ở đó, và phiên trực dài thì người dùng không muốn
-        # phải tự kéo thanh cuộn mỗi vài giây.
-        cur = self.view.textCursor()
-        cur.movePosition(QTextCursor.MoveOperation.End)
-        self.view.setTextCursor(cur)
-
-    # ---- i18n ----
     def retranslate(self) -> None:
         listening = self.listen_button.isChecked()
         self.device_label.setText(self.tr("Input:"))
@@ -311,8 +310,10 @@ class LivePage(QWidget):
         self.heard_cell.caption.setText(self.tr("Heard"))
         self.ridge.placeholder = self.tr("Press Listen to see the band live in 3D.")
         self.ridge.depth_label = self.tr("0–2000 Hz, newest in front")
-        self.view.setPlaceholderText(self.tr("Decoded text appears here as it is heard."))
-        self.legend.setText(self.tr("Grey text may still change; plain text is final."))
+        self.legend.setText(self.tr("Grey words may still change. Underlined words are uncertain; "
+                                    "point at any word for details."))
+        if self._clicks_warned:
+            self.banner.show_warning(self._clicks_text())
         self.copy_button.setToolTip(self.tr("Copy the decoded text"))
         self.copy_button.setAccessibleName(self.tr("Copy"))
         self.clear_button.setToolTip(self.tr("Clear the text and start over"))

@@ -8,7 +8,9 @@ và cắt ngang dòng thứ ba (ảnh chụp người dùng 24/09). Nay:
 - người dùng tự cuộn thì khung thôi bám theo vài giây rồi mới bám lại;
 - độ tin cậy chỉ đánh dấu ở từ ĐÁNG NGỜ (gạch chân vàng/đỏ); từ chắc chắn không mang dấu gì,
   nên bản tin dài đọc như văn bản thường và mắt chỉ dừng ở chỗ cần soi.
-Click một từ vẫn phát từ đúng chỗ đó; rê chuột lên từ hiện độ tin cậy và thời điểm.
+Click một từ vẫn phát từ đúng chỗ đó. Rê chuột lên từ: tooltip nói độ tin cậy, VÌ SAO có màu đó, và
+trên bộ đo từ ở mức ấy đúng khoảng bao nhiêu phần trăm (app/confidence.py — số đo, không đặt tay).
+Trang Nghe dùng cùng widget (`live=True`); từ CHƯA CHỐT vẽ màu xám và tooltip nói rõ điều đó.
 
 Vẽ bằng MỘT widget tự xếp chữ, không phải mỗi từ một QLabel: đo 24/09, 2 400 nhãn (bản tin
 60 phút ở 40 WPM) mất 7,5 giây chỉ để dựng, còn xếp chữ bằng QFontMetrics là vài mili giây.
@@ -20,6 +22,7 @@ import time
 from bisect import bisect_right
 
 from PySide6.QtCore import (
+    QCoreApplication,
     QEasingCurve,
     QEvent,
     QPropertyAnimation,
@@ -33,14 +36,20 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QLinearGradient, QPainter, QPen
 from PySide6.QtWidgets import QFrame, QScrollArea, QToolTip, QWidget
 
-from morsedesk.api import FALLBACK_CONFIDENCE, Word
+from morsedesk.api import Word
+from morsedesk.app.confidence import expected_accuracy
 
-WORD_GOOD = 0.8
+# Ngưỡng gạch chân theo SỐ ĐO (tools/calibrate_confidence.py, 25/09, ~8 000 từ, chế độ file): từ
+# >= 0,97 đúng 95 %; 0,90–0,97 đúng 84 %; 0,80–0,90 đúng 66 %; 0,65–0,80 đúng 57 %; < 0,65 đúng 17–38 %.
+# Ngưỡng cũ (không gạch từ 0,8) để trống cả những từ chỉ đúng hai phần ba.
+WORD_GOOD = 0.97
+WORD_FAIR = 0.8
 # Màu gạch chân theo độ tin cậy. Từ chắc chắn: không gạch.
 COLOR_GOOD, COLOR_MID, COLOR_LOW = "transparent", "#E0B341", "#F26B5B"
 # Ghim màu chữ thay vì lấy theo bảng màu hệ thống (bản đầu từng ra 1,25:1 trên ảnh chụp thật).
 TEXT_COLOR = "#E6ECF7"          # 12,9:1 trên nền khung
 UPCOMING_COLOR = "#95A3BF"      # phần chưa nghe tới khi đang phát: 6,4:1, vẫn đọc rõ
+TENTATIVE_TEXT = "#7F8BA6"      # từ chưa chốt ở trang Nghe (= live_page.TENTATIVE_COLOR, 5,1:1)
 PLACEHOLDER_COLOR = "#95A3BF"
 ACTIVE_BG = "#F5A524"           # từ đang phát: nền đèn tín hiệu
 ACTIVE_TEXT = "#1A1206"         # 9,6:1 trên ACTIVE_BG
@@ -56,11 +65,20 @@ FADE_PX = 26                    # mép trên/dưới mờ dần như màn hình 
 FADE_COLOR = "#141F35"          # = theme.PANEL, nền khung kết quả
 
 
+def fmt_number(value: float, decimals: int) -> str:
+    """Số theo ngôn ngữ giao diện: dấu phẩy thập phân cho tiếng Nga và Kazakh (0,72), dấu chấm cho
+    tiếng Anh. Ngôn ngữ lấy từ thuộc tính `ui_language` mà MainWindow đặt lên QApplication."""
+    app = QCoreApplication.instance()
+    lang = str(app.property("ui_language") or "en") if app is not None else "en"
+    text = f"{value:.{decimals}f}"
+    return text.replace(".", ",") if lang in ("ru", "kk") else text
+
+
 def confidence_color(c: float) -> str:
-    """Màu gạch chân theo ngưỡng tin cậy: không gạch (>=WORD_GOOD), vàng (>=FALLBACK_CONFIDENCE), đỏ."""
+    """Màu gạch chân theo ngưỡng tin cậy: không gạch (>= WORD_GOOD), vàng (>= WORD_FAIR), đỏ."""
     if c >= WORD_GOOD:
         return COLOR_GOOD
-    if c >= FALLBACK_CONFIDENCE:
+    if c >= WORD_FAIR:
         return COLOR_MID
     return COLOR_LOW
 
@@ -151,6 +169,8 @@ class _Canvas(QWidget):
                     p.setBrush(QColor(HOVER_BG))
                     p.drawRoundedRect(QRectF(r), 6, 6)
                 color = UPCOMING_COLOR if playing and i > active else TEXT_COLOR
+            if view.is_tentative(i) and i != active:
+                color = TENTATIVE_TEXT
             under = confidence_color(w.confidence)
             if under != COLOR_GOOD and i != active:
                 pen = QPen(QColor(under), 3)
@@ -231,6 +251,7 @@ class WordView(QScrollArea):
         super().__init__(parent)
         self._live = live
         self._words: list[Word] = []
+        self._tentative_from: int | None = None     # từ chỉ số này trở đi là chữ CHƯA CHỐT
         self._starts: list[float] = []
         self._active_index: int | None = None      # None = không phát; -1 = trước từ đầu tiên
         self._followed_y: int | None = None
@@ -280,11 +301,13 @@ class WordView(QScrollArea):
     def placeholder(self) -> str:
         return self._placeholder
 
-    def set_words(self, words: list[Word]) -> None:
-        """Thay toàn bộ danh sách từ hiển thị bằng `words`."""
+    def set_words(self, words: list[Word], tentative_from: int | None = None) -> None:
+        """Thay toàn bộ danh sách từ hiển thị bằng `words`; từ `tentative_from` trở đi là chữ tạm
+        (trang Nghe: có thể còn đổi khi nghe thêm)."""
         at_bottom = self._at_bottom()
         self._anim.stop()
         self._words = list(words)
+        self._tentative_from = tentative_from
         self._starts = [w.start_s for w in self._words]
         self._active_index = None
         self._followed_y = None
@@ -306,10 +329,41 @@ class WordView(QScrollArea):
     def texts(self) -> list[str]:
         return [w.text for w in self._words]
 
+    def is_tentative(self, i: int) -> bool:
+        return self._tentative_from is not None and i >= self._tentative_from
+
     def tooltip_for(self, i: int) -> str:
+        """Tooltip của một từ: độ tin cậy, vì sao có màu đó, từ ở mức ấy đúng khoảng bao nhiêu
+        phần trăm trên bộ đo (chế độ nghe và chế độ file có bảng riêng), và mốc thời gian."""
+        import html
+
         w = self._words[i]
-        return self.tr("confidence {conf:.2f} · {start:.2f}–{end:.2f} s").format(
-            conf=w.confidence, start=w.start_s, end=w.end_s)
+        under = confidence_color(w.confidence)
+        if under == COLOR_GOOD:
+            level, color = self.tr("high"), TEXT_COLOR
+            why = self.tr("No underline: the decoder was sure of every letter in this word.")
+        elif under == COLOR_MID:
+            level, color = self.tr("medium"), COLOR_MID
+            why = self.tr("Yellow underline: the decoder was only fairly sure of some letters "
+                          "in this word.")
+        else:
+            level, color = self.tr("low"), COLOR_LOW
+            why = self.tr("Red underline: the decoder was unsure of this word. Check it by ear.")
+        lines = [f'<b style="color:{color}">'
+                 + html.escape(self.tr("Confidence {value} ({level})").format(
+                     value=fmt_number(w.confidence, 2), level=level)) + "</b>",
+                 html.escape(why)]
+        acc = expected_accuracy(w.confidence, live=self._live)
+        if acc is not None:
+            lines.append(html.escape(self.tr(
+                "In our tests, words at this level were right about {percent} % of the time."
+            ).format(percent=fmt_number(100 * acc, 0))))
+        if self.is_tentative(i):
+            lines.append("<i>" + html.escape(self.tr(
+                "Grey: not final yet. It may still change as more audio arrives.")) + "</i>")
+        lines.append(html.escape(self.tr("{start}–{end} s").format(
+            start=fmt_number(w.start_s, 2), end=fmt_number(w.end_s, 2))))
+        return "<p style='white-space:pre-wrap; max-width:360px'>" + "<br>".join(lines) + "</p>"
 
     def word_rect(self, i: int) -> QRect:
         """Khung của từ thứ `i` trong tọa độ của vùng vẽ (cho test và bấm chuột)."""

@@ -12,6 +12,7 @@ import numpy as np
 from morsedesk.audio.io import load_audio, resample
 from morsedesk.constants import FRAME_RATE, HOP, SAMPLE_RATE
 from morsedesk.dsp.baseline import BaselineDecoder, Symbol
+from morsedesk.dsp.clicks import is_key_clicks
 from morsedesk.dsp.dither import dither_to_ceiling
 from morsedesk.dsp.frontend import (
     Window,
@@ -349,6 +350,11 @@ class Decoder:
             x = resample(np.asarray(x, dtype=np.float32), sample_rate, SAMPLE_RATE)
         est = estimate_tone(x)
         tone_hz = est.f0_hz if est.has_signal else None
+        if self.engine != "deepcw" and is_key_clicks(x, f0_hz=tone_hz):
+            # Chỉ có tiếng click (phím điện báo — hoặc nhiễu xung/sét), không có tone: đoán tone rồi
+            # giải thì ra chữ vô nghĩa, mỗi lần một ngôn ngữ (dsp/clicks.py). Nói thật thay vì bịa chữ;
+            # vẫn báo NO_SIGNAL vì nhiễu xung thuần cũng rơi vào đây (test §7 qrn).
+            return self._empty([warn(WarningCode.NO_SIGNAL), warn(WarningCode.KEY_CLICKS)])
         # Mô hình âm thanh chỉ từng thấy SNR -6..25 dB. Bản ghi thật của ARRL W1AW đo 61,7 dB và
         # mô hình trả về rác trên chính loại bản ghi đó, trong khi thêm nhiễu cho bẩn đi thì nó
         # đọc được ngay (CER 89,8 % -> 28,9 % trên clip đầu của T2). Chỉ đường mô hình dùng bản

@@ -40,10 +40,11 @@ def test_banner_levels_and_close(qtbot):
 
 
 def test_confidence_colors_thresholds():
-    assert WORD_GOOD == 0.8
-    assert confidence_color(0.95) == COLOR_GOOD and confidence_color(0.8) == COLOR_GOOD
-    assert confidence_color(0.6) == COLOR_MID and confidence_color(0.5) == COLOR_MID
-    assert confidence_color(0.49) == COLOR_LOW
+    # ngưỡng theo số đo hiệu chuẩn (word_view.WORD_GOOD/WORD_FAIR)
+    assert WORD_GOOD == 0.97
+    assert confidence_color(0.99) == COLOR_GOOD and confidence_color(0.97) == COLOR_GOOD
+    assert confidence_color(0.9) == COLOR_MID and confidence_color(0.8) == COLOR_MID
+    assert confidence_color(0.79) == COLOR_LOW
     assert len({COLOR_GOOD, COLOR_MID, COLOR_LOW}) == 3
 
 
@@ -52,11 +53,14 @@ def test_word_view_texts_tooltips_and_click(qtbot):
     qtbot.addWidget(v)
     v.resize(600, 200)
     v.show()
-    words = [Word("CQ", 0.0, 0.5, 0.9), Word("DE", 0.6, 1.0, 0.55), Word("K", 1.1, 1.3, 0.2)]
+    words = [Word("CQ", 0.0, 0.5, 0.98), Word("DE", 0.6, 1.0, 0.85), Word("K", 1.1, 1.3, 0.2)]
     v.set_words(words)
     assert v.texts() == ["CQ", "DE", "K"]
     assert [confidence_color(w.confidence) for w in v.words()] == [COLOR_GOOD, COLOR_MID, COLOR_LOW]
-    assert "0.90" in v.tooltip_for(0) and "0.60" in v.tooltip_for(1) and "1.00" in v.tooltip_for(1)
+    assert "0.98" in v.tooltip_for(0) and "0.60" in v.tooltip_for(1) and "1.00" in v.tooltip_for(1)
+    # tooltip nói VÌ SAO có màu đó (người dùng yêu cầu 25/09)
+    assert "No underline" in v.tooltip_for(0)
+    assert "Yellow" in v.tooltip_for(1) and "Red" in v.tooltip_for(2)
     got = []
     v.word_clicked.connect(got.append)
     qtbot.mouseClick(v.canvas(), Qt.MouseButton.LeftButton, pos=v.word_rect(1).center())
@@ -165,3 +169,43 @@ def test_word_colors_are_readable_on_any_system_theme(qtbot):
     # Gạch chân độ tin cậy là đồ họa, không phải chữ: mức 3:1 (WCAG 1.4.11) trên nền khung.
     for mark in (COLOR_MID, COLOR_LOW):
         assert _contrast(mark, FADE_COLOR) >= 3.0, mark
+
+
+def test_word_tooltip_gives_measured_accuracy_and_localised_numbers(qtbot, monkeypatch):
+    """"Đúng khoảng X %" lấy từ bảng hiệu chuẩn ĐO (app/confidence.py), riêng cho file và nghe; số
+    dùng dấu phẩy thập phân khi giao diện là tiếng Nga/Kazakh."""
+    from PySide6.QtCore import QCoreApplication
+
+    from morsedesk.app import confidence
+
+    monkeypatch.setattr(confidence, "_table", lambda mode, path=None: (
+        ((0.0, 0.5, 0.40), (0.5, 0.8, 0.83), (0.8, 1.0, 0.97)) if mode == "file"
+        else ((0.0, 0.5, 0.30), (0.5, 0.8, 0.70), (0.8, 1.0, 0.95))))
+    words = [Word("CQ", 0.0, 0.5, 0.9), Word("DE", 0.6, 1.25, 0.6)]      # bảng giả: 0,8 / 0,5
+    f = WordView()
+    live = WordView(live=True)
+    for v in (f, live):
+        qtbot.addWidget(v)
+        v.set_words(words)
+    assert "97 %" in f.tooltip_for(0) and "83 %" in f.tooltip_for(1)
+    assert "95 %" in live.tooltip_for(0) and "70 %" in live.tooltip_for(1)
+    app = QCoreApplication.instance()
+    old = app.property("ui_language")
+    try:
+        app.setProperty("ui_language", "ru")
+        assert "0,60" in f.tooltip_for(1) and "1,25" in f.tooltip_for(1)
+        app.setProperty("ui_language", "en")
+        assert "0.60" in f.tooltip_for(1)
+    finally:
+        app.setProperty("ui_language", old)
+
+
+def test_word_tooltip_omits_percentage_without_calibration(qtbot, monkeypatch):
+    """Bản dựng thiếu bảng hiệu chuẩn: bỏ dòng phần trăm chứ không bịa số."""
+    from morsedesk.app import confidence
+
+    monkeypatch.setattr(confidence, "_table", lambda mode, path=None: ())
+    v = WordView()
+    qtbot.addWidget(v)
+    v.set_words([Word("CQ", 0.0, 0.5, 0.9)])
+    assert "%" not in v.tooltip_for(0)

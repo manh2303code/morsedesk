@@ -20,6 +20,7 @@ class WarningCode(StrEnum):
     SECOND_TONE = "second_tone"
     LOW_CONFIDENCE = "low_confidence"
     LOW_CONFIDENCE_WITH_DSP = "low_confidence_with_dsp"
+    KEY_CLICKS = "key_clicks"
 
 
 # Chuỗi nguồn tiếng Anh cho giao diện. Phải khớp từng ký tự với khóa trong
@@ -32,6 +33,9 @@ WARNING_TEXTS: dict[str, str] = {
         "A second tone was found at {second_hz:.0f} Hz; tracking {tracked_hz:.0f} Hz.",
     WarningCode.LOW_CONFIDENCE.value: "Low confidence.",
     WarningCode.LOW_CONFIDENCE_WITH_DSP.value: "Low confidence; the DSP decoder result is shown too.",
+    WarningCode.KEY_CLICKS.value:
+        "Only clicks were heard, no Morse tone. If this is a telegraph key or sounder: MorseDesk decodes "
+        "Morse sent as a tone (radio CW); key clicks cannot be decoded yet.",
 }
 
 # Thông điệp tiếng Việt cho CLI và log, giữ đúng câu chữ đã dùng từ trước.
@@ -43,6 +47,8 @@ WARNING_TEXTS_VI: dict[str, str] = {
         "phát hiện tone thứ hai tại {second_hz:.0f} Hz, đang bám {tracked_hz:.0f} Hz",
     WarningCode.LOW_CONFIDENCE.value: "độ tin cậy thấp",
     WarningCode.LOW_CONFIDENCE_WITH_DSP.value: "độ tin cậy thấp, kèm kết quả bộ giải mã DSP",
+    WarningCode.KEY_CLICKS.value:
+        "chỉ nghe thấy tiếng click, không có tone Morse; nếu là phím điện báo thì loại này chưa giải được",
 }
 
 

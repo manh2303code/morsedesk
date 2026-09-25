@@ -23,6 +23,13 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
    để phân biệt Қ với К — model nghe đúng, chỉ không thể biết chữ nào. Văn thật thì LM gỡ được (1,1 %).
    Không phải lỗi giải mã; cần ghi rõ trong tài liệu / cân nhắc hiển thị "Қ/К" khi LM không chắc.
 
+14. **Giải Morse dạng TIẾNG CLICK của phím/sounder** (người dùng thử bản ghi "key typing 1930s", 25/09).
+    Nay chỉ nhận ra và báo KEY_CLICKS. Khả thi: khoảng cách click tụ thành cụm rõ (~45/75/140 ms ở
+    25–30 WPM). Việc khó: phân biệt click nhấn/nhả, tiếng nảy, vang phòng. Cần research (sounder
+    decoding) + bộ đo có đáp án (tự sinh bằng tests/unit/test_clicks.key_click_audio, cộng bản ghi thật).
+15. **Hiệu chuẩn độ tin cậy lại sau mỗi lần đổi model** (tools/calibrate_confidence.py). Chế độ nghe
+    có ít từ dưới 0,9 (gộp thành một khoảng, đúng 61 %) — thêm dữ liệu live nếu muốn chia nhỏ.
+
 ## Đang mở — trung bình
 
 5. **Model âm học: hướng tiếp theo (P2–P7 trong .superpowers/sdd/research-acoustic-2026-09-24.md).**
@@ -60,6 +67,10 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
 
 ## Cơ chế đo (quy ước từ 24/09)
 
+- **Chế độ nghe rất đắt để mô phỏng** (giải lại bộ đệm 9,5 s mỗi 0,5 s; tự nhận ngôn ngữ x3): 54 bản
+  tin live + live-auto ~50 phút trên 14 lõi. Kiểm nhanh: CHỈ cấu hình bị đổi (`--configs live-auto`)
+  và `--per-cell 1` (18 bản tin); bộ đủ chỉ khi nghiệm thu. Đổi phần không đụng tới cấu hình nào thì
+  khỏi đo lại cấu hình đó (25/09 đã đo thừa `live` dù mã của nó không đổi).
 - Thử nghiệm / chọn tham số / so model: chạy SONG SONG mọi lõi (`--workers`), cache khi được.
 - Huấn luyện: GPU trong WSL (scripts/wsl_train.sh).
 - Nghiệm thu app thật: CPU, tuần tự, đúng đường sản phẩm (`bench --workers 1`, test_windows_exe.ps1,
@@ -71,6 +82,12 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
 
 ## Đã xong (phiên 24/09)
 
+- **Chế độ nghe không bao giờ trộn bảng chữ** (25/09): chưa khóa ngôn ngữ thì chưa chốt, chữ tạm viết
+  một bảng chữ. live-auto 11,94 -> 7,87 % [-6,64; -1,55], bản tin lẫn Latin+Kirin 31/54 -> 0/54.
+- **Tiếng click phím điện báo**: nhận ra, trả rỗng + KEY_CLICKS (dsp/clicks.py); T1/dev/dev-OOV/T2/T4
+  giống hệt từng clip.
+- **Gạch chân + tooltip độ tin cậy ở cả trang Giải mã và trang Nghe**, % đo bằng
+  tools/calibrate_confidence.py; ngưỡng 0,97 / 0,8 theo số đo; en/ru/kk.
 - **Model v0.5.0 = E17** (25/09): như E16 nhưng văn bản huấn luyện là câu thật từ corpus (50 %), nhóm
   mã 1–8 chữ (20 %), điện văn (20 %), danh sách cũ (10 %). T4 1,94 -> 1,34 % (SAQ gõ tay on-air 22,9 ->
   16,2), dev-OOV 10,10 -> 8,95, bản tin dài 3,69 -> 3,26 (văn thật chế độ file 0,29 %), chế độ nghe 6,93

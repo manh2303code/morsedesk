@@ -123,6 +123,7 @@ class MainWindow(QMainWindow):
                 app.installTranslator(tr)
                 self._translator = tr
         self.current_language = code
+        app.setProperty("ui_language", code)     # số trong tooltip theo ngôn ngữ (word_view.fmt_number)
         self.settings.ui_language = code
         self.language_bar.set_current(code)
         self.about_page.set_language(code)

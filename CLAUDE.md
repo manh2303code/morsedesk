@@ -86,6 +86,8 @@ PYTHONUTF8=1 uv run python tools/long_random_eval.py   # bản tin ~2 phút x 3 
 PYTHONUTF8=1 uv run python tools/make_t1.py --out testdata/generated/t1oov --seed-base 700000 --holdout-text
                                                    # dev-OOV: văn bản model CHƯA thấy (xem Gotchas)
 PYTHONUTF8=1 uv run python tools/make_t4.py        # T4: bản ghi THẬT từ internet (SRR ru, ARRL, SAQ...)
+PYTHONUTF8=1 uv run python tools/calibrate_confidence.py   # % "từ ở mức này đúng khoảng" trong tooltip (~25 phút)
+                                                   # CHẠY LẠI sau MỖI lần đổi model âm học/LM
 PYTHONUTF8=1 uv run ruff check .
 PYTHONUTF8=1 uv run python tools/build_i18n.py     # sau MỖI lần thêm/sửa chuỗi self.tr()
 PYTHONUTF8=1 uv run morsedesk-gui
@@ -156,6 +158,15 @@ audio → dò tone 14 ms → dither nếu SNR>25dB → đặc trưng 11 chiều,
   đều; T1 nhóm mã −1,75 điểm; CZWCI → CQWCI). Corpus một câu một dòng → dấu chấm giữa bản tin bị phạt
   3–4,6 nat; đã sửa bằng ranh giới câu trong beam (`BeamParams.sentence_breaks`, 25/09).
   Chi tiết: .superpowers/sdd/research-lm-2026-09-24.md.
+- **Độ tin cậy thô của từ LẠC QUAN** (calibrate_confidence.py, 25/09, ~8 000 từ): >= 0,97 đúng 95 %,
+  0,80–0,90 chỉ đúng 66 % (chế độ nghe còn thấp hơn). Ngưỡng gạch chân nay 0,97 / 0,8 (word_view);
+  tooltip đọc bảng đo ở morsedesk/app/data/confidence_calibration.json, không đặt tay con số.
+- **Chế độ nghe tự nhận ngôn ngữ: CHƯA khóa thì CHƯA chốt** (model/stream.py `_pending`): mỗi lần giải
+  bộ đệm ~9,5 s tự chọn ngôn ngữ riêng, chốt ngay là dòng chữ lẫn Latin/Kirin. Chữ chờ hiện dạng tạm,
+  quy về một bảng chữ theo mẫu (`Profile.retarget`); quá PIN_FORCE_LETTERS thì khóa theo ngôn ngữ dẫn đầu.
+- **Tiếng CLICK của phím điện báo không phải tone** (dsp/clicks.py): bộ dò tone có thể tưởng có tone
+  (cộng hưởng cơ học ~1 kHz) và model bịa chữ. Nhận ra bằng số xung/giây + độ nhọn dải cao + tone chỉ
+  ngân ngắn (key_down_fraction < 0,15) -> trả rỗng + KEY_CLICKS. CHƯA giải được loại âm thanh này.
 - **Model hay phát ký tự ĐẦU TIÊN ngay khung đầu ra số 0** (BiGRU biết trước), bất kể ký tự nằm ở
   đâu — nên không được đệm rồi cắt ở đầu/cuối file.
 - **Mismatch giữa lúc huấn luyện và lúc chạy là mỏ vàng.** Hai thắng lợi lớn nhất đều từ đó:
