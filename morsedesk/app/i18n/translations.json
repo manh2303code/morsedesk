@@ -199,7 +199,8 @@
     "Listening is on. Stop listening before playing: the microphone would pick up the speaker.": "Идёт приём. Остановите приём перед воспроизведением: микрофон уловит звук из динамика.",
     "Playing — press Stop to edit the text.": "Идёт воспроизведение — нажмите «Стоп», чтобы изменить текст.",
     "The sound device is not responding (the system audio service or the sound driver is stuck). Playback and listening are paused; everything else keeps working. If sound does not come back within a minute or two, restart the computer.": "Звуковое устройство не отвечает (зависла системная аудиослужба или звуковой драйвер). Воспроизведение и приём приостановлены; всё остальное работает. Если звук не вернётся через минуту-две, перезагрузите компьютер.",
-    "No sound output on this computer: check that a sound card is present and that PortAudio (libportaudio2) is installed. Decoding files still works.": "На этом компьютере нет вывода звука: проверьте, что звуковая карта есть и PortAudio (libportaudio2) установлен. Декодирование файлов работает."
+    "No sound output on this computer: check that a sound card is present and that PortAudio (libportaudio2) is installed. Decoding files still works.": "На этом компьютере нет вывода звука: проверьте, что звуковая карта есть и PortAudio (libportaudio2) установлен. Декодирование файлов работает.",
+    "Looking for sound devices…": "Поиск звуковых устройств…"
   },
   "kk": {
     "MorseDesk": "MorseDesk",
@@ -401,6 +402,7 @@
     "Listening is on. Stop listening before playing: the microphone would pick up the speaker.": "Тыңдау жүріп жатыр. Ойнатпас бұрын тыңдауды тоқтатыңыз: микрофон динамиктің дыбысын қабылдап алады.",
     "Playing — press Stop to edit the text.": "Ойнатылып жатыр — мәтінді өзгерту үшін «Тоқтату» батырмасын басыңыз.",
     "The sound device is not responding (the system audio service or the sound driver is stuck). Playback and listening are paused; everything else keeps working. If sound does not come back within a minute or two, restart the computer.": "Дыбыс құрылғысы жауап бермей тұр (жүйенің аудио қызметі немесе дыбыс драйвері қатып қалды). Ойнату мен тыңдау тоқтатылды; қалғанның бәрі жұмыс істейді. Дыбыс бір-екі минутта қалпына келмесе, компьютерді қайта іске қосыңыз.",
-    "No sound output on this computer: check that a sound card is present and that PortAudio (libportaudio2) is installed. Decoding files still works.": "Бұл компьютерде дыбыс шығысы жоқ: дыбыс картасы бар екенін және PortAudio (libportaudio2) орнатылғанын тексеріңіз. Файлдарды декодтау жұмыс істейді."
+    "No sound output on this computer: check that a sound card is present and that PortAudio (libportaudio2) is installed. Decoding files still works.": "Бұл компьютерде дыбыс шығысы жоқ: дыбыс картасы бар екенін және PortAudio (libportaudio2) орнатылғанын тексеріңіз. Файлдарды декодтау жұмыс істейді.",
+    "Looking for sound devices…": "Дыбыс құрылғылары ізделуде…"
   }
 }

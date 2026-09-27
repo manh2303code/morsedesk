@@ -214,3 +214,29 @@ def test_tape_letter_click_still_works_after_wrap(qtbot, tmp_path, monkeypatch):
     assert tape._items[last][1] > tape._items[0][1]          # chữ cuối ở dòng dưới
     qtbot.mouseClick(tape, Qt.MouseButton.LeftButton, pos=tape.item_rect(last).center().toPoint())
     assert len(started) == 1 and started[0] > 0
+
+
+def test_listen_page_says_it_is_searching_and_explains_a_stuck_driver(qtbot, monkeypatch):
+    """Người dùng 27/09 (dịch vụ âm thanh Windows chết): ô thiết bị trống, tưởng "không có micro". Nay:
+    "đang tìm…", kẹt thì giải thích ngay trên trang; driver hồi lại thì danh sách hiện, lời báo tắt."""
+    from concurrent.futures import Future
+
+    from morsedesk.app import live_page as live_page_mod
+    from morsedesk.audio import engine as engine_mod
+    from tests.app.test_live_page import FakeLiveWorker
+
+    fut: Future = Future()
+    monkeypatch.setattr(live_page_mod, "input_devices", lambda: fut)
+    page = live_page_mod.LivePage(FakeLiveWorker())
+    qtbot.addWidget(page)
+    assert page.device_combo.count() == 1 and "Looking for sound devices" in page.device_combo.itemText(0)
+    assert not page.listen_button.isEnabled()
+    eng = engine_mod.default_engine()
+    monkeypatch.setattr(eng, "stuck", lambda: "query devices")
+    page._poll_devices()
+    assert page.banner.level == "warning" and "not responding" in page.banner.text()
+    monkeypatch.setattr(eng, "stuck", lambda: None)
+    fut.set_result([(3, "Microphone Array")])
+    page._poll_devices()
+    assert page.device_combo.itemText(0) == "Microphone Array" and page.listen_button.isEnabled()
+    assert not page.banner.isVisible() or "not responding" not in page.banner.text()

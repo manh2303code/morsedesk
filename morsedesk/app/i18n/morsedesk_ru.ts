@@ -487,190 +487,195 @@
 <context>
     <name>LivePage</name>
     <message>
-        <location filename="../live_page.py" line="253" />
+        <location filename="../live_page.py" line="220" />
+        <source>Looking for sound devices…</source>
+        <translation>Поиск звуковых устройств…</translation>
+    </message>
+    <message>
+        <location filename="../live_page.py" line="265" />
         <source>No input device found. Plug in a sound card or check that PortAudio is installed.</source>
         <translation>Устройство ввода не найдено. Подключите звуковую карту или проверьте установку PortAudio.</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="283" />
+        <location filename="../live_page.py" line="298" />
         <source>Hz</source>
         <translation>Гц</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="283" />
+        <location filename="../live_page.py" line="298" />
         <source>dB</source>
         <translation>дБ</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="283" />
+        <location filename="../live_page.py" line="298" />
         <source>WPM</source>
         <translation>WPM</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="283" />
+        <location filename="../live_page.py" line="298" />
         <source>s</source>
         <translation>с</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="288" />
-        <location filename="../live_page.py" line="419" />
+        <location filename="../live_page.py" line="303" />
+        <location filename="../live_page.py" line="434" />
         <source>English</source>
         <translation>Английский</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="288" />
-        <location filename="../live_page.py" line="419" />
+        <location filename="../live_page.py" line="303" />
+        <location filename="../live_page.py" line="434" />
         <source>Russian</source>
         <translation>Русский</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="288" />
-        <location filename="../live_page.py" line="420" />
+        <location filename="../live_page.py" line="303" />
+        <location filename="../live_page.py" line="435" />
         <source>Kazakh</source>
         <translation>Казахский</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="297" />
+        <location filename="../live_page.py" line="312" />
         <source>WPM {v:.1f}</source>
         <translation>Слов/мин {v:.1f}</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="299" />
+        <location filename="../live_page.py" line="314" />
         <source>Tone {v:.0f} Hz</source>
         <translation>Тон {v:.0f} Гц</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="301" />
+        <location filename="../live_page.py" line="316" />
         <source>SNR {v:.1f} dB</source>
         <translation>ОСШ {v:.1f} дБ</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="304" />
+        <location filename="../live_page.py" line="319" />
         <source>Alphabet: {v}</source>
         <translation>Алфавит: {v}</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="305" />
+        <location filename="../live_page.py" line="320" />
         <source>{v:.0f} s heard</source>
         <translation>принято {v:.0f} с</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="387" />
+        <location filename="../live_page.py" line="402" />
         <source>Only clicks were heard, no Morse tone. If this is a telegraph key or sounder: MorseDesk decodes Morse sent as a tone (radio CW); key clicks cannot be decoded yet.</source>
         <translation>Слышны только щелчки, тонального сигнала Морзе нет. Если это телеграфный ключ или клопфер: MorseDesk декодирует Морзе, переданную тоном (радио CW); щелчки ключа пока не декодируются.</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="414" />
+        <location filename="../live_page.py" line="429" />
         <source>Input:</source>
         <translation>Вход:</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="415" />
+        <location filename="../live_page.py" line="430" />
         <source>Alphabet:</source>
         <translation>Алфавит:</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="417" />
+        <location filename="../live_page.py" line="432" />
         <source>Auto detects the alphabet from the message itself</source>
         <translation>«Авто» определяет алфавит по самому сообщению</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="418" />
+        <location filename="../live_page.py" line="433" />
         <source>Refresh</source>
         <translation>Обновить</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="419" />
+        <location filename="../live_page.py" line="434" />
         <source>Auto</source>
         <translation>Авто</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="423" />
+        <location filename="../live_page.py" line="438" />
         <source>Look for newly plugged devices</source>
         <translation>Найти недавно подключённые устройства</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="424" />
+        <location filename="../live_page.py" line="439" />
         <source>Stop</source>
         <translation>Стоп</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="424" />
+        <location filename="../live_page.py" line="439" />
         <source>Listen</source>
         <translation>Слушать</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="425" />
+        <location filename="../live_page.py" line="440" />
         <source>Input level</source>
         <translation>Уровень входного сигнала</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="426" />
+        <location filename="../live_page.py" line="441" />
         <source>Level</source>
         <translation>Уровень</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="427" />
+        <location filename="../live_page.py" line="442" />
         <source>Alphabet</source>
         <translation>Алфавит</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="428" />
+        <location filename="../live_page.py" line="443" />
         <source>Tone</source>
         <translation>Тон</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="429" />
+        <location filename="../live_page.py" line="444" />
         <source>Speed</source>
         <translation>Скорость</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="430" />
+        <location filename="../live_page.py" line="445" />
         <source>SNR</source>
         <translation>ОСШ</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="431" />
+        <location filename="../live_page.py" line="446" />
         <source>Heard</source>
         <translation>Принято</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="432" />
+        <location filename="../live_page.py" line="447" />
         <source>Signal</source>
         <translation>Сигнал</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="433" />
+        <location filename="../live_page.py" line="448" />
         <source>Press Listen to see the band live in 3D.</source>
         <translation>Нажмите «Слушать», чтобы видеть диапазон в 3D в реальном времени.</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="434" />
+        <location filename="../live_page.py" line="449" />
         <source>Press Listen to see the band live.</source>
         <translation>Нажмите «Слушать», чтобы видеть диапазон в реальном времени.</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="436" />
+        <location filename="../live_page.py" line="451" />
         <source>Grey words may still change. Underlined words are uncertain; point at any word for details.</source>
         <translation>Серые слова ещё могут измениться. Подчёркнутые слова сомнительны; наведите на слово, чтобы узнать подробности.</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="440" />
+        <location filename="../live_page.py" line="455" />
         <source>Copy the decoded text</source>
         <translation>Копировать расшифрованный текст</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="441" />
+        <location filename="../live_page.py" line="456" />
         <source>Copy</source>
         <translation>Копировать</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="442" />
+        <location filename="../live_page.py" line="457" />
         <source>Clear the text and start over</source>
         <translation>Очистить текст и начать заново</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="443" />
+        <location filename="../live_page.py" line="458" />
         <source>Clear</source>
         <translation>Очистить</translation>
     </message>

@@ -47,7 +47,7 @@ from morsedesk.app.widgets.signal_columns import LiveColumns
 from morsedesk.app.widgets.signal_panel import SignalPanel
 from morsedesk.app.widgets.stats_bar import Readout
 from morsedesk.app.widgets.word_view import TENTATIVE_TEXT, WordView
-from morsedesk.audio.engine import default_engine
+from morsedesk.audio.engine import STUCK_TEXT, default_engine
 from morsedesk.constants import SAMPLE_RATE
 from morsedesk.warnings import WarningCode
 
@@ -77,6 +77,7 @@ class LivePage(QWidget):
         self._rec_start = 0.0           # giây (kể từ lúc bấm Nghe) của mẫu đầu trong thanh phát
         self.columns = LiveColumns(LIVE_KEEP_S)
         self._pending_devices: tuple[Future, object] | None = None
+        self._stuck_shown = False       # đã báo "driver kẹt" cho lần liệt kê đang chờ
         self._audio_text = AudioText(self)
         self._devices_timer = QTimer(self)
         self._devices_timer.setInterval(DEVICES_POLL_MS)
@@ -212,6 +213,11 @@ class LivePage(QWidget):
         result = input_devices()
         if isinstance(result, Future):
             self._pending_devices = (result, current)
+            self._stuck_shown = False
+            # Người dùng 27/09 (dịch vụ âm thanh Windows chết): ô thiết bị trống trơn, tưởng "máy không có
+            # micro". Nói rõ là đang tìm; kẹt thì `_poll_devices` giải thích ngay trên trang.
+            self.device_combo.clear()
+            self.device_combo.addItem(self.tr("Looking for sound devices…"), None)
             self.device_combo.setEnabled(False)
             self.listen_button.setEnabled(False)
             self.refresh_button.setEnabled(False)
@@ -227,18 +233,22 @@ class LivePage(QWidget):
             return
         fut, current = pending
         if not fut.done():
-            return                          # driver kẹt: MainWindow đã hiện banner "không phản hồi"
+            if not self._stuck_shown and default_engine().stuck():
+                self._stuck_shown = True        # driver kẹt: nói ngay tại đây, không chỉ ở banner cửa sổ
+                self.banner.show_warning(self._audio_text.stuck())
+            return
         self._pending_devices = None
         self._devices_timer.stop()
         self.refresh_button.setEnabled(not self._listening)
         try:
             devices = list(fut.result())
+            error = None
         except Exception as e:
             log.warning("listing input devices failed: %s", e)
-            devices = []
-        self._fill_devices(devices, current)
+            devices, error = [], str(e)
+        self._fill_devices(devices, current, error)
 
-    def _fill_devices(self, devices: list[tuple[int, str]], current) -> None:
+    def _fill_devices(self, devices: list[tuple[int, str]], current, error: str | None = None) -> None:
         self.device_combo.clear()
         for index, name in devices:
             self.device_combo.addItem(name, index)
@@ -249,9 +259,14 @@ class LivePage(QWidget):
         has = bool(devices)
         self.device_combo.setEnabled(has)
         self.listen_button.setEnabled(has)
-        if not has:
+        if not has and error is not None and STUCK_TEXT in error:
+            self.banner.show_warning(self._audio_text.stuck())
+        elif not has:
             self.banner.show_warning(self.tr("No input device found. Plug in a sound card or "
                                              "check that PortAudio is installed."))
+        elif self._stuck_shown:
+            self.banner.hide()                  # driver hồi lại: bỏ lời báo kẹt
+        self._stuck_shown = False
 
     # ---- slot của worker ----
     def on_text(self, committed: str, tentative: str) -> None:

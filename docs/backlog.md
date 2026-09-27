@@ -64,6 +64,10 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
     thật, và thử xem mở micro lúc loa đang phát có còn làm treo driver không khi app không bao giờ mở hai
     thứ cùng lúc. Gợi ý nếu còn treo: tắt hiệu ứng micro (Realtek Audio Console / AEC), driver Intel SST
     20.40.11880.2 (02/2025).
+    23:52–23:55 người dùng thử app trên máy CHƯA khởi động lại: "không tìm thấy mic và loa" — đúng, Audiosrv
+    đã sập 7 lần và đang Stopped, chính Windows cũng không thấy thiết bị; app không đơ, 3 lần thoát cứng
+    (log). Đã thêm "đang tìm thiết bị…" + lời giải thích kẹt ngay trên trang Nghe — `dist/` CHƯA có, dựng
+    lại exe + AppImage cùng đợt kiểm tiếng thật này.
 25. **Linux: PortAudio mới (Ubuntu 26.04, 19.7+git) có host API PulseAudio: không kết nối được máy chủ Pulse
     thì `Pa_Initialize` hỏng HẲN** ("PulseAudio_Initialize: Can't connect to server"). AppImage mang bản 19.6
     chỉ-ALSA của Ubuntu 22.04 nên không dính, nhưng đừng nâng ảnh dựng mà không thử máy không có Pulse.

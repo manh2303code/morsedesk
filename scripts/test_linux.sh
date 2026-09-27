@@ -7,6 +7,7 @@
 # (test_train_smoke chậm nhất: torch CPU trong WSL).
 set -uo pipefail
 cd "$(dirname "$0")/.."
+export PATH="$HOME/.local/bin:$PATH"          # uv cài theo người dùng; bash không đăng nhập thì thiếu
 export UV_PROJECT_ENVIRONMENT="$HOME/.venv-md-test" VIRTUAL_ENV="$HOME/.venv-md-test" UV_LINK_MODE=copy
 uv sync --all-extras --frozen >/dev/null
 export PYTHONUTF8=1 QT_QPA_PLATFORM=offscreen PYTHONDONTWRITEBYTECODE=1
