@@ -329,6 +329,8 @@ mình**. Trong một phiên đã có hai kết luận research không sống só
   khởi động (Qt không tính cửa sổ kiểu SplashScreen là "cửa sổ cuối", nên phải tự thoát).
 - Onefile chạy **hai tiến trình** (cha bung, con chạy app) — `Start-Process -PassThru` trả tiến
   trình cha nên `MainWindowHandle` luôn 0, dễ tưởng app hỏng.
+- **`scripts/build_windows.ps1` chạy bằng PowerShell 7 (`pwsh`)**, không `powershell.exe` 5: 27/09 bản 5
+  báo `Get-FileHash` không tồn tại ở bước tổng kiểm (exe đã dựng xong, chỉ thiếu SHA256SUMS).
 - **KHÔNG dựng exe và AppImage song song**: `build_appimage.sh` chạy `rm -rf build` trên chính repo
   được mount vào container, xóa `build/win` của bản Windows đang dựng (`base_library.zip` not found).
 - **27/09 exe khởi động 18 s trên máy dev** (hoạt cảnh chờ 7 s; 25/09 là 4,7 s) trong khi mã nguồn nạp
@@ -408,8 +410,8 @@ nhận trên T1: T1 9,70 → 9,79 %, dev và T2 không đổi, 120/120 lần ch�
 cậy ~0,99 — về đường bao nó chính là Morse chữ E. Test cũ kiểm §7 bằng `engine="baseline"` nên không bắt
 được việc engine `onnx` bịa chữ; test mới chạy trên `onnx`.
 
-**Đóng gói (dựng lại 27/09 tối, model v0.6.0 + nhận diện số + đối chiếu nhịp phím + sửa MP3/OGG, 9cf44ad).** Windows `dist/MorseDesk.exe` một file
-139,6 MB (`scripts/build_windows.ps1`); Linux `dist/MorseDesk-x86_64.AppImage` 148 MB. Kiểm: chạy
+**Đóng gói (dựng lại 27/09 khuya, luồng thiết bị âm thanh + ngắt từ dài + khóa văn bản khi phát, 452949b; trước đó 9cf44ad = số + nhịp phím).** Windows `dist/MorseDesk.exe` một file
+139,8 MB (`scripts/build_windows.ps1`); Linux `dist/MorseDesk-x86_64.AppImage` 148 MB. Kiểm: chạy
 `scripts/test_windows_exe.ps1` TRƯỚC (nó sinh mẫu `dist/selftest/`), rồi `scripts/test_appimage.sh`
 — cả hai đòi `--self-test` ra văn bản giống hệt mã nguồn. Đổi model thì phải dựng lại CẢ HAI.
 Docker Desktop có lúc báo "running" mà máy ảo đã chết (lỗi 500): `docker desktop restart` — train
