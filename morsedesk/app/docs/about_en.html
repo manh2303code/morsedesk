@@ -29,6 +29,14 @@ automatically, or by you.</p>
 Russian letters, so the sound alone cannot tell Қ from К. The Kazakh language model decides which
 letter was meant: the greeting in the Kazakh sample, keyed as САЛЕМЕТСИЗ БЕ, is written
 <span class="kk">СӘЛЕМЕТСІЗ БЕ</span>.</p>
+<p><b>Numbers as operators send them.</b> Number stations and contest operators shorten digits:
+0 is sent as one long dah, the code of T, and contests also send 1 as A, 9 as N and so on. When a
+message is number traffic, MorseDesk writes these as digits (<i>153T4</i> becomes 15304) and puts
+groups broken by a pause, or run together, back to their fixed length, while call signs,
+coordinates and ordinary text keep their letters. On six real number-station recordings it gets
+17 digits in 100 wrong, against 29 for the open-source decoder ggmorse, and reads 73 groups in 100
+entirely right, against 37. In live listening, long runs of digits are followed character by
+character.</p>
 <p><b>Accurate in noise.</b> On 500 generated test signals with noise, fading and interference,
 MorseDesk gets about 8 characters wrong in every 100. DeepCW, a public neural Morse decoder that
 reads Latin letters only, gets 24 wrong on the same signals. On ten real ARRL practice broadcasts
@@ -118,6 +126,9 @@ in Cyrillic). For short messages, choose the language yourself.</li>
 one to two seconds. Once it has heard about fifty characters in one language, it stays with that
 language for the rest of the session.</li>
 <li><b>Files</b> up to one hour.</li>
+<li><b>Long runs of digits sent by hand.</b> If the sender pauses inside a run about as long as
+the gap between words, a space appears there: the pause itself is ambiguous. In number groups of a
+fixed length, such as five-digit groups, MorseDesk puts the pieces back together.</li>
 </ul>
 
 <h2>Computer requirements</h2>

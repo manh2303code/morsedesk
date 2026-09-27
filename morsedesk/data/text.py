@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
+from morsedesk.data.numeric_text import numeric_text
 from morsedesk.encode.text import _PROSIGN_RE, normalize, text_to_tokens
 from morsedesk.lm.profile import Profile
 
@@ -96,6 +97,7 @@ class TextSampler:
         random_ratio: float = 0.1,
         builtin_ratio: float = 0.0,
         group_len: tuple[int, int] = (5, 5),
+        numeric_ratio: float = 0.0,
     ) -> None:
         """`builtin_ratio`: phần văn bản lấy từ danh sách dựng sẵn BUILTIN_WORDS ngay cả khi có corpus
         (không có corpus thì phần "từ" vốn đã là danh sách đó). `group_len`: độ dài nhóm mã ngẫu
@@ -109,6 +111,8 @@ class TextSampler:
         self.random_ratio = random_ratio
         self.builtin_ratio = builtin_ratio
         self.group_len = group_len
+        # Phần "điện số" (data/numeric_text.py, E18 27/09). 0 = hành vi cũ, T1/dev sinh lại y hệt.
+        self.numeric_ratio = numeric_ratio
         self.corpus: dict[str, list[str]] = {}
         for pid, path in (corpus or {}).items():
             lines = [ln.strip() for ln in Path(path).read_text(encoding="utf-8").splitlines()]
@@ -151,6 +155,14 @@ class TextSampler:
         profile = self.profiles[profile_id]
         n = int(rng.integers(n_words[0], n_words[1] + 1))
         u = rng.random()
+        if u < self.numeric_ratio:
+            letters = sorted(c for c in self.profiles["en"].letter_to_pattern if len(c) == 1 and c.isalpha())
+            raw = numeric_text(letters, rng, n)
+            en = self.profiles.get("en")
+            if profile.id != "en" and en is not None:
+                raw = translit_via_patterns(raw, en, profile)
+            return keep_supported(raw, profile) or BUILTIN_WORDS[profile_id][0]
+        u -= self.numeric_ratio
         if u < self.random_ratio:
             raw = self._random_groups(profile, rng, n)
         elif u < self.random_ratio + self.ham_ratio:

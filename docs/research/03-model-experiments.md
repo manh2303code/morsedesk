@@ -446,3 +446,67 @@ Test §7 (nhiễu trắng / sóng mang / nhiễu xung / im lặng không ra ch�
 **Đã chọn E17 làm `models/acoustic.onnx` v0.5.0**, theo đúng thước đo người dùng đặt ra (bản ghi
 thật, dài, từ internet). E16 lưu ở `models/archive/acoustic-0.4.0-E16.onnx`. Quy tắc "T1 quyết định"
 của CLAUDE.md KHÔNG áp dụng cho thay đổi văn bản huấn luyện — xem CLAUDE.md.
+
+## E18: tinh chỉnh E17 cho "điện số" (2026-09-27)
+
+Người dùng 26/09: số dài, ngẫu nhiên, xen chữ, dấu và dấu cách giải rất kém. Đo trước (xem
+.superpowers/sdd/research-numbers-2026-09-27.md): trên số TỔNG HỢP app chỉ sai 0,2 % chữ số; trên
+bản ghi THẬT của trạm số (T5: M01/M12/M14, bản chép Priyom) sai 25 %, 42 % nhóm đúng. Phần lớn lỗi
+nằm ở khâu sau mô hình (số viết tắt `T` = 0, Auto cắt lưới mỗi 30 s, DSP dính nhóm, chế độ nghe chỉ
+chốt cả từ) và đã sửa ở khâu giải mã. Riêng mô hình: E17 gần như chưa thấy nhóm TOÀN số (1 % clip).
+
+**Cấu hình**: khởi tạo từ E17 (`--init-from`, optimizer mới), 24 000 bước, seed 29, 35 % văn bản
+"điện số" (`data/numeric_text.py`: nhóm 3–7 số, dãy 6–14 số, nhóm chữ-số, số định dạng, số xen dấu;
+25 % nhóm dùng 0 = T, 10 % cả bộ viết tắt; 30 % mẫu số rút khoảng giữa nhóm còn 55–85 %). 1,22 giờ.
+
+| Bộ | E17 | E18 | Ghi chú |
+|---|---|---|---|
+| T5 trạm số thật, lỗi chữ số / nhóm đúng | 18,07 % / 68,95 % | **17,03 % / 73,57 %** | lợi ở M14 (65,7 → 72,9 % nhóm): 23 chữ số E17 đọc thành `'` `:` `_` nay đúng; M12 xấu hơn ở phần rác đầu/cuối (E18 đọc rác thành SỐ) |
+| T4 bản ghi thật (40) | 1,56 % | **1,45 %** | SAQ gõ tay 16,48 → 14,92; nguồn khác y hệt |
+| T2 | 1,84 % | 1,84 % | |
+| dev-OOV (ghép cặp) | 8,61 % | 8,74 % | +0,12 [−0,25; +0,52] — không phân biệt được |
+| bản tin 2 phút, app | — | — | mọi ô trong ±0,4 điểm, không ô nào khác một cách có hệ thống |
+| số tổng hợp, app: nhóm đúng | 88,8 % | 88,3 % | dãy số gõ tay 89,5 → 86,8 % |
+
+**Đọc kết quả.** Mọi dấu cách "chèn nhầm" vào dãy số gõ tay (tools/numeric_eval.py) rơi ĐÚNG vào
+khoảng giữa chữ bị người gõ kéo dài (bộ đo mô phỏng 5 % khoảng giữa chữ dài 5 dit, cộng jitter): E17
+tách ở khoảng >= 4,66 dit, E18 đã tách từ 4,06 dit — khoảng giữa từ ngắn nhất trong cùng bộ là 4,63
+dit, nên đây là âm thanh nhập nhằng thật chứ không phải lỗi nghe. E18 tách sớm hơn vì chính phần rút
+khoảng giữa nhóm (tới 3,6 dit) trong dữ liệu huấn luyện. -> E19.
+
+### E19: như E18 nhưng KHÔNG rút khoảng giữa nhóm (`--tight-group-p 0`), seed 31
+
+Cùng mã giải mã 27/09 (số viết tắt siết + điện số đọc thẳng từ mô hình + DSP giữ cấu trúc từ):
+
+| Bộ | E17 | E18 | E19 |
+|---|---|---|---|
+| T5 trạm số: lỗi chữ số / nhóm đúng | 17,90 / 68,15 % | **17,00 / 73,25 %** | 17,27 / 70,54 % |
+| T4 (trung bình từng file) | 1,34 % | **1,25 %** (SAQ 14,67) | 1,31 % (SAQ 16,20 theo ký tự) |
+| số tổng hợp: nhóm đúng [theo mẫu] | 89,3 [94,6] % | **89,7 [94,9] %** | 89,0 [94,2] % |
+| — dãy số gõ tay (nhóm đúng) | 88,9 % | 87,5 % | **90,5 %** |
+| dev-OOV (ghép cặp, theo ký tự) | 8,61 % | 8,74 (+0,12 ns) | 8,74 (+0,12 ns) |
+| bản tin 2 phút app | 3,09 % | 3,12 (ns) | 3,16 (ns) |
+| T2 | 1,84 % | 1,84 % | 1,41 % (chỉ file kk TỰ SINH đổi) |
+
+E19 sửa đúng chỗ nó nhắm (dãy số gõ tay ít bị tách) nhưng thua E18 trên cả hai bộ bản ghi thật.
+
+### Quyết định: E18 -> `models/acoustic.onnx` v0.6.0 (27/09)
+
+So ghép cặp E17 -> E18, cùng mã, CER trung bình từng file, bootstrap 5 000:
+
+| Bộ | E17 (0.5.0) | E18 (0.6.0) | Hiệu [95 %] |
+|---|---|---|---|
+| T4 (40) | 1,34 % | **1,25 %** | −0,09 [−0,21; 0,00], 3 tốt / 0 xấu |
+| dev-OOV | 8,95 % | 8,99 % | +0,04 [−0,43; +0,52] |
+| bản tin 2 phút app | 3,26 % | 3,30 % | +0,04 [−0,05; +0,12] |
+| bản tin 2 phút model-only | 5,53 % | **5,40 %** | −0,13 [−0,25; −0,01] |
+| T2 | 1,84 % | 1,84 % | 0 (y hệt) |
+| T1 | 8,39 % | 8,36 % | −0,02 [−0,50; +0,52] |
+| dev | 9,19 % | 8,79 % | −0,40 [−0,91; +0,05] |
+| chế độ nghe, số (12 bản tin) | 0,1 % / 92,8 % | **0,0 % / 95,4 %** | lỗi chữ số / nhóm đúng |
+| chế độ nghe, văn bản (18) | 3,29 % | 3,21 % | −0,08 [−0,32; +0,18] |
+
+Theo quy tắc 4 (dev-OOV + T4 + long_random) E18 không kém ở đâu và thắng trên bản ghi thật; cộng
+thêm trạm số thật (T5) là đúng thước đo của yêu cầu. E17 lưu ở `models/archive/acoustic-0.5.0-E17.*`.
+Nhược điểm đã biết: E18 đọc rác đầu/cuối điện (tiếng dò sóng) thành SỐ thay vì chữ (backlog #19),
+và tách dãy số gõ tay sớm hơn một chút (nhập nhằng thật, backlog #18).

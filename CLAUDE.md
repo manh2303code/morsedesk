@@ -136,7 +136,7 @@ audio → dò tone 14 ms → dither nếu SNR>25dB → đặc trưng 11 chiều,
 
 | | Là gì | Ghi chú |
 |---|---|---|
-| `models/acoustic.onnx` | CTC 65 lớp, BiGRU 1 lớp hai chiều × 384, 4,5 MB, 1 119 425 tham số (E17 v0.5.0, văn bản corpus thật) | 65 lớp là **cả ký tự** (`.-`, `-...`), không phải từng chấm gạch |
+| `models/acoustic.onnx` | CTC 65 lớp, BiGRU 1 lớp hai chiều × 384, 4,5 MB, 1 119 425 tham số (E18 v0.6.0 = E17 + 35 % điện số) | 65 lớp là **cả ký tự** (`.-`, `-...`), không phải từng chấm gạch |
 | `models/lm/{en,ru,kk}.bin` | n-gram ký tự bậc 6, 41 MB | **bảng đếm thống kê, không phải nơ-ron**; chấm cùng đáp án gốc thì đáng ~3,9 điểm CER (T1 13,57 → 9,70 %), riêng Kazakh ~8,5 điểm |
 | `models/deepcw/model.onnx` | model ngoài, 15 MB | chỉ profile `en`, dùng đối chứng |
 
@@ -159,8 +159,8 @@ audio → dò tone 14 ms → dither nếu SNR>25dB → đặc trưng 11 chiều,
   đều; T1 nhóm mã −1,75 điểm; CZWCI → CQWCI). Corpus một câu một dòng → dấu chấm giữa bản tin bị phạt
   3–4,6 nat; đã sửa bằng ranh giới câu trong beam (`BeamParams.sentence_breaks`, 25/09).
   Chi tiết: .superpowers/sdd/research-lm-2026-09-24.md.
-- **Độ tin cậy thô của từ LẠC QUAN** (calibrate_confidence.py, 25/09, ~8 000 từ): >= 0,97 đúng 95 %,
-  0,80–0,90 chỉ đúng 66 % (chế độ nghe còn thấp hơn). Ngưỡng gạch chân nay 0,97 / 0,8 (word_view);
+- **Độ tin cậy thô của từ LẠC QUAN** (calibrate_confidence.py, 27/09 với model 0.6.0, ~9 000 từ): >= 0,97 đúng 95 %,
+  0,80–0,90 chỉ đúng 61 % (chế độ nghe 74 %). Ngưỡng gạch chân nay 0,97 / 0,8 (word_view);
   tooltip đọc bảng đo ở morsedesk/app/data/confidence_calibration.json, không đặt tay con số.
 - **Chế độ nghe tự nhận ngôn ngữ: CHƯA khóa thì CHƯA chốt** (model/stream.py `_pending`): mỗi lần giải
   bộ đệm ~9,5 s tự chọn ngôn ngữ riêng, chốt ngay là dòng chữ lẫn Latin/Kirin. Chữ chờ hiện dạng tạm,
@@ -174,6 +174,23 @@ audio → dò tone 14 ms → dither nếu SNR>25dB → đặc trưng 11 chiều,
   SNR (train −6…25 dB, bản ghi thật 49–143 dB → thêm dither, CER 89,8 % → 28,9 %) và độ dài cửa
   sổ (clip train 4–12 s nhưng suy luận cắt 4 s → nới lên 12 s, 17,96 % → 10,87 %). Sửa ở khâu
   **suy luận** rẻ hơn huấn luyện lại hàng chục lần.
+- **Số: bộ đo tổng hợp KHÔNG thấy lỗi của điện số thật** (27/09). Số tổng hợp sai 0,2 % chữ số,
+  trạm số thật (T5: `tools/real_numbers_eval.py`, testdata/private/t5, bản chép Priyom) sai 25 %. Lỗi
+  nằm SAU mô hình: số viết tắt (trạm số đánh 0 bằng một gạch dài = mẫu `T`), Auto cắt lưới mỗi 30 s
+  rồi ghép chữ (nay: đoạn chỉ để bỏ phiếu ngôn ngữ, văn bản giải cả lưới một lượt), DSP dính các
+  nhóm đánh sát nhau mà timing vẫn khớp lưới (nay `dsp_keeps_words`), chế độ nghe chỉ chốt cả từ nên
+  dãy số dài hơn bộ đệm 9 s mất phần đầu. Chi tiết: .superpowers/sdd/research-numbers-2026-09-27.md.
+- **Số viết tắt chỉ đổi khi chắc** (`morsedesk/numbers.py`): bản tin phải là điện số; nhóm TOÀN chữ số
+  + chữ viết tắt được; ngoài nhóm đúng độ dài cố định chỉ đổi `T`; nhóm có dấu câu giữ nguyên (tọa
+  độ `…N/…E`, `T=05`), trừ trong điện nhóm cố định (ở đó dấu câu là rác nghe nhầm). `5NN`, hô hiệu
+  `UA9T`, lưới `EB84`, nhóm mã SRR `Д088А` không bị đụng — có test cho từng loại.
+- **Dấu cách giữa dãy số gõ tay là nhập nhằng THẬT**: khoảng giữa chữ bị kéo tới 4–6,8 dit trùng
+  khoảng giữa từ ngắn nhất (4,6 dit); mọi dấu cách "nhầm" đo 27/09 đều rơi đúng chỗ đó. Độ chắc CTC của
+  dấu cách không phân biệt được (0,36–0,996 so với 0,51–1,0). Rút khoảng giữa nhóm trong dữ liệu huấn
+  luyện (E18) làm model tách SỚM hơn (từ 4,06 dit thay vì 4,66).
+- **Mốc CTC của một chữ phát SỚM hơn chữ** (~0,23 x độ dài chữ trước điểm bắt đầu): chế độ nghe chốt
+  theo chữ phải lùi mép 2 khoảng cách chữ (`ripe_edge` trong model/stream.py), nếu không chữ số 0
+  (năm gạch) bị chốt khi mới nghe được ba gạch -> `Ш`/`#`.
 - **Mô hình đọc nhiễu nền thành chữ.** 30 giây nhiễu trắng thuần ra `WE ARE`. Nó chưa bao giờ
   được dạy nói "ở đây không có gì", còn AGC thì kéo nhiễu lên ngang tín hiệu. `skip_silent_windows`
   chặn được, nhưng **chỉ bật cho chế độ nghe** — ở chế độ file nó làm CER xấu 3,6 điểm.
@@ -292,20 +309,26 @@ mình**. Trong một phiên đã có hai kết luận research không sống só
 | Thí nghiệm model E0–E15 | `docs/research/03-model-experiments.md` |
 | So với model có sẵn (DeepCW, QuartzNet) | `docs/research/04-pretrained-baselines.md` |
 | Research realtime và đóng gói | `.superpowers/sdd/research-*.md` |
+| Số / điện số / trạm số thật (T5) | `.superpowers/sdd/research-numbers-2026-09-27.md`, `tools/numeric_eval.py`, `tools/real_numbers_eval.py` |
 | Nhật ký từng task (gitignored) | `.superpowers/sdd/progress.md` |
 
 ## Hiện trạng
 
-Model **E17 v0.5.0** (như E16 — hidden 384, 1 119 425 tham số, fading nặng — nhưng văn bản huấn luyện là câu thật từ corpus thay danh sách 51 từ; thay E16 ngày 25/09, xem 03-model-experiments), cửa sổ 12 s, beam `alpha` 0,3 / `char_bonus` 1,25 + ranh giới câu. Ba bộ tổng hợp cùng ma trận:
+Model **E18 v0.6.0** (27/09: E17 tinh chỉnh thêm 24 000 bước với 35 % văn bản "điện số" — nhóm số, dãy
+số, số viết tắt, số định dạng; cùng kiến trúc hidden 384, 1 119 425 tham số; E17 = 0.5.0 ở
+models/archive, xem 03-model-experiments), cửa sổ 12 s, beam `alpha` 0,3 / `char_bonus` 1,25 + ranh
+giới câu; điện số đọc thẳng từ mô hình (không LM). Ba bộ tổng hợp cùng ma trận:
 
 | | tổng | clean | mp3 | qrm | qrn | qsb |
 |---|---|---|---|---|---|---|
-| T1 (seed 1000) | **8,39 %** | 1,71 | 1,80 | 1,39 | 1,42 | 35,61 |
-| dev (seed 500000) | **9,21 %** | 2,76 | 2,90 | 2,55 | 2,51 | 35,33 |
-| dev-OOV (seed 700000, văn bản chưa thấy) | **8,95 %** | 2,24 | 1,10 | 3,57 | 2,16 | 35,67 |
+| T1 (seed 1000) | **8,36 %** | 1,52 | 1,62 | 1,26 | 1,38 | 36,04 |
+| dev (seed 500000) | **8,79 %** | 2,76 | 2,69 | 2,80 | 2,46 | 33,24 |
+| dev-OOV (seed 700000, văn bản chưa thấy) | **8,99 %** | 1,80 | 1,19 | 3,39 | 2,26 | 36,32 |
 
-**T4 (bản ghi thật từ internet, 40 file) 1,34 %**: đề thi SRR tiếng Nga 0,55 %, ARRL 0,05 %, K7QO/SKCC
-0 %, VK6FLAB 0,79 %, **SAQ gõ tay on-air 16,21 %** (khoảng cách lớn nhất còn lại). Không có bản ghi
+**T4 (bản ghi thật từ internet, 40 file) 1,25 %**: đề thi SRR tiếng Nga 0,55 %, ARRL 0,05 %, K7QO/SKCC
+0 %, VK6FLAB 0,79 %, **SAQ gõ tay on-air 14,67 %** (khoảng cách lớn nhất còn lại). **T5 trạm số thật
+(6 file) sai 17,00 % chữ số, 73,25 % nhóm đúng** (26/09: 25,12 / 42,36; ggmorse 28,79 / 36,78). Chế độ
+nghe: điện số 0,0 % lỗi chữ số / 95,4 % nhóm đúng (26/09: 24,8 / 62,7), văn bản 3,21 % (18 bản tin). Không có bản ghi
 Kazakh thật nào. T2 **1,84 %** (bản ghi ARRL thật 0,95 %, 18–40 WPM không sai ký tự nào; trước 23/09 báo 3,93 % vì đáp án Kazakh bị viết phẳng — xem 02-baseline-numbers). **Không kênh nào qua cổng 2 % một cách chắc chắn** — trên T1 bốn kênh
 chạm dưới 2 % nhưng dev độc lập cho 2,6–3,1 %.
 

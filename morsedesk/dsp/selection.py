@@ -96,3 +96,17 @@ def dsp_is_complete(dsp_text: str, model_text: str) -> bool:
     """
     n_model = len(model_text.replace(" ", ""))
     return n_model == 0 or len(dsp_text.replace(" ", "")) >= DSP_MIN_LENGTH_RATIO * n_model
+
+
+# Bộ DSP tách từ bằng ngưỡng khoảng lặng cố định. Điện số thật đánh các nhóm SÁT nhau (trạm M12, bản
+# ghi Priyom 2019: khoảng giữa nhóm chỉ nhỉnh hơn khoảng giữa chữ) thì bộ DSP dính cả bản tin thành một
+# khối 100 chữ số, trong khi mô hình tách đúng 19/22 nhóm — timing vẫn khớp lưới hoàn hảo nên các cổng
+# trên không bắt được. Đo 27/09: M12 msg441 nhóm đúng 13,6 % (DSP) -> 86,4 % (mô hình).
+DSP_MIN_WORD_RATIO = 0.6
+DSP_MIN_MODEL_WORDS = 6
+
+
+def dsp_keeps_words(dsp_text: str, model_text: str) -> bool:
+    """Bộ DSP có giữ được cách chia từ/nhóm như mô hình nghe thấy không (không dính các nhóm lại)."""
+    n_model = len(model_text.split())
+    return n_model < DSP_MIN_MODEL_WORDS or len(dsp_text.split()) >= DSP_MIN_WORD_RATIO * n_model

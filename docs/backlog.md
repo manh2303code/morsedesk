@@ -34,6 +34,20 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
     theo đồng hồ + vẽ ~25 hình/s = ~2x CPU cho 3D. Để nguyên vì người dùng đặt "hạn chế tài nguyên";
     làm nếu người dùng thấy giật. Cũng chưa có bản đồ thu nhỏ cả file để nhảy xa (hiện dùng thanh phát).
 
+17. **Số: cần thêm bản ghi THẬT có bản chép đáng tin** (27/09). T5 chỉ có 6 file trạm số (M01 x2, M12 x3,
+    M14 x1, bản chép Priyom). M14: lỗi dồn ở đoạn 70–90 % bản chép (78 nhóm liền không khớp) trong khi
+    bản giải không có khoảng trống -> nghi bản chép lệch âm thanh; M01-713: bản chép đáng ngờ (27 % nhóm
+    đúng với mọi bộ giải mã, kể cả ggmorse). Cần thêm điện số thật: điện thi đấu (serial, 5NN), điện
+    thời tiết/hàng hải, trạm số khác (E11, S06…).
+18. **Dấu cách trong dãy số gõ tay là nhập nhằng thật** (tools/numeric_eval.py, 27/09): mọi dấu cách
+    "nhầm" rơi đúng vào khoảng giữa chữ bị kéo tới 4–6,8 dit, trùng khoảng giữa từ ngắn nhất (4,6 dit).
+    Chỉ sửa được bằng BIẾT độ dài nhóm: tự nhận (numbers.py, cần >= 4 nhóm thuần số và >= 50 % cùng độ
+    dài) hoặc cho người dùng đặt "nhóm N chữ số" trong giao diện. Chưa làm tùy chọn giao diện.
+19. **Điện số: đoạn rác đầu/cuối đọc thành số** (M12, E18): tiếng dò sóng/tín hiệu gọi trước điện ra
+    `58446`, `19159 5` — với E17 ra chữ (`'RM`). Không đụng thân điện nhưng làm bẩn đầu/cuối.
+20. **Auto với nhóm chữ-số và số có định dạng**: phần chữ không có từ nào để LM chọn bảng chữ, nên có
+    bản tin Latin bị nhận là Kirin (đã biết ở #2). Hướng: hòa điểm thì theo ngôn ngữ giao diện.
+
 ## Đang mở — trung bình
 
 5. **Model âm học: hướng tiếp theo (P2–P7 trong .superpowers/sdd/research-acoustic-2026-09-24.md).**
@@ -86,6 +100,24 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
 
 ## Đã xong (phiên 24/09)
 
+- **Nhận diện SỐ** (27/09, người dùng 26/09: "giải mã số học cực kỳ kém"). Research + đo:
+  .superpowers/sdd/research-numbers-2026-09-27.md. Bộ đo mới: `tools/numeric_eval.py` (số tổng hợp,
+  5 loại nội dung) và `tools/real_numbers_eval.py` (T5: trạm số thật M01/M12/M14, so ggmorse).
+  - Số viết tắt (0 = T; bộ thi đấu trong nhóm cố định) + ghép/tách nhóm độ dài cố định, CHỈ trong điện
+    số (`morsedesk/numbers.py`); tọa độ `N/E`, `T=`, `5NN`, hô hiệu, nhóm mã SRR không bị đụng.
+  - Điện số đọc thẳng từ mô hình, không qua LM văn bản (LM kéo `(` về `9`: 21/202 -> 4/202 nhóm).
+  - Auto: đoạn 30 s chỉ để bỏ phiếu ngôn ngữ, văn bản giải cả lưới một lượt (nhóm không còn bị cắt).
+  - DSP phải giữ cấu trúc từ (`dsp_keeps_words`): M12 đánh nhóm sát nhau -> DSP dính cả bản tin.
+  - Chế độ nghe: chốt dần từng chữ của từ dài (dãy số dài hơn bộ đệm), lùi mép 2 khoảng cách chữ vì
+    mốc CTC phát sớm; nhận ra chữ đã chốt bằng chữ GẦN mốc nhất (ngưỡng cố định từng nuốt chữ đầu
+    từ sau: `HAVE TOLD` -> `HAVEOLD`); bộ đệm đã cắt đầu được đệm nhiễu ở mép đầu như mép trong
+    (bộ đệm nằm trọn trong dãy số ra RỖNG 6/8 lần -> mất đuôi bản tin).
+  - Model E18 v0.6.0 (E17 + 35 % điện số); E19 (không rút khoảng giữa nhóm) không được chọn.
+  - Kết quả: T5 trạm số thật 25,12 % lỗi chữ số / 42,36 % nhóm đúng -> **17,00 / 73,25** (ggmorse
+    28,79 / 36,78); chế độ nghe với số 24,8 / 62,7 -> **0,0 / 95,4**; chế độ nghe văn bản 5,55 ->
+    **3,21 %** (18 bản tin; ghép cặp E17 5,55 -> 3,29, [−3,79; −0,88]); số tổng hợp nhóm đúng 88,8 ->
+    89,7 % (94,9 % theo mẫu), số có định dạng 90,8 -> 94,6 %; T4 1,34 -> 1,25 %; T1/dev/dev-OOV/T2
+    không đổi có ý nghĩa.
 - **Ba file mẫu "Xin chào" thuần Morse** (25/09, người dùng): bỏ nhiễu SNR 15 dB — sine 700 Hz liên
   tục pha, sườn raised-cosine 5 ms, khoảng lặng là số 0 tuyệt đối. Cả ba vẫn tự nhận đúng nguyên văn
   và ngôn ngữ (đi đường DSP, SNR đo 51 dB). Cảnh 3D: dải động hiển thị tối đa 30 dB (MAX_RANGE_DB) để

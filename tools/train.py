@@ -201,6 +201,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--builtin-ratio", type=float, default=0.0,
                     help="phần giữ danh sách dựng sẵn khi đã có corpus")
     ap.add_argument("--group-len", default="5", help="độ dài nhóm mã ngẫu nhiên: '5' hoặc '1-8'")
+    ap.add_argument("--numeric-ratio", type=float, default=0.0,
+                    help="phần văn bản 'điện số' (data/numeric_text.py): nhóm số, dãy số, số định dạng")
+    ap.add_argument("--tight-group-p", type=float, default=0.3,
+                    help="phần mẫu điện số rút khoảng giữa nhóm (data/synth.py TIGHT_GROUP_P)")
+    ap.add_argument("--init-from", type=Path, default=None,
+                    help="tinh chỉnh: chỉ nạp TRỌNG SỐ từ checkpoint (optimizer mới, bắt đầu bước 0)")
     ap.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto",
                     help="auto = dùng CUDA nếu có (máy dev có RTX 5090); mô hình xuất ra vẫn là ONNX CPU")
     ap.add_argument("--resume", type=Path, default=None,
@@ -240,6 +246,12 @@ def main(argv: list[str] | None = None) -> int:
             print("checkpoint cũ: chỉ nạp trọng số, bước bắt đầu 0")
         if ck_cfg.get("feature_mode", "clip") != a.feature_mode:
             print(f"cảnh báo: checkpoint feature_mode={ck_cfg.get('feature_mode', 'clip')}, đang train {a.feature_mode}")
+    if a.init_from and not a.resume:
+        ckpt = load_ckpt(a.init_from)
+        if dict(CONFIG_DEFAULT, **ckpt.get("config", {}))["hidden"] != a.hidden:
+            raise SystemExit("--hidden khác checkpoint --init-from")
+        model.load_state_dict(ckpt["state_dict"])
+        print(f"tinh chỉnh từ {a.init_from} (bước {ckpt.get('step')}, val_ter {ckpt.get('val_ter')})")
     if start_step >= a.steps:
         raise SystemExit(f"--steps ({a.steps}) phải lớn hơn bước đã có trong checkpoint ({start_step})")
     name = torch.cuda.get_device_name(0) if dev.type == "cuda" else f"CPU {torch.get_num_threads()} luồng"
@@ -254,7 +266,8 @@ def main(argv: list[str] | None = None) -> int:
     gen = SynthGenerator(SynthConfig(mp3_enabled=not a.no_mp3, channel_sampling=sampling_for(a.qsb_hard),
                                      min_seconds=a.min_seconds, max_seconds=a.max_seconds, corpus=corpus,
                                      ham_ratio=a.ham_ratio, random_ratio=a.random_ratio,
-                                     builtin_ratio=a.builtin_ratio, group_len=(int(lo), int(hi or lo))))
+                                     builtin_ratio=a.builtin_ratio, group_len=(int(lo), int(hi or lo)),
+                                     numeric_ratio=a.numeric_ratio, tight_group_p=a.tight_group_p))
     val_items = []
     for i in range(a.val_clips):
         ex = gen.generate(VAL_SEED_BASE + i)

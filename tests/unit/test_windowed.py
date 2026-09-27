@@ -240,3 +240,20 @@ def test_long_messages_do_not_lose_whole_windows():
     assert len(x) / 8000 > 50
     r = Decoder("en", engine="onnx", lm=False, fallback=False).decode_array(x, 8000)
     assert cer(text, r.text) < 0.10, r.text
+
+
+def test_live_buffer_that_starts_inside_a_digit_run_is_still_read():
+    """Bộ đệm chế độ nghe (9 s, một cửa sổ) sau khi cắt phần đầu bắt đầu GIỮA tín hiệu. Nằm trọn trong
+    một dãy số liền thì model ra RỖNG (đo 27/09: 6/8 bộ đệm, cả E17/E18/E19) — chế độ nghe mất cả đuôi
+    bản tin khi chốt cuối phiên. `continued=True` đệm mép đầu như mép giáp cửa sổ khác."""
+    from morsedesk.api import DEFAULT_MODEL_PATH
+
+    if not DEFAULT_MODEL_PATH.is_file():
+        pytest.skip("cần models/acoustic.onnx")
+    dec = Decoder("en", engine="onnx", lm=True, fallback=False, skip_silent_windows=True, numbers=False)
+    rng = np.random.default_rng(0)
+    for seed in range(4):
+        run = "".join(str(d) for d in rng.integers(0, 10, 40))
+        x = Encoder("en").to_audio(run, wpm=20, snr_db=20, seed=seed)
+        text = dec.decode_array(x[-9 * 8000:], 8000, continued=True).text
+        assert text.endswith(run[-7:]), (seed, text, run)

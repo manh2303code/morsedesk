@@ -34,7 +34,7 @@ class FakeDecoder:
         self.results = results
         self.calls = 0
 
-    def decode_array(self, x, sample_rate=None):
+    def decode_array(self, x, sample_rate=None, **kw):
         i = min(self.calls, len(self.results) - 1)
         self.calls += 1
         words = [Word(t, s, e, 0.9) for s, e, t in self.results[i]]
@@ -159,7 +159,7 @@ class _LangDecoder:
         self.pinned.append(pid)
         return True
 
-    def decode_array(self, x, sr):
+    def decode_array(self, x, sr, **kw):
         from types import SimpleNamespace
 
         lang = self.languages[min(self.calls, len(self.languages) - 1)]
@@ -235,7 +235,7 @@ def test_live_session_never_mixes_alphabets_while_choosing():
     class Flipping(_LangDecoder):
         """Lần chẵn giải ra chữ Latin (en), lần lẻ ra chữ Kirin (ru) — cùng một mẫu Morse."""
 
-        def decode_array(self, x, sr):
+        def decode_array(self, x, sr, **kw):
             lang = "en" if self.calls % 2 == 0 else "ru"
             self.calls += 1
             dur = len(x) / sr
@@ -270,3 +270,65 @@ def test_update_carries_words_with_confidence_and_the_shown_language():
     assert " ".join(w.text for w in up.committed_words) == up.committed
     starts = [w.start_s for w in up.committed_words]
     assert starts == sorted(starts) and starts[-1] > 2.0            # thời gian TUYỆT ĐỐI của phiên
+
+
+class TimelineDecoder:
+    """Giả lập bộ giải mã thật trên một dòng chữ có mốc tuyệt đối: mỗi lần giải chỉ thấy các chữ nằm
+    trong bộ đệm hiện tại (mốc tương đối với đầu bộ đệm), từ chưa kết thúc thì hết ở cuối bộ đệm."""
+
+    def __init__(self, chars: list[tuple[str, float]], stream_ref: list) -> None:
+        self.chars = chars                  # (chữ hoặc " ", giây tuyệt đối)
+        self.stream_ref = stream_ref
+
+    def decode_array(self, x, sample_rate=8000, **kw):
+        sd = self.stream_ref[0]
+        t0 = sd._dropped_frames / sample_rate
+        t1 = t0 + len(x) / sample_rate
+        seen = [(c, t) for c, t in self.chars if t0 <= t <= t1 - 0.3]
+        words, cur = [], []
+        for c, t in seen + [(" ", t1)]:
+            if c == " ":
+                if cur:
+                    words.append(Word("".join(ch for ch, _ in cur), cur[0][1] - t0, t - t0, 0.9,
+                                      [(ch, tt - t0) for ch, tt in cur]))
+                    cur = []
+                continue
+            cur.append((c, t))
+        return _Res(words, " ".join(w.text for w in words))
+
+
+def test_digit_run_longer_than_the_buffer_is_not_lost():
+    """Người dùng 26/09 (chế độ nghe): dãy số liền dài hơn bộ đệm ~9 s mất gần nửa chữ số vì chỉ chốt
+    TỪ trọn vẹn. Nay từ dài chốt dần từng chữ đã chín, phần sau nối vào cùng từ, không cách."""
+    run = "12345678901234567890"
+    chars = [(c, 1.0 + 1.2 * k) for k, c in enumerate(run)] + [(" ", 25.3), ("C", 26.0), ("Q", 26.6), (" ", 27.4)]
+    ref: list = []
+    sd = StreamDecoder(decoder=TimelineDecoder(chars, ref), numbers=False)
+    ref.append(sd)
+    mid = None
+    for i, b in enumerate(_blocks(29.0)):
+        up = sd.push(b)
+        if abs(i * 0.1 - 14.0) < 1e-6:
+            mid = up
+    sd.flush()
+    assert sd.committed == f"{run} CQ"
+    # giữa chừng: phần đầu đã chốt, phần sau là TẠM của cùng từ — không chèn dấu cách vào giữa dãy
+    assert mid is not None and mid.committed and run.startswith(mid.committed)
+    assert (mid.committed + mid.tentative).replace(" ", "") == run[:len((mid.committed + mid.tentative).replace(" ", ""))]
+    assert " " not in (mid.committed + mid.tentative).strip()
+
+
+def test_first_letter_after_a_committed_word_is_not_swallowed():
+    """Mốc CTC của chữ dài phát sớm: `E` cuối HAVE và `T` đầu TOLD chỉ cách nhau 0,24 s ở 20 WPM (mốc
+    thật, bản tin long_random en natural). Ngưỡng cố định 0,25 s (27/09) coi `T` là chữ đã nhận và nối
+    phần còn lại vào từ trước: `HAVE TOLD HAS` -> `HAVEOLD HAS`."""
+    chars = [("H", 1.0), ("A", 1.92), ("V", 2.4), ("E", 3.12), (" ", 3.35), ("T", 3.36), ("O", 3.96),
+             ("L", 4.8), ("D", 5.52), (" ", 6.11), ("H", 6.12), ("A", 6.96), ("S", 7.44), (" ", 7.91),
+             ("I", 7.92), ("N", 8.52), (" ", 9.2)]
+    ref: list = []
+    sd = StreamDecoder(decoder=TimelineDecoder(chars, ref), numbers=False)
+    ref.append(sd)
+    for b in _blocks(11.0):
+        sd.push(b)
+    sd.flush()
+    assert sd.committed == "HAVE TOLD HAS IN"

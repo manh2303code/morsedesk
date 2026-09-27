@@ -88,7 +88,7 @@ class LiveWorker(QThread):
             # mặc định chung.
             self._decoder = Decoder(self.profile, engine=self.engine, model_path=self.model_path,
                                     lm_store=lm_store, fallback=False,
-                                    skip_silent_windows=True)
+                                    skip_silent_windows=True, numbers=False)   # StreamDecoder xử lý số
             self._stream = StreamDecoder(decoder=self._decoder)
         return self._stream
 

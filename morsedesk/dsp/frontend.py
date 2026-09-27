@@ -260,16 +260,21 @@ def key_down_fraction(seg: np.ndarray, f0_hz: float, sample_rate: int = SAMPLE_R
 
 
 def repad_window(x: np.ndarray, w: Window, n_frames: int, pad_frames: int,
-                 cfg: FrontendConfig | None = None, sample_rate: int = SAMPLE_RATE) -> Window:
+                 cfg: FrontendConfig | None = None, sample_rate: int = SAMPLE_RATE,
+                 inner_start: bool = False) -> Window:
     """Tính lại đặc trưng của cửa sổ `w` với đệm nhiễu nền ở mép GIÁP CỬA SỔ KHÁC (không đệm hai
     đầu của chính `x`). Cùng tone, cùng cfg như lần tính đầu.
+
+    `inner_start`: đầu `x` cũng là mép trong — bộ đệm chế độ nghe đã cắt phần đầu nên bắt đầu GIỮA tín
+    hiệu. Đo 27/09: bộ đệm 9 s nằm trọn trong một dãy số liền, không đệm thì model ra rỗng (cổng
+    NO_SIGNAL) và mất cả đuôi bản tin; đệm thì đọc đúng `7060192` với độ tin cậy 1,0.
 
     Trả nguyên `w` khi không có mép nào để đệm (clip một cửa sổ) hoặc khi cửa sổ là sóng mang
     liên tục (tone bật >= STEADY_KEY_FRACTION thời gian — không có nhịp phím): đệm cho AGC một
     nền yên để so, và sóng mang 20 s đang ra độ tin cậy 0,11 (bị cổng chặn) thành 'A' 0,17."""
     cfg = cfg or WINDOW_CFG
     s, e = w.start_frame, w.end_frame
-    head = pad_frames if s > 0 else 0
+    head = pad_frames if (s > 0 or inner_start) else 0
     tail = pad_frames if e < n_frames else 0
     if not (head or tail):
         return w

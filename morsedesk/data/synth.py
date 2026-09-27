@@ -26,6 +26,24 @@ from morsedesk.model.vocab import SPACE, VOCAB
 
 AMPLITUDE = 0.8
 MAX_SAMPLE_ROUNDS = 50
+# Điện số thật hay đánh các nhóm SÁT nhau (trạm M12: khoảng giữa nhóm chỉ nhỉnh hơn khoảng giữa chữ).
+# Với văn bản chủ yếu là số, 30 % mẫu rút khoảng giữa nhóm còn 55–85 % (không dưới 3,6 dit).
+TIGHT_GROUP_P = 0.3
+TIGHT_GROUP_FACTOR = (0.55, 0.85)
+_DIGIT_PATTERNS = {"-----", ".----", "..---", "...--", "....-", ".....", "-....", "--...", "---..", "----."}
+
+
+def _numeric_tokens(tokens: list[str]) -> bool:
+    marks = [t for t in tokens if t != SPACE]
+    return bool(marks) and sum(t in _DIGIT_PATTERNS for t in marks) >= 0.5 * len(marks)
+
+
+def _tighten_word_gaps(elements: list[Element], keyer: KeyerParams, factor: float) -> list[Element]:
+    from morsedesk.encode.timing import unit_seconds
+
+    u = unit_seconds(keyer.wpm)
+    return [Element(e.on, max(3.6 * u, e.duration * factor)) if (not e.on and e.duration > 5.0 * u) else e
+            for e in elements]
 
 
 def rescale_elements(elements: list[Element], target_seconds: float) -> list[Element]:
@@ -68,6 +86,8 @@ class SynthConfig:
     random_ratio: float = 0.1
     builtin_ratio: float = 0.0
     group_len: tuple[int, int] = (5, 5)
+    numeric_ratio: float = 0.0          # phần "điện số" (E18); 0 = hành vi cũ
+    tight_group_p: float = TIGHT_GROUP_P  # phần mẫu điện số rút khoảng giữa nhóm (E19: 0)
     mp3_enabled: bool = True
     channel_sampling: ChannelSampling | None = None
 
@@ -81,7 +101,7 @@ class SynthGenerator:
         self.profiles: dict[str, Profile] = {pid: load_profile(pid) for pid in ids}
         self.text = TextSampler(self.profiles, cfg.corpus, ham_ratio=cfg.ham_ratio,
                                 random_ratio=cfg.random_ratio, builtin_ratio=cfg.builtin_ratio,
-                                group_len=cfg.group_len)
+                                group_len=cfg.group_len, numeric_ratio=cfg.numeric_ratio)
         self._mp3 = cfg.mp3_enabled and ffmpeg_available()
         if cfg.mp3_enabled and not self._mp3:
             logging.getLogger(__name__).warning("không có ffmpeg: bỏ tăng cường MP3")
@@ -164,6 +184,8 @@ class SynthGenerator:
         target = float(rng.uniform(self.cfg.min_seconds, self.cfg.max_seconds))
         tokens, text_original = self._sample_tokens(profile, keyer, rng, target)
         nominal = tokens_to_elements(tokens, keyer.timing())
+        if self.cfg.numeric_ratio > 0 and _numeric_tokens(tokens) and rng.random() < self.cfg.tight_group_p:
+            nominal = _tighten_word_gaps(nominal, keyer, float(rng.uniform(*TIGHT_GROUP_FACTOR)))
         elements = rescale_elements(apply_keyer(nominal, keyer, rng), total_seconds(nominal))
         n_sig = elements_to_segments(elements, SAMPLE_RATE)[-1][2]
         t = np.arange(n_sig) / SAMPLE_RATE

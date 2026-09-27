@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
 import numpy as np
@@ -22,20 +22,21 @@ from morsedesk.dsp.frontend import (
     repad_window,
     window_cfg,
 )
-from morsedesk.dsp.selection import dsp_is_complete, dsp_result_usable, prefer_dsp
+from morsedesk.dsp.selection import dsp_is_complete, dsp_keeps_words, dsp_result_usable, prefer_dsp
 from morsedesk.dsp.tone import ToneEstimate, estimate_tone, fallback_tone_hz
 from morsedesk.dsp.windowing import WINDOW_PAD_FRAMES
 from morsedesk.encode.synth import add_noise, elements_to_audio, tone_power
 from morsedesk.encode.text import text_to_tokens
 from morsedesk.encode.timing import TimingParams, tokens_to_elements
 from morsedesk.lm.beam import BeamParams, Hypothesis, beam_search
-from morsedesk.lm.langid import LangIdResult, detect, detect_tokens
+from morsedesk.lm.langid import LangIdResult, detect, detect_tokens, split_segments
 from morsedesk.lm.ngram import CharNGramLM
 from morsedesk.lm.profile import Profile, list_profiles, load_profile
 from morsedesk.lm.store import LMStore
 from morsedesk.model.ctc import greedy_decode_with_frames
 from morsedesk.model.protocol import AcousticModel
 from morsedesk.model.vocab import SPACE, UNK, VOCAB
+from morsedesk.numbers import analyze, letters_of, normalize_groups
 from morsedesk.progress import STAGE_ACOUSTIC, STAGE_LANGUAGE, DecodeProgress, StageProgress
 from morsedesk.warnings import DecodeWarning, WarningCode, warn
 
@@ -62,6 +63,12 @@ class Word:
     start_s: float
     end_s: float
     confidence: float
+    # (chữ, giây) của từng chữ trong từ — để tách/ghép nhóm số và để chế độ nghe chốt được từng chữ
+    # của một "từ" dài hơn bộ đệm (dãy số liền). Không xuất ra JSON.
+    chars: list = field(default_factory=list, compare=False, repr=False)
+    # Xác suất của dấu cách ĐỨNG TRƯỚC từ này (1.0 nếu không biết): khoảng cách từ thật gần như luôn
+    # ~1,0; dấu cách chèn nhầm giữa nhóm số gõ tay thì lưỡng lự — dùng khi ghép lại nhóm vỡ.
+    space_p: float = field(default=1.0, compare=False, repr=False)
 
 
 @dataclass
@@ -84,7 +91,10 @@ class DecodeResult:
     decoded_by: str = "model"
 
     def to_json(self) -> str:
-        return json.dumps(asdict(self), ensure_ascii=False, indent=2)
+        d = asdict(self)
+        for w in d["words"]:
+            w.pop("chars", None)
+        return json.dumps(d, ensure_ascii=False, indent=2)
 
 
 def _finite_snr(v: float | None) -> bool:
@@ -143,10 +153,14 @@ def symbols_to_words(
     cur: list[str] = []
     start = end = 0
 
+    times: list[float] = []
+
     def flush() -> None:
         if cur:
-            words.append(Word("".join(cur), start / frame_rate, end / frame_rate, confidence))
+            words.append(Word("".join(cur), start / frame_rate, end / frame_rate, confidence,
+                              list(zip(cur, times, strict=True))))
             cur.clear()
+            times.clear()
 
     for i, s in enumerate(symbols):
         if s.token == SPACE:
@@ -156,6 +170,7 @@ def symbols_to_words(
             start = s.start_frame
         end = s.end_frame
         cur.append(letters[i] if letters is not None else profile.render([s.token]))
+        times.append(s.start_frame / frame_rate)
     flush()
     return words
 
@@ -209,18 +224,24 @@ def _group_words(items: list[tuple[str, str, int, float]], frame_rate: int, end_
     words: list[Word] = []
     cur: list[str] = []
     probs: list[float] = []
+    times: list[float] = []
     start = 0
+    space_p, pending_space = 1.0, 1.0
     for tok, letter, f, p in list(items) + [(SPACE, " ", end_frame, 1.0)]:
         if tok == SPACE:
             if cur:
                 conf = float(np.exp(np.mean(np.log(np.maximum(probs, 1e-6)))))
-                words.append(Word("".join(cur), start / frame_rate, f / frame_rate, conf))
-                cur, probs = [], []
+                words.append(Word("".join(cur), start / frame_rate, f / frame_rate, conf,
+                                  list(zip(cur, times, strict=True)), space_p))
+                cur, probs, times = [], [], []
+            pending_space = float(p)
             continue
         if not cur:
+            space_p = pending_space
             start = f
         cur.append(letter)
         probs.append(p)
+        times.append(f / frame_rate)
     return words
 
 
@@ -237,6 +258,39 @@ def hypothesis_to_words(hyp: Hypothesis, frame_rate: int, stride: int, end_frame
     return _group_words(items, frame_rate, end_frame)
 
 
+def numbers_words(words: list[Word], profile: Profile) -> list[Word] | None:
+    """Điện số (morsedesk/numbers.py): số viết tắt -> số, ghép/tách nhóm độ dài cố định. None nếu
+    bản tin không phải điện số (không đổi gì)."""
+    groups = [letters_of(w.text) for w in words]
+    new_groups, sources, ctx = normalize_groups(groups, profile)
+    if not ctx.numeric or (new_groups == groups):
+        return None
+    out: list[Word] = []
+    offsets: dict[tuple[int, ...], int] = {}
+    for letters, src in zip(new_groups, sources, strict=True):
+        key = tuple(src)
+        base = [t for k in src for _, t in words[k].chars] or [words[src[0]].start_s] * sum(
+            len(groups[k]) for k in src)
+        off = offsets.get(key, 0)
+        times = base[off:off + len(letters)]
+        offsets[key] = off + len(letters)
+        if len(times) < len(letters):
+            times = times + [times[-1] if times else words[src[0]].start_s] * (len(letters) - len(times))
+        start = times[0] if off else words[src[0]].start_s
+        last = off + len(letters) >= len(base)
+        end = words[src[-1]].end_s if last else times[-1]
+        conf = min(words[k].confidence for k in src)
+        out.append(Word("".join(letters), start, end, conf, list(zip(letters, times, strict=True))))
+    return out
+
+
+def apply_numbers(result: DecodeResult, profile: Profile) -> DecodeResult:
+    words = numbers_words(result.words, profile)
+    if words is None:
+        return result
+    return replace(result, text=" ".join(w.text for w in words), words=words)
+
+
 def _strip_spaces(emissions: list[tuple[str, int, float]]) -> list[tuple[str, int, float]]:
     i, j = 0, len(emissions)
     while i < j and emissions[i][0] == SPACE:
@@ -251,9 +305,12 @@ class Decoder:
         self, profile: str | Profile = "en", engine: str = "baseline", model_path: Path | None = None,
         fallback: bool = True, lm: bool = True, beam: int = 64, lm_dir: Path | None = None,
         acoustic_model: AcousticModel | None = None, lm_store: LMStore | None = None,
-        skip_silent_windows: bool = False,
+        skip_silent_windows: bool = False, numbers: bool = True,
     ) -> None:
         """lm_store: dùng chung LM giữa nhiều Decoder (GUI); khi có thì bỏ qua lm_dir.
+
+        numbers: xử lý điện số (morsedesk/numbers.py — số viết tắt, nhóm độ dài cố định). Chế độ nghe
+        tắt nó ở đây và làm ở StreamDecoder với ngữ cảnh cả phiên (bộ đệm ~9 s quá ít nhóm).
 
         skip_silent_windows: cửa sổ không dò ra tone thì ép thành blank thay vì chạy mô hình.
         Chặn được chuyện mô hình đọc nhiễu nền thành chữ (30 giây nhiễu trắng thuần ra `WE ARE`),
@@ -266,6 +323,7 @@ class Decoder:
         self.fallback = fallback
         self.lm_enabled = bool(lm)
         self.skip_silent_windows = bool(skip_silent_windows)
+        self.numbers = bool(numbers)
         self.beam_params = BeamParams(beam=int(beam))
         self._baseline = BaselineDecoder()
         self._model: AcousticModel | None = acoustic_model
@@ -343,7 +401,17 @@ class Decoder:
         return self.engine == "onnx" and getattr(self._model, "feature_mode", "clip") == "window"
 
     def decode_array(self, x: np.ndarray, sample_rate: int = SAMPLE_RATE,
-                     progress: DecodeProgress | None = None) -> DecodeResult:
+                     progress: DecodeProgress | None = None, continued: bool = False) -> DecodeResult:
+        """`continued`: `x` nối tiếp âm thanh đã có trước nó (bộ đệm chế độ nghe sau khi cắt phần đầu),
+        nên mép đầu là mép TRONG — đệm nhiễu nền như mép giáp cửa sổ khác (frontend.repad_window)."""
+        result = self._decode_array(x, sample_rate, progress, continued)
+        if self.numbers and result.words:
+            profile = self._profiles.get(result.language) or self.profile or next(iter(self._profiles.values()))
+            result = apply_numbers(result, profile)
+        return result
+
+    def _decode_array(self, x: np.ndarray, sample_rate: int = SAMPLE_RATE,
+                      progress: DecodeProgress | None = None, continued: bool = False) -> DecodeResult:
         """Ước lượng tone toàn clip chỉ là gợi ý ở chế độ 'window': clip dài chủ yếu là nhiễu vẫn
         giải mã được nếu có cửa sổ 4 s nào dò ra tone (spec §3.1)."""
         if sample_rate != SAMPLE_RATE:
@@ -400,7 +468,7 @@ class Decoder:
         language = StageProgress(progress, *STAGE_LANGUAGE) if progress is not None else None
         # chế độ 'clip' gọi đúng hai đối số: test thay `_log_probs` bằng hàm hai tham số
         logp, n_in = (self._log_probs(x_model, tone_hz, progress=acoustic) if windows is None
-                      else self._log_probs(x_model, tone_hz, windows, progress=acoustic))
+                      else self._log_probs(x_model, tone_hz, windows, progress=acoustic, continued=continued))
         result = self._decode_onnx(x, logp, n_in, tone_hz, snr_db, warnings, progress=language)
         if language is not None:
             language.finish()                   # 100 % chỉ khi KẾT QUẢ CUỐI đã sẵn sàng
@@ -434,7 +502,7 @@ class Decoder:
                             warning_codes=list(warnings))
 
     def _log_probs(self, x: np.ndarray, f0_hz: float, windows: list[Window] | None = None,
-                   progress: DecodeProgress | None = None) -> tuple[np.ndarray, int]:
+                   progress: DecodeProgress | None = None, continued: bool = False) -> tuple[np.ndarray, int]:
         """Nơi duy nhất biến âm thanh thành log-prob. `windows`: đặc trưng cửa sổ đã tính sẵn."""
         from morsedesk.model.chunker import run_chunked, run_chunked_audio, run_chunked_windows
 
@@ -446,7 +514,7 @@ class Decoder:
             cfg = self.feature_cfg
 
             def pad(w: Window) -> Window:
-                return repad_window(x, w, n_frames, WINDOW_PAD_FRAMES, cfg)
+                return repad_window(x, w, n_frames, WINDOW_PAD_FRAMES, cfg, inner_start=continued)
 
             return run_chunked_windows(self._model, windows, n_frames, progress,
                                        skip_silent=self.skip_silent_windows, pad=pad), n_frames
@@ -459,17 +527,26 @@ class Decoder:
                               progress=progress)[0]
             emissions = _strip_spaces([(tok, f * stride, p) for tok, f, p in hyp.emissions])
             return hypothesis_to_words(hyp, FRAME_RATE, stride, n_in), emissions, self.profile, {}
-        res = detect(logp, self._profiles, self._lms, self.beam_params, progress=progress)
-        words: list[Word] = []
-        emissions: list[tuple[str, int, float]] = []
-        for seg in res.segments:
-            if seg.profile_id is None:
-                continue
-            hyp = seg.best[segment_profile(seg, res.profile_id)]
-            end_in = min(n_in, seg.end * stride)
-            words += hypothesis_to_words(hyp, FRAME_RATE, stride, end_in, offset=seg.start)
-            emissions += [(tok, (seg.start + f) * stride, p) for tok, f, p in hyp.emissions]
-        return words, _strip_spaces(emissions), self._profiles[res.profile_id], res.scores
+        segments = len(split_segments(logp, blank_id=self.beam_params.blank_id))
+        staged = progress is not None and hasattr(progress, "sub") and segments > 1
+        vote = progress.sub(0, segments, segments + 1) if staged else progress
+        res = detect(logp, self._profiles, self._lms, self.beam_params, progress=vote)
+        pid = res.profile_id
+        voted = [seg for seg in res.segments if seg.profile_id is not None]
+        if len(res.segments) == 1 and voted:
+            # Một đoạn: beam của ngôn ngữ đã chọn chính là lượt giải cả lưới, dùng luôn.
+            hyp = voted[0].best[segment_profile(voted[0], pid)]
+        elif voted:
+            # Nhiều đoạn (âm thanh > 30 s): các đoạn cắt đều, chỗ cắt rơi giữa nhóm chữ/số, ghép lại
+            # là đẻ ra dấu cách sai ("40788 70729" -> "4078 8 7 0729"; đo 26/09 trên nhóm số gõ tay:
+            # 84 % nhóm đúng so với 97 % khi biết trước ngôn ngữ). Các đoạn chỉ để BỎ PHIẾU chọn
+            # ngôn ngữ; văn bản giải lại cả lưới một lượt bằng ngôn ngữ đã chọn.
+            last = progress.sub(segments, segments + 1, segments + 1) if staged else None
+            hyp = beam_search(logp, self._profiles[pid], self._lms[pid], self.beam_params, progress=last)[0]
+        else:
+            return [], [], self._profiles[pid], res.scores
+        emissions = _strip_spaces([(tok, f * stride, p) for tok, f, p in hyp.emissions])
+        return hypothesis_to_words(hyp, FRAME_RATE, stride, n_in), emissions, self._profiles[pid], res.scores
 
     def _deepcw_words(self, x: np.ndarray) -> tuple[list[Word], list[tuple[str, int, float]], float]:
         """Từ và emissions từ hậu nghiệm DeepCW.
@@ -540,6 +617,13 @@ class Decoder:
         stride = int(self._model.time_stride)
         if self.lm_enabled:
             words, emissions, profile, scores = self._beam_words(logp, stride, n_in, progress)
+            if words and analyze([letters_of(w.text) for w in words], profile).numeric:
+                # Điện số: LM văn bản không biết gì về dãy số ngẫu nhiên, chỉ kéo mẫu mô hình đã
+                # nghe về ký tự "hay gặp" hơn — đo 27/09: nhóm `(737)` ra `9737)` 21/202 lần với
+                # LM, 4/202 khi đọc thẳng từ mô hình. Ngôn ngữ vẫn do LM chọn ở trên.
+                emissions = _strip_spaces([(VOCAB.token(i), f * stride, p)
+                                           for i, f, p in greedy_decode_with_frames(logp, VOCAB.blank_id)])
+                words = emissions_to_words(emissions, profile, FRAME_RATE, n_in)
         else:
             profile, scores = self.profile, {}
             emissions = _strip_spaces([(VOCAB.token(i), f * stride, p)
@@ -569,7 +653,8 @@ class Decoder:
                 model_text = " ".join(w.text for w in words)
                 # DSP ngắn hẳn mô hình = nó đã bỏ sót cả đoạn (fading). Chỉ đổi sang mô hình khi mô
                 # hình đủ tin cậy; nếu không, cổng bên dưới sẽ trả RỖNG — tệ hơn giữ kết quả DSP.
-                keep_dsp = (dsp_is_complete(" ".join(w.text for w in dsp_words), model_text)
+                dsp_text = " ".join(w.text for w in dsp_words)
+                keep_dsp = ((dsp_is_complete(dsp_text, model_text) and dsp_keeps_words(dsp_text, model_text))
                             or confidence < MIN_CLIP_CONFIDENCE)
             else:
                 keep_dsp = False
