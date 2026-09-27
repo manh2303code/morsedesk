@@ -392,7 +392,7 @@ nhận trên T1: T1 9,70 → 9,79 %, dev và T2 không đổi, 120/120 lần ch�
 cậy ~0,99 — về đường bao nó chính là Morse chữ E. Test cũ kiểm §7 bằng `engine="baseline"` nên không bắt
 được việc engine `onnx` bịa chữ; test mới chạy trên `onnx`.
 
-**Đóng gói (dựng lại 27/09, model v0.6.0 + nhận diện số + chế độ nghe chốt theo chữ, 82bb622).** Windows `dist/MorseDesk.exe` một file
+**Đóng gói (dựng lại 27/09 tối, model v0.6.0 + nhận diện số + đối chiếu nhịp phím + sửa MP3/OGG, 9cf44ad).** Windows `dist/MorseDesk.exe` một file
 139,6 MB (`scripts/build_windows.ps1`); Linux `dist/MorseDesk-x86_64.AppImage` 148 MB. Kiểm: chạy
 `scripts/test_windows_exe.ps1` TRƯỚC (nó sinh mẫu `dist/selftest/`), rồi `scripts/test_appimage.sh`
 — cả hai đòi `--self-test` ra văn bản giống hệt mã nguồn. Đổi model thì phải dựng lại CẢ HAI.
