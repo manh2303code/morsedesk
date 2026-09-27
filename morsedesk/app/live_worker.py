@@ -13,12 +13,14 @@ from __future__ import annotations
 
 import logging
 import time
+from concurrent.futures import Future
 
 import numpy as np
 from PySide6.QtCore import QThread, Signal
 
 from morsedesk.api import DEFAULT_MODEL_PATH, Decoder
-from morsedesk.audio.capture import AudioCapture, CaptureError
+from morsedesk.audio.capture import AudioCapture, CaptureError, devices_from
+from morsedesk.audio.engine import default_engine
 from morsedesk.constants import SAMPLE_RATE
 from morsedesk.lm.store import LMStore
 from morsedesk.model.stream import StreamDecoder
@@ -150,18 +152,32 @@ class LiveWorker(QThread):
         self.listening.emit(False)
 
 
-def input_devices() -> list[tuple[int, str]]:
-    """(chỉ số, tên) của thiết bị thu; rỗng nếu máy không có hoặc thiếu PortAudio.
+def input_devices() -> Future:
+    """Liệt kê micro ở luồng thiết bị, KHÔNG chờ: Future của [(chỉ số, tên)].
 
-    Bọc lỗi thành danh sách rỗng vì giao diện chỉ cần biết "có gì để chọn không" — lỗi chi tiết
-    sẽ hiện khi người dùng thật sự bấm nghe, kèm đúng ngữ cảnh.
+    Trước 27/09 hàm này gọi PortAudio ngay trên luồng giao diện (lúc dựng trang Nghe và mỗi lần bấm
+    Làm mới); lần đầu đó còn là `Pa_Initialize` — dịch vụ âm thanh của hệ điều hành đang treo thì cả
+    cửa sổ treo theo. Lỗi (thiếu PortAudio, driver kẹt) nằm trong Future; trang tự báo.
     """
-    from morsedesk.audio.capture import list_input_devices
+    out: Future = Future()
 
-    try:
-        return [(d.index, d.name) for d in list_input_devices()]
-    except CaptureError:
-        return []
+    def done(fut: Future) -> None:
+        try:
+            raw = fut.result()
+            out.set_result([(d.index, d.name) for d in devices_from(raw, "max_input_channels")])
+        except Exception as e:
+            out.set_exception(CaptureError(str(e)) if not isinstance(e, CaptureError) else e)
+
+    default_engine().query_devices().add_done_callback(done)
+    return out
+
+
+def known_input_devices() -> list[tuple[int, str]] | None:
+    """Kết quả liệt kê gần nhất, không gọi PortAudio; None nếu chưa liệt kê lần nào (trang Cài đặt)."""
+    raw = default_engine().last_devices
+    if raw is None:
+        return None
+    return [(d.index, d.name) for d in devices_from(raw, "max_input_channels")]
 
 
 DEFAULT_SAMPLE_RATE = SAMPLE_RATE

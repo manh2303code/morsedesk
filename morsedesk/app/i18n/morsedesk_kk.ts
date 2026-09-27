@@ -20,6 +20,34 @@
     </message>
 </context>
 <context>
+    <name>AudioText</name>
+    <message>
+        <location filename="../audio_text.py" line="16" />
+        <source>The sound device is not responding (the system audio service or the sound driver is stuck). Playback and listening are paused; everything else keeps working. If sound does not come back within a minute or two, restart the computer.</source>
+        <translation>Дыбыс құрылғысы жауап бермей тұр (жүйенің аудио қызметі немесе дыбыс драйвері қатып қалды). Ойнату мен тыңдау тоқтатылды; қалғанның бәрі жұмыс істейді. Дыбыс бір-екі минутта қалпына келмесе, компьютерді қайта іске қосыңыз.</translation>
+    </message>
+    <message>
+        <location filename="../audio_text.py" line="19" />
+        <source>Listening is on. Stop listening before playing: the microphone would pick up the speaker.</source>
+        <translation>Тыңдау жүріп жатыр. Ойнатпас бұрын тыңдауды тоқтатыңыз: микрофон динамиктің дыбысын қабылдап алады.</translation>
+    </message>
+    <message>
+        <location filename="../audio_text.py" line="30" />
+        <source>No sound output on this computer: check that a sound card is present and that PortAudio (libportaudio2) is installed. Decoding files still works.</source>
+        <translation>Бұл компьютерде дыбыс шығысы жоқ: дыбыс картасы бар екенін және PortAudio (libportaudio2) орнатылғанын тексеріңіз. Файлдарды декодтау жұмыс істейді.</translation>
+    </message>
+    <message>
+        <location filename="../audio_text.py" line="31" />
+        <source>Cannot play the audio: {detail}</source>
+        <translation>Дыбысты ойнату мүмкін болмады: {detail}</translation>
+    </message>
+    <message>
+        <location filename="../audio_text.py" line="37" />
+        <source>Listening failed: {detail}</source>
+        <translation>Тыңдау сәтсіз аяқталды: {detail}</translation>
+    </message>
+</context>
+<context>
     <name>BusyOverlay</name>
     <message>
         <location filename="../widgets/busy_overlay.py" line="76" />
@@ -282,367 +310,367 @@
 <context>
     <name>EncodePage</name>
     <message>
-        <location filename="../encode_page.py" line="432" />
+        <location filename="../encode_page.py" line="486" />
         <source>Estimated audio is {minutes} min long; the limit is {limit} min. Shorten the text or raise the speed.</source>
         <translation>Аудионың болжамды ұзақтығы {minutes} мин, шегі {limit} мин. Мәтінді қысқартыңыз немесе жылдамдықты арттырыңыз.</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="502" />
+        <location filename="../encode_page.py" line="556" />
         <source>Invalid timing settings: the Farnsworth speed must not exceed the speed in WPM.</source>
         <translation>Тайминг параметрлері қате: Фарнсворт жылдамдығы WPM жылдамдығынан аспауы тиіс.</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="505" />
+        <location filename="../encode_page.py" line="559" />
         <source>Could not build the audio.</source>
         <translation>Аудионы құру мүмкін болмады.</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="589" />
+        <location filename="../encode_page.py" line="650" />
         <source>Save audio</source>
         <translation>Аудионы сақтау</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="589" />
+        <location filename="../encode_page.py" line="650" />
         <source>Audio ({ext})</source>
         <translation>Аудио ({ext})</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="616" />
+        <location filename="../encode_page.py" line="677" />
         <source>Cannot write {path}: {detail}</source>
         <translation>{path} жазылмады: {detail}</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="625" />
+        <location filename="../encode_page.py" line="686" />
         <source>Text to encode</source>
         <translation>Кодталатын мәтін</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="626" />
+        <location filename="../encode_page.py" line="687" />
         <source>Morse code:</source>
         <translation>Морзе коды:</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="631" />
+        <location filename="../encode_page.py" line="692" />
         <source>Type text to see its Morse code.</source>
         <translation>Морзе кодын көру үшін мәтін теріңіз.</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="306" />
-        <location filename="../encode_page.py" line="632" />
+        <location filename="../encode_page.py" line="319" />
+        <location filename="../encode_page.py" line="693" />
         <source>English</source>
         <translation>Ағылшын</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="306" />
-        <location filename="../encode_page.py" line="633" />
+        <location filename="../encode_page.py" line="319" />
+        <location filename="../encode_page.py" line="694" />
         <source>Russian</source>
         <translation>Орыс</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="306" />
-        <location filename="../encode_page.py" line="633" />
+        <location filename="../encode_page.py" line="319" />
+        <location filename="../encode_page.py" line="694" />
         <source>Kazakh</source>
         <translation>Қазақ</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="308" />
+        <location filename="../encode_page.py" line="321" />
         <source>Detected alphabet: {name}</source>
         <translation>Анықталған әліпби: {name}</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="362" />
-        <location filename="../encode_page.py" line="496" />
+        <location filename="../encode_page.py" line="408" />
+        <location filename="../encode_page.py" line="550" />
         <source>Cannot encode {chars} — fix the text or switch alphabet before sending.</source>
         <translation>{chars} кодтау мүмкін емес — жіберер алдында мәтінді түзетіңіз немесе әліпбиді ауыстырыңыз.</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="405" />
+        <location filename="../encode_page.py" line="459" />
         <source>Length ≈ {t}</source>
         <translation>Ұзақтығы ≈ {t}</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="627" />
+        <location filename="../encode_page.py" line="688" />
         <source>The message appears here as signal-lamp marks.</source>
         <translation>Хабар осында сигнал шамдары түрінде көрінеді.</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="628" />
+        <location filename="../encode_page.py" line="689" />
         <source>Alphabet</source>
         <translation>Әліпби</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="628" />
+        <location filename="../encode_page.py" line="689" />
         <source>Timing</source>
         <translation>Тайминг</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="629" />
+        <location filename="../encode_page.py" line="690" />
         <source>Sound</source>
         <translation>Дыбыс</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="629" />
+        <location filename="../encode_page.py" line="690" />
         <source>File</source>
         <translation>Файл</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="632" />
+        <location filename="../encode_page.py" line="693" />
         <source>Auto</source>
         <translation>Авто</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="640" />
+        <location filename="../encode_page.py" line="701" />
         <source>Profile:</source>
         <translation>Профиль:</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="641" />
+        <location filename="../encode_page.py" line="702" />
         <source>Speed (WPM):</source>
         <translation>Жылдамдық (WPM):</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="642" />
+        <location filename="../encode_page.py" line="703" />
         <source>Farnsworth (WPM):</source>
         <translation>Фарнсворт (WPM):</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="643" />
+        <location filename="../encode_page.py" line="704" />
         <source>Weight:</source>
         <translation>Салмақ:</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="644" />
+        <location filename="../encode_page.py" line="705" />
         <source>Tone (Hz):</source>
         <translation>Тон (Гц):</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="645" />
+        <location filename="../encode_page.py" line="706" />
         <source>Add noise, SNR (dB):</source>
         <translation>Шу қосу, SNR (дБ):</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="646" />
+        <location filename="../encode_page.py" line="707" />
         <source>Format:</source>
         <translation>Пішім:</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="651" />
+        <location filename="../encode_page.py" line="712" />
         <source>Play</source>
         <translation>Ойнату</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="652" />
+        <location filename="../encode_page.py" line="713" />
         <source>Click a letter to play from there.</source>
         <translation>Сол жерден ойнату үшін әріпті басыңыз.</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="653" />
+        <location filename="../encode_page.py" line="714" />
         <source>The key presses in time with the sound when you press Play.</source>
         <translation>«Ойнату» басылғанда кілт дыбыспен бірге басылады.</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="656" />
+        <location filename="../encode_page.py" line="717" />
         <source>Stop</source>
         <translation>Тоқтату</translation>
     </message>
     <message>
-        <location filename="../encode_page.py" line="657" />
+        <location filename="../encode_page.py" line="718" />
         <source>Save…</source>
         <translation>Сақтау…</translation>
+    </message>
+    <message>
+        <location filename="../encode_page.py" line="719" />
+        <source>Playing — press Stop to edit the text.</source>
+        <translation>Ойнатылып жатыр — мәтінді өзгерту үшін «Тоқтату» батырмасын басыңыз.</translation>
     </message>
 </context>
 <context>
     <name>LivePage</name>
     <message>
-        <location filename="../live_page.py" line="203" />
+        <location filename="../live_page.py" line="253" />
         <source>No input device found. Plug in a sound card or check that PortAudio is installed.</source>
         <translation>Кіріс құрылғысы табылмады. Дыбыс картасын қосыңыз немесе PortAudio орнатылғанын тексеріңіз.</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="233" />
+        <location filename="../live_page.py" line="283" />
         <source>Hz</source>
         <translation>Гц</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="233" />
+        <location filename="../live_page.py" line="283" />
         <source>dB</source>
         <translation>дБ</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="233" />
+        <location filename="../live_page.py" line="283" />
         <source>WPM</source>
         <translation>WPM</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="233" />
+        <location filename="../live_page.py" line="283" />
         <source>s</source>
         <translation>с</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="238" />
-        <location filename="../live_page.py" line="369" />
+        <location filename="../live_page.py" line="288" />
+        <location filename="../live_page.py" line="419" />
         <source>English</source>
         <translation>Ағылшын</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="238" />
-        <location filename="../live_page.py" line="369" />
+        <location filename="../live_page.py" line="288" />
+        <location filename="../live_page.py" line="419" />
         <source>Russian</source>
         <translation>Орыс</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="238" />
-        <location filename="../live_page.py" line="370" />
+        <location filename="../live_page.py" line="288" />
+        <location filename="../live_page.py" line="420" />
         <source>Kazakh</source>
         <translation>Қазақ</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="247" />
+        <location filename="../live_page.py" line="297" />
         <source>WPM {v:.1f}</source>
         <translation>Сөз/мин {v:.1f}</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="249" />
+        <location filename="../live_page.py" line="299" />
         <source>Tone {v:.0f} Hz</source>
         <translation>Тон {v:.0f} Гц</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="251" />
+        <location filename="../live_page.py" line="301" />
         <source>SNR {v:.1f} dB</source>
         <translation>СШҚ {v:.1f} дБ</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="254" />
+        <location filename="../live_page.py" line="304" />
         <source>Alphabet: {v}</source>
         <translation>Әліпби: {v}</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="255" />
+        <location filename="../live_page.py" line="305" />
         <source>{v:.0f} s heard</source>
         <translation>{v:.0f} с қабылданды</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="277" />
-        <source>Listening failed: {detail}</source>
-        <translation>Тыңдау сәтсіз аяқталды: {detail}</translation>
-    </message>
-    <message>
-        <location filename="../live_page.py" line="337" />
+        <location filename="../live_page.py" line="387" />
         <source>Only clicks were heard, no Morse tone. If this is a telegraph key or sounder: MorseDesk decodes Morse sent as a tone (radio CW); key clicks cannot be decoded yet.</source>
         <translation>Тек шыртыл естіледі, Морзе тоны жоқ. Егер бұл телеграф кілті немесе клопфер болса: MorseDesk тонмен берілген Морзені (радио CW) декодтайды; кілт шыртылын әзірге декодтай алмайды.</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="364" />
+        <location filename="../live_page.py" line="414" />
         <source>Input:</source>
         <translation>Кіріс:</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="365" />
+        <location filename="../live_page.py" line="415" />
         <source>Alphabet:</source>
         <translation>Әліпби:</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="367" />
+        <location filename="../live_page.py" line="417" />
         <source>Auto detects the alphabet from the message itself</source>
         <translation>«Авто» әліпбиді хабардың өзінен анықтайды</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="368" />
+        <location filename="../live_page.py" line="418" />
         <source>Refresh</source>
         <translation>Жаңарту</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="369" />
+        <location filename="../live_page.py" line="419" />
         <source>Auto</source>
         <translation>Авто</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="373" />
+        <location filename="../live_page.py" line="423" />
         <source>Look for newly plugged devices</source>
         <translation>Жаңа қосылған құрылғыларды іздеу</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="374" />
+        <location filename="../live_page.py" line="424" />
         <source>Stop</source>
         <translation>Тоқтату</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="374" />
+        <location filename="../live_page.py" line="424" />
         <source>Listen</source>
         <translation>Тыңдау</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="375" />
+        <location filename="../live_page.py" line="425" />
         <source>Input level</source>
         <translation>Кіріс сигналының деңгейі</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="376" />
+        <location filename="../live_page.py" line="426" />
         <source>Level</source>
         <translation>Деңгей</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="377" />
+        <location filename="../live_page.py" line="427" />
         <source>Alphabet</source>
         <translation>Әліпби</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="378" />
+        <location filename="../live_page.py" line="428" />
         <source>Tone</source>
         <translation>Тон</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="379" />
+        <location filename="../live_page.py" line="429" />
         <source>Speed</source>
         <translation>Жылдамдық</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="380" />
+        <location filename="../live_page.py" line="430" />
         <source>SNR</source>
         <translation>SNR</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="381" />
+        <location filename="../live_page.py" line="431" />
         <source>Heard</source>
         <translation>Тыңдалды</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="382" />
+        <location filename="../live_page.py" line="432" />
         <source>Signal</source>
         <translation>Сигнал</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="383" />
+        <location filename="../live_page.py" line="433" />
         <source>Press Listen to see the band live in 3D.</source>
         <translation>Жолақты нақты уақытта 3D түрінде көру үшін «Тыңдау» батырмасын басыңыз.</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="384" />
+        <location filename="../live_page.py" line="434" />
         <source>Press Listen to see the band live.</source>
         <translation>Жолақты нақты уақытта көру үшін «Тыңдау» батырмасын басыңыз.</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="386" />
+        <location filename="../live_page.py" line="436" />
         <source>Grey words may still change. Underlined words are uncertain; point at any word for details.</source>
         <translation>Сұр сөздер әлі өзгеруі мүмкін. Асты сызылған сөздер күмәнді; толығырақ білу үшін сөзге меңзерді апарыңыз.</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="390" />
+        <location filename="../live_page.py" line="440" />
         <source>Copy the decoded text</source>
         <translation>Декодталған мәтінді көшіру</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="391" />
+        <location filename="../live_page.py" line="441" />
         <source>Copy</source>
         <translation>Көшіру</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="392" />
+        <location filename="../live_page.py" line="442" />
         <source>Clear the text and start over</source>
         <translation>Мәтінді тазалап, қайта бастау</translation>
     </message>
     <message>
-        <location filename="../live_page.py" line="393" />
+        <location filename="../live_page.py" line="443" />
         <source>Clear</source>
         <translation>Тазалау</translation>
     </message>
@@ -650,42 +678,42 @@
 <context>
     <name>MainWindow</name>
     <message>
-        <location filename="../main_window.py" line="148" />
+        <location filename="../main_window.py" line="174" />
         <source>MorseDesk</source>
         <translation>MorseDesk</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="149" />
+        <location filename="../main_window.py" line="175" />
         <source>UI language:</source>
         <translation>Интерфейс тілі:</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="154" />
+        <location filename="../main_window.py" line="180" />
         <source>Decode</source>
         <translation>Декодтау</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="156" />
+        <location filename="../main_window.py" line="182" />
         <source>Listen</source>
         <translation>Тыңдау</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="158" />
+        <location filename="../main_window.py" line="184" />
         <source>Encode</source>
         <translation>Кодтау</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="160" />
+        <location filename="../main_window.py" line="186" />
         <source>About</source>
         <translation>Бағдарлама туралы</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="162" />
+        <location filename="../main_window.py" line="188" />
         <source>Settings</source>
         <translation>Параметрлер</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="201" />
+        <location filename="../main_window.py" line="229" />
         <source>Finishing the current decode; the window will close right after.</source>
         <translation>Ағымдағы декодтау аяқталуда; содан кейін терезе жабылады.</translation>
     </message>
@@ -693,59 +721,59 @@
 <context>
     <name>PlayerBar</name>
     <message>
-        <location filename="../widgets/player_bar.py" line="266" />
-        <location filename="../widgets/player_bar.py" line="267" />
+        <location filename="../widgets/player_bar.py" line="288" />
+        <location filename="../widgets/player_bar.py" line="289" />
         <source>Unmute</source>
         <translation>Дыбысты қосу</translation>
     </message>
     <message>
-        <location filename="../widgets/player_bar.py" line="266" />
-        <location filename="../widgets/player_bar.py" line="267" />
+        <location filename="../widgets/player_bar.py" line="288" />
+        <location filename="../widgets/player_bar.py" line="289" />
         <source>Mute</source>
         <translation>Дыбысты өшіру</translation>
     </message>
     <message>
-        <location filename="../widgets/player_bar.py" line="268" />
+        <location filename="../widgets/player_bar.py" line="290" />
         <source>Volume: {v} %</source>
         <translation>Дыбыс деңгейі: {v} %</translation>
     </message>
     <message>
-        <location filename="../widgets/player_bar.py" line="269" />
+        <location filename="../widgets/player_bar.py" line="291" />
         <source>Volume</source>
         <translation>Дыбыс деңгейі</translation>
     </message>
     <message>
-        <location filename="../widgets/player_bar.py" line="304" />
+        <location filename="../widgets/player_bar.py" line="341" />
         <source>Pause</source>
         <translation>Кідірту</translation>
     </message>
     <message>
-        <location filename="../widgets/player_bar.py" line="304" />
+        <location filename="../widgets/player_bar.py" line="341" />
         <source>Play</source>
         <translation>Ойнату</translation>
     </message>
     <message>
-        <location filename="../widgets/player_bar.py" line="306" />
+        <location filename="../widgets/player_bar.py" line="344" />
         <source>Pause playback</source>
         <translation>Ойнатуды кідірту</translation>
     </message>
     <message>
-        <location filename="../widgets/player_bar.py" line="306" />
+        <location filename="../widgets/player_bar.py" line="344" />
         <source>Listen to the decoded audio</source>
         <translation>Декодталған дыбысты тыңдау</translation>
     </message>
     <message>
-        <location filename="../widgets/player_bar.py" line="307" />
+        <location filename="../widgets/player_bar.py" line="345" />
         <source>Drag to jump to a moment</source>
         <translation>Белгілі бір сәтке өту үшін сүйреңіз</translation>
     </message>
     <message>
-        <location filename="../widgets/player_bar.py" line="308" />
+        <location filename="../widgets/player_bar.py" line="346" />
         <source>Playback speed (the pitch stays the same)</source>
         <translation>Ойнату жылдамдығы (дыбыс биіктігі өзгермейді)</translation>
     </message>
     <message>
-        <location filename="../widgets/player_bar.py" line="309" />
+        <location filename="../widgets/player_bar.py" line="347" />
         <source>Playback speed</source>
         <translation>Ойнату жылдамдығы</translation>
     </message>
@@ -783,78 +811,78 @@
         <translation>Журнал файлы: {path}</translation>
     </message>
     <message>
-        <location filename="../settings_page.py" line="129" />
+        <location filename="../settings_page.py" line="127" />
         <source>version {v}</source>
         <translation>{v} нұсқасы</translation>
     </message>
     <message>
-        <location filename="../settings_page.py" line="131" />
+        <location filename="../settings_page.py" line="129" />
         <source>{n} parameters</source>
         <translation>{n} параметр</translation>
     </message>
     <message>
-        <location filename="../settings_page.py" line="133" />
+        <location filename="../settings_page.py" line="131" />
         <source>Decoding engine</source>
         <translation>Декодтау қозғалтқышы</translation>
     </message>
     <message>
-        <location filename="../settings_page.py" line="134" />
+        <location filename="../settings_page.py" line="132" />
         <source>Acoustic model</source>
         <translation>Акустикалық модель</translation>
     </message>
     <message>
-        <location filename="../settings_page.py" line="135" />
+        <location filename="../settings_page.py" line="133" />
         <source>Language models</source>
         <translation>Тілдік модельдер</translation>
     </message>
     <message>
-        <location filename="../settings_page.py" line="135" />
-        <location filename="../settings_page.py" line="138" />
+        <location filename="../settings_page.py" line="133" />
+        <location filename="../settings_page.py" line="136" />
         <source>none found</source>
         <translation>табылмады</translation>
     </message>
     <message>
-        <location filename="../settings_page.py" line="136" />
+        <location filename="../settings_page.py" line="134" />
         <source>MP3 export</source>
         <translation>MP3 экспорты</translation>
     </message>
     <message>
-        <location filename="../settings_page.py" line="137" />
+        <location filename="../settings_page.py" line="135" />
         <source>Formats written directly</source>
         <translation>Тікелей жазылатын пішімдер</translation>
     </message>
     <message>
-        <location filename="../settings_page.py" line="138" />
+        <location filename="../settings_page.py" line="136" />
         <source>Sound inputs</source>
         <translation>Дыбыс кірістері</translation>
     </message>
     <message>
-        <location filename="../settings_page.py" line="139" />
+        <location filename="../settings_page.py" line="137" />
         <source>Log file</source>
         <translation>Журнал файлы</translation>
     </message>
     <message>
-        <location filename="../settings_page.py" line="144" />
+        <location filename="../settings_page.py" line="142" />
         <source>Neural network (ONNX) with the classic DSP decoder</source>
         <translation>Нейрондық желі (ONNX) және классикалық DSP декодері</translation>
     </message>
     <message>
-        <location filename="../settings_page.py" line="145" />
+        <location filename="../settings_page.py" line="143" />
         <source>Classic DSP decoder only</source>
         <translation>Тек классикалық DSP декодері</translation>
     </message>
     <message>
-        <location filename="../settings_page.py" line="156" />
+        <location filename="../settings_page.py" line="154" />
         <source>This computer</source>
         <translation>Осы компьютер</translation>
     </message>
     <message>
-        <location filename="../settings_page.py" line="160" />
+        <location filename="../settings_page.py" line="158" />
         <source>Open log folder</source>
         <translation>Журнал қалтасын ашу</translation>
     </message>
     <message>
-        <location filename="../settings_page.py" line="161" />
+        <location filename="../settings_page.py" line="159" />
         <source>Copy report</source>
         <translation>Есепті көшіру</translation>
     </message>
@@ -1062,62 +1090,62 @@
 <context>
     <name>WordView</name>
     <message>
-        <location filename="../widgets/word_view.py" line="343" />
+        <location filename="../widgets/word_view.py" line="386" />
         <source>high</source>
         <translation>жоғары</translation>
     </message>
     <message>
-        <location filename="../widgets/word_view.py" line="344" />
+        <location filename="../widgets/word_view.py" line="387" />
         <source>No underline: the decoder was sure of every letter in this word.</source>
         <translation>Асты сызылмаған: декодер бұл сөздің әр әрпіне сенімді болды.</translation>
     </message>
     <message>
-        <location filename="../widgets/word_view.py" line="346" />
+        <location filename="../widgets/word_view.py" line="389" />
         <source>medium</source>
         <translation>орташа</translation>
     </message>
     <message>
-        <location filename="../widgets/word_view.py" line="347" />
+        <location filename="../widgets/word_view.py" line="390" />
         <source>Yellow underline: the decoder was only fairly sure of some letters in this word.</source>
         <translation>Сары сызық: декодер бұл сөздің кейбір әріптеріне тек ішінара сенімді болды.</translation>
     </message>
     <message>
-        <location filename="../widgets/word_view.py" line="350" />
+        <location filename="../widgets/word_view.py" line="393" />
         <source>low</source>
         <translation>төмен</translation>
     </message>
     <message>
-        <location filename="../widgets/word_view.py" line="351" />
+        <location filename="../widgets/word_view.py" line="394" />
         <source>Red underline: the decoder was unsure of this word. Check it by ear.</source>
         <translation>Қызыл сызық: декодер бұл сөзге сенімді емес. Оны құлақпен тексеріңіз.</translation>
     </message>
     <message>
-        <location filename="../widgets/word_view.py" line="353" />
+        <location filename="../widgets/word_view.py" line="396" />
         <source>Confidence {value} ({level})</source>
         <translation>Сенімділік {value} ({level})</translation>
     </message>
     <message>
-        <location filename="../widgets/word_view.py" line="359" />
+        <location filename="../widgets/word_view.py" line="402" />
         <source>In our tests, words at this level were right about {percent} % of the time.</source>
         <translation>Біздің өлшеулерімізде осы деңгейдегі сөздер шамамен {percent} % жағдайда дұрыс болды.</translation>
     </message>
     <message>
-        <location filename="../widgets/word_view.py" line="363" />
+        <location filename="../widgets/word_view.py" line="406" />
         <source>Grey: not final yet. It may still change as more audio arrives.</source>
         <translation>Сұр: әлі түпкілікті емес. Дыбыс келген сайын өзгеруі мүмкін.</translation>
     </message>
     <message>
-        <location filename="../widgets/word_view.py" line="364" />
+        <location filename="../widgets/word_view.py" line="407" />
         <source>{start}–{end} s</source>
         <translation>{start}–{end} с</translation>
     </message>
     <message>
-        <location filename="../widgets/word_view.py" line="482" />
+        <location filename="../widgets/word_view.py" line="525" />
         <source>Words appear here as they are heard.</source>
         <translation>Сөздер қабылданған сайын осында шығады.</translation>
     </message>
     <message>
-        <location filename="../widgets/word_view.py" line="483" />
+        <location filename="../widgets/word_view.py" line="526" />
         <source>Open an audio file to decode.</source>
         <translation>Декодтау үшін аудиофайлды ашыңыз.</translation>
     </message>

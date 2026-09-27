@@ -194,7 +194,12 @@
     "Drag or scroll to move, click to listen from there": "Тяните или прокручивайте, чтобы перемещаться; щёлкните, чтобы слушать отсюда",
     "Drag or scroll to look back; click to replay after you stop": "Тяните или прокручивайте, чтобы вернуться назад; после остановки щелчок проигрывает запись",
     "Open or drop an audio file to see its spectrogram.": "Откройте или перетащите аудиофайл, чтобы увидеть его спектрограмму.",
-    "Press Listen to see the band live.": "Нажмите «Слушать», чтобы видеть диапазон в реальном времени."
+    "Press Listen to see the band live.": "Нажмите «Слушать», чтобы видеть диапазон в реальном времени.",
+    "Cannot play the audio: {detail}": "Не удалось воспроизвести звук: {detail}",
+    "Listening is on. Stop listening before playing: the microphone would pick up the speaker.": "Идёт приём. Остановите приём перед воспроизведением: микрофон уловит звук из динамика.",
+    "Playing — press Stop to edit the text.": "Идёт воспроизведение — нажмите «Стоп», чтобы изменить текст.",
+    "The sound device is not responding (the system audio service or the sound driver is stuck). Playback and listening are paused; everything else keeps working. If sound does not come back within a minute or two, restart the computer.": "Звуковое устройство не отвечает (зависла системная аудиослужба или звуковой драйвер). Воспроизведение и приём приостановлены; всё остальное работает. Если звук не вернётся через минуту-две, перезагрузите компьютер.",
+    "No sound output on this computer: check that a sound card is present and that PortAudio (libportaudio2) is installed. Decoding files still works.": "На этом компьютере нет вывода звука: проверьте, что звуковая карта есть и PortAudio (libportaudio2) установлен. Декодирование файлов работает."
   },
   "kk": {
     "MorseDesk": "MorseDesk",
@@ -391,6 +396,11 @@
     "Drag or scroll to move, click to listen from there": "Жылжу үшін сүйреңіз не айналдырыңыз; сол жерден тыңдау үшін басыңыз",
     "Drag or scroll to look back; click to replay after you stop": "Артқа қарау үшін сүйреңіз не айналдырыңыз; тоқтатқаннан кейін басып, қайта тыңдаңыз",
     "Open or drop an audio file to see its spectrogram.": "Спектрограммасын көру үшін аудиофайлды ашыңыз немесе осында сүйреңіз.",
-    "Press Listen to see the band live.": "Жолақты нақты уақытта көру үшін «Тыңдау» батырмасын басыңыз."
+    "Press Listen to see the band live.": "Жолақты нақты уақытта көру үшін «Тыңдау» батырмасын басыңыз.",
+    "Cannot play the audio: {detail}": "Дыбысты ойнату мүмкін болмады: {detail}",
+    "Listening is on. Stop listening before playing: the microphone would pick up the speaker.": "Тыңдау жүріп жатыр. Ойнатпас бұрын тыңдауды тоқтатыңыз: микрофон динамиктің дыбысын қабылдап алады.",
+    "Playing — press Stop to edit the text.": "Ойнатылып жатыр — мәтінді өзгерту үшін «Тоқтату» батырмасын басыңыз.",
+    "The sound device is not responding (the system audio service or the sound driver is stuck). Playback and listening are paused; everything else keeps working. If sound does not come back within a minute or two, restart the computer.": "Дыбыс құрылғысы жауап бермей тұр (жүйенің аудио қызметі немесе дыбыс драйвері қатып қалды). Ойнату мен тыңдау тоқтатылды; қалғанның бәрі жұмыс істейді. Дыбыс бір-екі минутта қалпына келмесе, компьютерді қайта іске қосыңыз.",
+    "No sound output on this computer: check that a sound card is present and that PortAudio (libportaudio2) is installed. Decoding files still works.": "Бұл компьютерде дыбыс шығысы жоқ: дыбыс картасы бар екенін және PortAudio (libportaudio2) орнатылғанын тексеріңіз. Файлдарды декодтау жұмыс істейді."
   }
 }

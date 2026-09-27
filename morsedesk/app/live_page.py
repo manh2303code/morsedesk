@@ -20,7 +20,10 @@ khung bám con trỏ phát y như trang Giải mã.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, Qt
+import logging
+from concurrent.futures import Future
+
+from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QComboBox,
@@ -34,6 +37,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from morsedesk.app.audio_text import AudioText
 from morsedesk.app.live_worker import LiveWorker, input_devices
 from morsedesk.app.theme import NIGHT, mark_primary
 from morsedesk.app.widgets.banner import Banner
@@ -43,12 +47,15 @@ from morsedesk.app.widgets.signal_columns import LiveColumns
 from morsedesk.app.widgets.signal_panel import SignalPanel
 from morsedesk.app.widgets.stats_bar import Readout
 from morsedesk.app.widgets.word_view import TENTATIVE_TEXT, WordView
+from morsedesk.audio.engine import default_engine
 from morsedesk.constants import SAMPLE_RATE
 from morsedesk.warnings import WarningCode
 
 # Cùng danh sách với trang Giải mã. `auto` đứng đầu và là mặc định: bắt người dùng chọn bảng mã
 # trước khi nghe là bắt họ đoán thứ mà chính bản tin sẽ nói ra.
 PROFILE_CHOICES = ("auto", "en", "ru", "kk-cyrl-ru")
+log = logging.getLogger(__name__)
+DEVICES_POLL_MS = 150       # chờ danh sách micro từ luồng thiết bị
 
 # Xám đủ nhạt để thấy ngay là "chưa chắc", vẫn đủ đậm để đọc trên nền đêm (5,1:1).
 TENTATIVE_COLOR = TENTATIVE_TEXT
@@ -69,6 +76,11 @@ class LivePage(QWidget):
         self._listening = False
         self._rec_start = 0.0           # giây (kể từ lúc bấm Nghe) của mẫu đầu trong thanh phát
         self.columns = LiveColumns(LIVE_KEEP_S)
+        self._pending_devices: tuple[Future, object] | None = None
+        self._audio_text = AudioText(self)
+        self._devices_timer = QTimer(self)
+        self._devices_timer.setInterval(DEVICES_POLL_MS)
+        self._devices_timer.timeout.connect(self._poll_devices)
 
         self.device_label = QLabel(self)
         self.device_combo = QComboBox(self)
@@ -167,7 +179,7 @@ class LivePage(QWidget):
         lay.addWidget(self.player)
 
         self.listen_button.clicked.connect(self._on_listen_clicked)
-        self.refresh_button.clicked.connect(self.refresh_devices)
+        self.refresh_button.clicked.connect(self._on_refresh)
         self.copy_button.clicked.connect(self._copy)
         self.clear_button.clicked.connect(self.clear)
         self.signal_panel.seek_requested.connect(self._go_to)
@@ -185,11 +197,49 @@ class LivePage(QWidget):
         self.retranslate()
 
     # ---- thiết bị ----
+    def _on_refresh(self) -> None:
+        """Nút Làm mới: PortAudio chỉ liệt kê thiết bị lúc khởi tạo, nên phải khởi tạo lại mới thấy
+        tai nghe vừa cắm (trước 27/09 nút này chỉ đọc lại danh sách cũ)."""
+        default_engine().rescan()
+        self.refresh_devices()
+
     def refresh_devices(self) -> None:
-        """Nạp lại danh sách mic. Cần nút bấm vì người dùng hay cắm tai nghe SAU khi mở app."""
+        """Nạp lại danh sách mic. Cần nút bấm vì người dùng hay cắm tai nghe SAU khi mở app.
+
+        Liệt kê chạy ở luồng thiết bị; trang chờ bằng timer, không bao giờ chặn giao diện.
+        """
         current = self.device_combo.currentData()
+        result = input_devices()
+        if isinstance(result, Future):
+            self._pending_devices = (result, current)
+            self.device_combo.setEnabled(False)
+            self.listen_button.setEnabled(False)
+            self.refresh_button.setEnabled(False)
+            self._devices_timer.start()
+            self._poll_devices()            # bản inline (test) đã có kết quả ngay
+            return
+        self._fill_devices(list(result), current)
+
+    def _poll_devices(self) -> None:
+        pending = self._pending_devices
+        if pending is None:
+            self._devices_timer.stop()
+            return
+        fut, current = pending
+        if not fut.done():
+            return                          # driver kẹt: MainWindow đã hiện banner "không phản hồi"
+        self._pending_devices = None
+        self._devices_timer.stop()
+        self.refresh_button.setEnabled(not self._listening)
+        try:
+            devices = list(fut.result())
+        except Exception as e:
+            log.warning("listing input devices failed: %s", e)
+            devices = []
+        self._fill_devices(devices, current)
+
+    def _fill_devices(self, devices: list[tuple[int, str]], current) -> None:
         self.device_combo.clear()
-        devices = input_devices()
         for index, name in devices:
             self.device_combo.addItem(name, index)
         if current is not None:
@@ -274,7 +324,7 @@ class LivePage(QWidget):
         self.retranslate()
 
     def on_failed(self, message: str) -> None:
-        self.banner.show_warning(self.tr("Listening failed: {detail}").format(detail=message))
+        self.banner.show_warning(self._audio_text.capture(message))
         self.listen_button.setChecked(False)
 
     # ---- xem lại / nghe lại ----

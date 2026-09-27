@@ -94,10 +94,27 @@ class _Canvas(QWidget):
         font.setPointSize(FONT_PT)
         font.setWeight(QFont.Weight.DemiBold)
         self.setFont(font)
-        self.rects: list[QRect] = []
+        self.rects: list[QRect] = []          # khung từng từ (từ bị ngắt dòng: mảnh ĐẦU)
+        # Từ dài hơn cả một dòng (dãy số liền không dấu cách) ngắt ở ranh giới ký tự: chỉ số từ ->
+        # các mảnh (khung, chữ). Trước 27/09 phần đuôi vẽ ra ngoài mép phải và mất hẳn.
+        self.pieces: dict[int, list[tuple[QRect, str]]] = {}
         self.line_tops: list[int] = []        # y của từng dòng, tăng dần
         self.line_first: list[int] = []       # chỉ số từ đầu tiên của từng dòng
         self.hover = -1
+
+    @staticmethod
+    def _split(text: str, fm: QFontMetrics, budget: int) -> list[str]:
+        """Cắt `text` thành các mảnh rộng không quá `budget` px (ít nhất một ký tự mỗi mảnh)."""
+        parts, cur, cur_w = [], "", 0
+        for ch in text:
+            cw = fm.horizontalAdvance(ch)
+            if cur and cur_w + cw > budget:
+                parts.append(cur)
+                cur, cur_w = "", 0
+            cur += ch
+            cur_w += cw
+        parts.append(cur)
+        return parts
 
     def relayout(self, width: int) -> int:
         """Xếp chữ cho bề rộng `width`; trả chiều cao cần có."""
@@ -105,6 +122,7 @@ class _Canvas(QWidget):
         h = fm.height() + PAD_TOP + PAD_BOTTOM
         x, y = MARGIN_X, MARGIN_Y
         rects: list[QRect] = []
+        pieces: dict[int, list[tuple[QRect, str]]] = {}
         tops: list[int] = [] if not self.view._words else [MARGIN_Y]
         first: list[int] = [] if not self.view._words else [0]
         right = max(width - 8, MARGIN_X + 1)
@@ -114,12 +132,39 @@ class _Canvas(QWidget):
                 x, y = MARGIN_X, y + h + GAP_Y
                 tops.append(y)
                 first.append(i)
+            if x + ww > right and len(w.text) > 1:
+                # Chừa vài px: tổng độ rộng từng ký tự lệch chút so với cả chuỗi (kerning).
+                parts = self._split(w.text, fm, right - x - 2 * PAD_X - 4)
+                frags = []
+                for k, part in enumerate(parts):
+                    if k:
+                        x, y = MARGIN_X, y + h + GAP_Y
+                        tops.append(y)
+                        first.append(i)
+                    pw = fm.horizontalAdvance(part) + 2 * PAD_X
+                    frags.append((QRect(x, y, pw, h), part))
+                    x += pw
+                pieces[i] = frags
+                rects.append(frags[0][0])
+                x += GAP_X
+                continue
             rects.append(QRect(x, y, ww, h))
             x += ww + GAP_X
-        self.rects, self.line_tops, self.line_first = rects, tops, first
+        self.rects, self.pieces, self.line_tops, self.line_first = rects, pieces, tops, first
         if not rects:
             return MARGIN_Y * 2 + h
         return y + h + MARGIN_Y
+
+    def word_pieces(self, i: int) -> list[tuple[QRect, str]]:
+        """Các mảnh (khung, chữ) của từ `i`: một mảnh, trừ từ dài bị ngắt dòng."""
+        return self.pieces.get(i) or [(self.rects[i], self.view._words[i].text)]
+
+    def bounds(self, i: int) -> QRect:
+        """Khung bao mọi mảnh của từ `i` (để vẽ lại khi rê chuột/đổi từ đang phát)."""
+        r = QRect(self.rects[i])
+        for piece, _ in self.pieces.get(i, ()):
+            r = r.united(piece)
+        return r
 
     def index_at(self, pos) -> int:
         if not self.rects:
@@ -128,9 +173,10 @@ class _Canvas(QWidget):
         if line < 0:
             return -1
         lo = self.line_first[line]
-        hi = self.line_first[line + 1] if line + 1 < len(self.line_first) else len(self.rects)
-        for i in range(lo, hi):
-            if self.rects[i].contains(pos):
+        # +1: từ đầu dòng SAU có thể bắt đầu (mảnh đầu) ngay trên dòng này.
+        hi = self.line_first[line + 1] + 1 if line + 1 < len(self.line_first) else len(self.rects)
+        for i in range(lo, min(hi, len(self.rects))):
+            if any(r.contains(pos) for r, _ in self.word_pieces(i)):
                 return i
         return -1
 
@@ -154,33 +200,30 @@ class _Canvas(QWidget):
         active = view._active_index
         playing = active is not None
         for i in range(start, len(self.rects)):
-            r = self.rects[i]
-            if r.top() > clip.bottom():
+            if self.rects[i].top() > clip.bottom():
                 break
             w = view._words[i]
             if i == active:
-                p.setPen(Qt.PenStyle.NoPen)
-                p.setBrush(QColor(ACTIVE_BG))
-                p.drawRoundedRect(QRectF(r), 6, 6)
                 color = ACTIVE_TEXT
             else:
-                if i == self.hover:
-                    p.setPen(Qt.PenStyle.NoPen)
-                    p.setBrush(QColor(HOVER_BG))
-                    p.drawRoundedRect(QRectF(r), 6, 6)
                 color = UPCOMING_COLOR if playing and i > active else TEXT_COLOR
             if view.is_tentative(i) and i != active:
                 color = TENTATIVE_TEXT
             under = confidence_color(w.confidence)
-            if under != COLOR_GOOD and i != active:
-                pen = QPen(QColor(under), 3)
-                pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-                p.setPen(pen)
-                yb = r.bottom() - 2
-                p.drawLine(r.left() + PAD_X - 1, yb, r.right() - PAD_X + 1, yb)
-            p.setPen(QColor(color))
-            p.drawText(r.adjusted(PAD_X, PAD_TOP, -PAD_X, -PAD_BOTTOM),
-                       Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, w.text)
+            for r, text in self.word_pieces(i):
+                if i == active or i == self.hover:
+                    p.setPen(Qt.PenStyle.NoPen)
+                    p.setBrush(QColor(ACTIVE_BG if i == active else HOVER_BG))
+                    p.drawRoundedRect(QRectF(r), 6, 6)
+                if under != COLOR_GOOD and i != active:
+                    pen = QPen(QColor(under), 3)
+                    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+                    p.setPen(pen)
+                    yb = r.bottom() - 2
+                    p.drawLine(r.left() + PAD_X - 1, yb, r.right() - PAD_X + 1, yb)
+                p.setPen(QColor(color))
+                p.drawText(r.adjusted(PAD_X, PAD_TOP, -PAD_X, -PAD_BOTTOM),
+                           Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, text)
         p.end()
 
     def mouseMoveEvent(self, event) -> None:
@@ -189,13 +232,13 @@ class _Canvas(QWidget):
             old, self.hover = self.hover, i
             for k in (old, i):
                 if 0 <= k < len(self.rects):
-                    self.update(self.rects[k].adjusted(-2, -2, 2, 2))
+                    self.update(self.bounds(k).adjusted(-2, -2, 2, 2))
             self.setCursor(Qt.CursorShape.PointingHandCursor if i >= 0 else Qt.CursorShape.ArrowCursor)
         super().mouseMoveEvent(event)
 
     def leaveEvent(self, event) -> None:
         if 0 <= self.hover < len(self.rects):
-            self.update(self.rects[self.hover].adjusted(-2, -2, 2, 2))
+            self.update(self.bounds(self.hover).adjusted(-2, -2, 2, 2))
         self.hover = -1
         super().leaveEvent(event)
 
@@ -210,7 +253,7 @@ class _Canvas(QWidget):
         if event.type() == QEvent.Type.ToolTip:
             i = self.index_at(event.pos())
             if i >= 0:
-                QToolTip.showText(event.globalPos(), self.view.tooltip_for(i), self, self.rects[i])
+                QToolTip.showText(event.globalPos(), self.view.tooltip_for(i), self, self.bounds(i))
             else:
                 QToolTip.hideText()
                 event.ignore()
@@ -415,7 +458,7 @@ class WordView(QScrollArea):
         else:
             for k in (old, i):
                 if 0 <= k < len(self._canvas.rects):
-                    self._canvas.update(self._canvas.rects[k].adjusted(-2, -2, 2, 2))
+                    self._canvas.update(self._canvas.bounds(k).adjusted(-2, -2, 2, 2))
         if i >= 0:
             self._follow(i)
 

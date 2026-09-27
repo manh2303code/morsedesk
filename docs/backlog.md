@@ -57,6 +57,18 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
 23. **T4 Fedyai: bản chép ghi `.` ở cuối bài, âm thanh là `<SK>`** (ảnh đường bao 27/09) — app nay đọc đúng
     nên T4 "xấu" 1,25 -> 1,30 %. Sửa bản chép khi soát lại T4.
 
+24. **Kiểm lại âm thanh THẬT sau khi khởi động lại máy dev** (27/09 tối): audiodg.exe kẹt trong driver
+    (1 luồng, AppHangXProcB1 x3) — mọi lời gọi PortAudio treo tới khi khởi động lại. Bản sửa luồng thiết bị
+    đã chứng minh trên CHÍNH tình trạng kẹt đó (giao diện hở tối đa 32 ms, thoát cứng) nhưng CHƯA nghe tiếng
+    thật: chạy `scratchpad/scenario.py`-kiểu (Phát -> Nghe -> dừng -> phát trang Giải mã) với loa + micro
+    thật, và thử xem mở micro lúc loa đang phát có còn làm treo driver không khi app không bao giờ mở hai
+    thứ cùng lúc. Gợi ý nếu còn treo: tắt hiệu ứng micro (Realtek Audio Console / AEC), driver Intel SST
+    20.40.11880.2 (02/2025).
+25. **Linux: PortAudio mới (Ubuntu 26.04, 19.7+git) có host API PulseAudio: không kết nối được máy chủ Pulse
+    thì `Pa_Initialize` hỏng HẲN** ("PulseAudio_Initialize: Can't connect to server"). AppImage mang bản 19.6
+    chỉ-ALSA của Ubuntu 22.04 nên không dính, nhưng đừng nâng ảnh dựng mà không thử máy không có Pulse.
+    App báo "không có âm thanh" (AudioUnavailable), không sập.
+
 ## Đang mở — trung bình
 
 5. **Model âm học: hướng tiếp theo (P2–P7 trong .superpowers/sdd/research-acoustic-2026-09-24.md).**
@@ -109,6 +121,16 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
 
 ## Đã xong (phiên 24/09)
 
+- **App đơ khi đang phát rồi bấm Nghe; từ dài tràn mép; gõ lúc đang phát mất khung sáng** (27/09 tối, người
+  dùng). Dựng lại trên máy dev: mở micro lúc loa đang phát làm audiodg/Audiosrv của Windows treo (nhật ký
+  AppHangXProcB1); PortAudio còn cấm gọi từ nhiều luồng (UI đóng loa trong lúc luồng nghe mở micro = tranh
+  chấp danh sách stream toàn cục). Sửa: audio/engine.py — MỘT luồng thiết bị giữ mọi lời gọi PortAudio, lệnh
+  có hạn giờ, kẹt thì banner + từ chối nhanh, độc quyền phát/thu (Nghe dừng mọi tiếng; đang nghe thì không
+  phát), vị trí phát tính từ đồng hồ ghi trong callback (không `stream.time`), stream phát hết được đóng,
+  liệt kê micro không chặn, nút Làm mới dò lại thiết bị thật, thoát có hạn giờ rồi TerminateProcess.
+  Băng Morse và khung chữ ngắt từ dài hơn một dòng (dấu nối); trang Tạo mã khóa văn bản + thông số khi
+  đang phát. Kiểm: Windows với âm thanh KẸT THẬT và Linux (WSL: không PortAudio / PortAudio 19.6 ALSA null /
+  PulseAudio treo) — giao diện không đơ lần nào, thoát được; bộ test đầy đủ xanh trên Windows và Linux.
 - **Bộ test chuẩn cho số + đối chiếu nhịp phím** (27/09 chiều, người dùng: "thuật toán tối ưu tuyệt đối,
   bộ test mọi edgecase, file tải về, LLM as judge"): docs/research/05-numbers.md.
   - tools/numeric_edge_bench.py (122 ca, must/hard/ambiguous); T6 = 8 file tải về, đáp án do 2 giám khảo

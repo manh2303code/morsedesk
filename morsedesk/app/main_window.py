@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication, QEvent, QSize, QTranslator
+from PySide6.QtCore import QCoreApplication, QEvent, QSize, QTimer, QTranslator
 from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from morsedesk.app.about_page import AboutPage
+from morsedesk.app.audio_text import AudioText
 from morsedesk.app.branding import app_icon
 from morsedesk.app.decode_page import DecodePage
 from morsedesk.app.doc_window import TechDocWindow
@@ -26,11 +27,13 @@ from morsedesk.app.settings_page import SettingsPage
 from morsedesk.app.widgets.banner import Banner
 from morsedesk.app.widgets.flags import LanguageBar
 from morsedesk.app.worker import DecoderWorker, Player
+from morsedesk.audio.engine import default_engine
 
 # Tên hiển thị ngôn ngữ giao diện, viết bằng chính ngôn ngữ đó. KHÔNG gắn nhãn "bản nháp" cho bản
 # nào: tác giả là người Kazakh, và một ghi chú quy trình nội bộ (soát bản dịch, CP-12) không phải
 # việc của người dùng cuối — nó chỉ làm họ mất tin vào đúng ngôn ngữ của mình.
 LANGUAGE_NAMES = {"en": "English", "ru": "Русский", "kk": "Қазақша"}
+AUDIO_HEALTH_MS = 500       # nhịp xem luồng thiết bị âm thanh có đang kẹt trong driver không
 
 
 class MainWindow(QMainWindow):
@@ -100,7 +103,30 @@ class MainWindow(QMainWindow):
         lay.addWidget(self.banner)
         lay.addWidget(self.tabs, 1)
         self.setCentralWidget(central)
+        # Một thiết bị âm thanh cho cả app (audio/engine.py): đang nghe thì các trang khác không phát.
+        # Luồng thiết bị tự dừng tiếng đang phát khi bắt đầu nghe; đây chỉ là để nút nói đúng trạng thái.
+        if live is not None:
+            live.listening.connect(self.encode_page.set_listening)
+            live.listening.connect(self.decode_page.player.set_listening)
+        # Driver âm thanh kẹt (dịch vụ âm thanh của hệ điều hành treo): nói cho người dùng biết, thay vì
+        # để họ bấm Phát/Nghe mãi không thấy gì. Chỉ đọc trạng thái Python — không gọi PortAudio.
+        self._audio_text = AudioText(self)
+        self._audio_stuck = False
+        self._health_timer = QTimer(self)
+        self._health_timer.setInterval(AUDIO_HEALTH_MS)
+        self._health_timer.timeout.connect(self.check_audio_health)
+        self._health_timer.start()
         self.retranslate()
+
+    def check_audio_health(self) -> None:
+        stuck = default_engine().stuck() is not None
+        if stuck == self._audio_stuck:
+            return
+        self._audio_stuck = stuck
+        if stuck:
+            self.banner.show_warning(self._audio_text.stuck())
+        elif not self._closing:
+            self.banner.clear()
 
     # ---- i18n ----
     def set_language(self, code: str) -> bool:
@@ -164,6 +190,8 @@ class MainWindow(QMainWindow):
         self.encode_page.retranslate()
         self.settings_page.retranslate()
         self.about_page.retranslate()
+        if self._audio_stuck:
+            self.banner.show_warning(self._audio_text.stuck())
         if self.doc_window is not None:
             self.doc_window.retranslate()
         if self.live_page is not None:

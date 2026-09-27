@@ -14,6 +14,7 @@ from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QActionGroup, QColor, QIcon, QPainter, QPixmap, QPolygonF
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QMenu, QPushButton, QSlider, QToolButton, QWidget
 
+from morsedesk.app.audio_text import AudioText
 from morsedesk.app.widgets.icons import icon_button, line_icon
 from morsedesk.audio.playback import AudioPlayback, PlaybackError
 
@@ -79,6 +80,9 @@ class PlayerBar(QWidget):
         super().__init__(parent)
         self.playback = AudioPlayback()
         self._seeking = False               # đang kéo thanh trượt: đừng để timer giật nó về
+        self._listening = False             # trang Nghe đang thu: không phát ra loa (set_listening)
+        self._unavailable = False           # máy không có PortAudio: nút tắt hẳn
+        self._text = AudioText(self)
         # Trang chủ quản gán hàm này để nạp audio ngay trước lần phát đầu. Nạp lười vì một bản
         # ghi 37 phút chiếm 71 MB, và phần lớn lần giải mã người dùng chỉ đọc chữ chứ không nghe.
         # Dùng hook thay vì nối thêm slot vào `clicked`: slot nối sau sẽ chạy SAU `toggle`, tức
@@ -160,11 +164,21 @@ class PlayerBar(QWidget):
         self.retranslate()
 
     # ---- nạp và điều khiển ----
+    def _can_play(self, has: bool) -> bool:
+        return has and not self._listening and not self._unavailable
+
+    def set_listening(self, flag: bool) -> None:
+        """Trang Nghe đang thu (MainWindow nối `LiveWorker.listening`): khóa nút phát và nói vì sao.
+        Lúc bắt đầu nghe, tiếng đang phát đã bị luồng thiết bị dừng (engine.claim_input)."""
+        self._listening = bool(flag)
+        self.play_button.setEnabled(self._can_play(self.slider.isEnabled()))   # thanh trượt bật = có tiếng
+        self.retranslate()
+
     def load(self, x, sample_rate: int) -> None:
         """Nạp audio vừa giải mã. Con trỏ về 0, chưa phát."""
         self.playback.load(x, sample_rate)
         has = self.playback.duration_s > 0
-        self.play_button.setEnabled(has)
+        self.play_button.setEnabled(self._can_play(has))
         self.slider.setEnabled(has)
         self.slider.setValue(0)
         self._update_labels()
@@ -182,7 +196,7 @@ class PlayerBar(QWidget):
         test không thấy vì nó gọi thẳng `ensure_loaded`.
         """
         if self.ensure_loaded is not None:
-            self.play_button.setEnabled(True)
+            self.play_button.setEnabled(self._can_play(True))
             self.slider.setEnabled(True)
         self._armed_s = duration_s or 0.0
         self._update_labels()
@@ -209,13 +223,20 @@ class PlayerBar(QWidget):
         try:
             self.playback.play()
         except PlaybackError as e:
-            # Thiếu thiết bị phát là chuyện bình thường trên máy air-gap tối giản: báo một dòng
-            # rồi tắt hẳn nút, chứ không để người dùng bấm mãi không thấy gì.
-            self.play_button.setEnabled(False)
-            self.slider.setEnabled(False)
-            self.error.emit(str(e))
+            self._report(e)
             return
         self._timer.start()
+        self.retranslate()
+
+    def _report(self, e: PlaybackError) -> None:
+        # Thiếu PortAudio là chuyện bình thường trên máy air-gap tối giản: báo một dòng rồi tắt hẳn
+        # nút, chứ không để người dùng bấm mãi không thấy gì. Lỗi khác (đang nghe, driver kẹt, thiết
+        # bị bận) thì để nút bật — lát nữa bấm lại được.
+        if e.permanent:
+            self._unavailable = True
+            self.play_button.setEnabled(False)
+            self.slider.setEnabled(False)
+        self.error.emit(self._text.playback(e))
         self.retranslate()
 
     def pause(self) -> None:
@@ -284,6 +305,18 @@ class PlayerBar(QWidget):
         return self.playback.duration_s * (value / SLIDER_STEPS)
 
     def _tick(self) -> None:
+        if not self.playback.playing and not self.playback.finished:
+            # Dừng không do nút này: mở thiết bị lỗi (tới muộn, ở luồng thiết bị), hoặc loa bị nhường
+            # cho trang Nghe / trang khác. Trả nút về ▶ và báo lỗi nếu có.
+            self._timer.stop()
+            err, self.playback.error = self.playback.error, None
+            self._update_labels()
+            self.position_changed.emit(self.playback.position_s)
+            if err is not None:
+                self._report(err)
+            else:
+                self.retranslate()
+            return
         pos = self.playback.position_s
         if not self._seeking:
             dur = self.playback.duration_s
@@ -307,7 +340,8 @@ class PlayerBar(QWidget):
         self.play_button.setIcon(self._icons["pause" if playing else "play"])
         self.play_button.setAccessibleName(self.tr("Pause") if playing else self.tr("Play"))
         self.play_button.setToolTip(
-            self.tr("Pause playback") if playing else self.tr("Listen to the decoded audio"))
+            self._text.busy() if self._listening
+            else self.tr("Pause playback") if playing else self.tr("Listen to the decoded audio"))
         self.slider.setToolTip(self.tr("Drag to jump to a moment"))
         self.speed_button.setToolTip(self.tr("Playback speed (the pitch stays the same)"))
         self.speed_button.setAccessibleName(self.tr("Playback speed"))

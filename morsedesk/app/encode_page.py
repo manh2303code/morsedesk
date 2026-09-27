@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from morsedesk.api import Encoder
+from morsedesk.app.audio_text import AudioText
 from morsedesk.app.settings import AppSettings
 from morsedesk.app.theme import mark_primary
 from morsedesk.app.widgets.banner import Banner
@@ -86,6 +87,9 @@ class EncodePage(QWidget):
         self._profiles = {pid: load_profile(pid) for pid in PROFILES}
         self._limit_banner = False      # banner đang hiện có phải cảnh báo quá thời lượng không
         self._unsupported: list[str] = []   # ký tự văn bản hiện tại không mã hóa được
+        self._locked = False            # đang phát: văn bản + thông số dựng tiếng bị khóa
+        self._listening = False         # trang Nghe đang thu: không phát ra loa (set_listening)
+        self._audio_text = AudioText(self)
 
         self.text_label = QLabel(self)
         self.text_label.setProperty("role", "section")
@@ -121,9 +125,18 @@ class EncodePage(QWidget):
         self.warn_label.setStyleSheet(
             "color:#FFD2CC; background:#4E2323; border:1px solid #7A3530; border-radius:6px; padding:5px 8px;")
         self.warn_label.hide()
+        # Đang phát thì văn bản bị khóa (xem `_set_locked`); dòng này nói vì sao gõ không ăn. Nằm
+        # cùng hàng tiêu đề nên hiện/ẩn không đẩy bố cục.
+        self.lock_label = QLabel(self)
+        self.lock_label.setProperty("role", "hint")
+        self.lock_label.hide()
+        header = QHBoxLayout()
+        header.addWidget(self.text_label)
+        header.addStretch(1)
+        header.addWidget(self.lock_label)
         left = QVBoxLayout()
         left.setSpacing(8)
-        left.addWidget(self.text_label)
+        left.addLayout(header)
         left.addWidget(self.text_edit, 2)
         left.addWidget(self.charmap)
         left.addSpacing(6)
@@ -310,8 +323,38 @@ class EncodePage(QWidget):
         self.auto_label.show()
 
     def _insert_char(self, ch: str) -> None:
+        if self._locked:            # `insertPlainText` bỏ qua read-only: chốt ở đây
+            return
         self.text_edit.insertPlainText(ch)
         self.text_edit.setFocus()
+
+    def _param_widgets(self) -> list[QWidget]:
+        """Thông số mà tiếng ĐANG PHÁT được dựng từ đó (định dạng file thì không)."""
+        return [self.profile_combo, self.wpm_spin, self.farnsworth_check, self.farnsworth_spin,
+                self.weight_spin, self.tone_spin, self.snr_check, self.snr_spin]
+
+    def _set_locked(self, locked: bool) -> None:
+        """Đang phát: khóa văn bản và các thông số dựng nên tiếng đang phát.
+
+        Người dùng 27/09: gõ thêm vào ô văn bản giữa lúc phát làm khung sáng quanh chữ đang kêu biến
+        mất — băng đã dựng lại theo văn bản mới, không còn khớp tiếng. Đổi WPM/bảng mã giữa chừng cũng
+        vậy. Bấm Dừng (hoặc phát hết) là mở khóa.
+        """
+        if locked == self._locked:
+            return
+        self._locked = locked
+        self.text_edit.setReadOnly(locked)
+        self.charmap.setEnabled(not locked)
+        for w in self._param_widgets():
+            w.setEnabled(not locked)
+        if not locked:          # hai ô số chỉ bật khi ô đánh dấu của nó được chọn
+            self.farnsworth_spin.setEnabled(self.farnsworth_check.isChecked())
+            self.snr_spin.setEnabled(self.snr_check.isChecked())
+        self.lock_label.setVisible(locked)
+        self.text_edit.setToolTip(self.lock_label.text() if locked else "")
+
+    def is_locked(self) -> bool:
+        return self._locked
 
     def _on_text_changed(self) -> None:
         """Văn bản ngắn: cập nhật ngay. Dài: khóa Nghe thử/Lưu NGAY (chuỗi Morse đang hiện đã cũ —
@@ -340,8 +383,6 @@ class EncodePage(QWidget):
         pid = self.effective_profile_id()
         profile = self._profiles[pid]
         text = self.current_text()
-        if self._timeline is not None:
-            self._end_animation()       # văn bản đổi giữa lúc phát: băng không còn khớp tiếng
         self.charmap.set_profile(pid)
         self._show_auto_choice(pid)
         tokens = Encoder(profile).to_tokens(text, strict=False) if text.strip() else []
@@ -349,8 +390,13 @@ class EncodePage(QWidget):
         if self.morse_view.toPlainText() != morse:
             self.morse_view.setPlainText(morse)
         cursor = self.text_edit.textCursor()
+        before = self.tape.words()
         self.tape.set_words(self._tape_words(text, profile) if morse else [],
                             follow_end=cursor.atEnd())
+        if self._locked and self.tape.words() != before:
+            # Người dùng không gõ được khi đang phát (`_set_locked`); văn bản vẫn đổi (bằng mã) thì
+            # tiếng đang phát không còn khớp băng: dừng hẳn, đừng để phát tiếp mà không tô.
+            self.stop()
         seconds = self._seconds_for(tokens)
         self._show_length_seconds(seconds if morse else None)
         bad = unsupported_chars(text, profile)
@@ -368,8 +414,16 @@ class EncodePage(QWidget):
         has = bool(morse)
         over = has and self._over_limit(seconds or 0.0) is not None
         ready = has and not over and not bad
-        self.play_button.setEnabled(ready)
+        self.play_button.setEnabled(ready and not self._listening)
         self.save_button.setEnabled(ready)
+
+    def set_listening(self, flag: bool) -> None:
+        """Trang Nghe đang thu (MainWindow nối `LiveWorker.listening`): không phát ra loa — micro sẽ thu
+        lại tiếng loa. Lúc bắt đầu nghe, tiếng đang phát đã bị luồng thiết bị dừng (engine.claim_input);
+        timer hình tự thấy và mở khóa văn bản."""
+        self._listening = bool(flag)
+        self.play_button.setToolTip(self._audio_text.busy() if self._listening else "")
+        self.refresh_morse()
 
     @staticmethod
     def _tape_words(text: str, profile: Profile) -> list[list[tuple[str, str]]]:
@@ -535,9 +589,10 @@ class EncodePage(QWidget):
             self.playback.play(from_s)
         except PlaybackError as e:
             self._end_animation()
-            self.banner.show_warning(f"cannot play audio: {e}")
+            self.banner.show_warning(self._audio_text.playback(e))
             return
         self._timeline = timeline
+        self._set_locked(True)
         self._anim_timer.start()
         self._tick_playback()
 
@@ -562,7 +617,12 @@ class EncodePage(QWidget):
 
     def _tick_playback(self) -> None:
         if not self.playback.playing:
+            # Hết bài, bấm Dừng, lỗi mở thiết bị (tới muộn, từ luồng thiết bị) hoặc loa bị nhường cho
+            # trang Nghe: bỏ tô, mở khóa, báo lỗi nếu có.
+            err, self.playback.error = self.playback.error, None
             self._end_animation()
+            if err is not None:
+                self.banner.show_warning(self._audio_text.playback(err))
             return
         if self._timeline is None:
             self.key_anim.set_state(True)
@@ -581,6 +641,7 @@ class EncodePage(QWidget):
         self._timeline = None
         self.tape.set_active(None)
         self.key_anim.set_state(False)
+        self._set_locked(False)
 
     def _save_dialog(self) -> None:
         ext = str(self.format_combo.currentData())
@@ -655,6 +716,9 @@ class EncodePage(QWidget):
         self.key_anim.setAccessibleName(tip)
         self.stop_button.setText(self.tr("Stop"))
         self.save_button.setText(self.tr("Save…"))
+        self.lock_label.setText(self.tr("Playing — press Stop to edit the text."))
+        if self._locked:
+            self.text_edit.setToolTip(self.lock_label.text())
         self.refresh_morse()
 
     def changeEvent(self, event) -> None:

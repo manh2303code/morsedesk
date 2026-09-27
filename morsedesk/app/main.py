@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import faulthandler
 import logging
+import os
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -21,12 +23,15 @@ from morsedesk.app.settings import AppSettings, default_language
 from morsedesk.app.startup import check_models, missing_models_message
 from morsedesk.app.theme import apply_theme
 from morsedesk.app.worker import DecoderWorker, Player
+from morsedesk.audio.engine import default_engine
 from morsedesk.textio import force_utf8_streams
 
 I18N_DIR = Path(__file__).resolve().parent / "i18n"
 ORG_NAME = "MorseDesk"
 APP_NAME = "MorseDesk"
 log = logging.getLogger("morsedesk.app")
+AUDIO_EXIT_S = 2.0          # chờ luồng thiết bị đóng stream + Pa_Terminate lúc thoát
+EXIT_WATCHDOG_S = 15.0      # thoát mà còn kẹt lâu hơn ngần này ở bất cứ đâu: kết thúc tiến trình
 
 
 def set_app_identity() -> None:
@@ -125,6 +130,53 @@ def create_app(args: argparse.Namespace) -> tuple[QApplication, MainWindow]:
     return app, window
 
 
+def hard_exit(code: int) -> None:
+    """Kết thúc tiến trình ngay, không chạy atexit (atexit của sounddevice gọi `Pa_Terminate` và sẽ
+    treo theo driver). Windows: `TerminateProcess` — `ExitProcess` (= os._exit) còn chạy phần dọn của
+    từng DLL, mà DLL âm thanh đang kẹt thì chính chỗ đó có thể treo."""
+    logging.shutdown()
+    if sys.platform == "win32":
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        kernel32.TerminateProcess(kernel32.GetCurrentProcess(), code)
+    os._exit(code)
+
+
+def finish(code: int, window: MainWindow | None) -> int:
+    """Sau vòng lặp sự kiện: đóng thiết bị âm thanh có hạn giờ; kẹt thì kết thúc tiến trình.
+
+    Người dùng 27/09: app đơ, phải giết trong Task Manager. Driver âm thanh treo thì mọi lời gọi
+    PortAudio treo theo — kể cả `Pa_Terminate` mà sounddevice gọi lúc thoát, và QThread nghe còn chạy
+    thì Qt hủy nó bằng abort (0xC0000409). Nay: đóng gọn nếu được, không thì thoát cứng; đồng hồ canh
+    (faulthandler, không cần GIL) chốt chặn mọi chỗ kẹt khác trong lúc thoát.
+    """
+    watchdog = _arm_exit_watchdog()
+    clean = default_engine().shutdown(AUDIO_EXIT_S)
+    live = getattr(window, "live", None)
+    if live is not None and live.isRunning():
+        live.shutdown()
+        clean = live.wait(3000) and clean
+    if not clean:
+        log.error("audio device or listening thread still stuck at exit: terminating the process")
+        hard_exit(code)
+    faulthandler.cancel_dump_traceback_later()
+    if watchdog is not None:
+        watchdog.close()
+    return code
+
+
+def _arm_exit_watchdog():
+    try:
+        log_dir = log_directory()
+        log_dir.mkdir(parents=True, exist_ok=True)
+        f = open(log_dir / "exit-hang.txt", "a", encoding="utf-8")     # noqa: SIM115 — sống tới khi thoát
+        faulthandler.dump_traceback_later(EXIT_WATCHDOG_S, exit=True, file=f)
+        return f
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+
 def main(argv: list[str] | None = None) -> int:
     """Điểm vào `morsedesk-gui`: thiếu model/LM -> hộp thoại lỗi + mã 2; đủ -> mở cửa sổ, chạy vòng lặp Qt."""
     force_utf8_streams()
@@ -151,7 +203,7 @@ def main(argv: list[str] | None = None) -> int:
         app, window = create_app(args)
         window.show()
         close_splash()
-        return int(app.exec())
+        return finish(int(app.exec()), window)
     # Màn hình chờ động (phím Morse gõ ra logo): hiện NGAY, trước khi dựng cửa sổ chính. Khung đầu
     # của nó trùng ảnh tĩnh của màn hình chờ PyInstaller, nên chỗ nối giữa hai màn hình không giật.
     from morsedesk.app.splash import SplashScreen
@@ -175,7 +227,7 @@ def main(argv: list[str] | None = None) -> int:
 
     splash.finished.connect(reveal)
     splash.play()
-    return int(app.exec())
+    return finish(int(app.exec()), window)
 
 
 if __name__ == "__main__":

@@ -10,6 +10,45 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
+def _no_audio_module():
+    """`sounddevice` thay thế mặc định cho MỌI test: không thiết bị nào, mở stream là lỗi.
+
+    27/09: trang Nghe liệt kê micro ngay khi dựng, và trước đây mọi test dựng MainWindow đều chạm
+    PortAudio THẬT (`Pa_Initialize`). Máy dev có driver âm thanh treo (audiodg kẹt) thì cả bộ test đứng
+    im ở test_contrast. Test cần stream thì dùng fixture `fake_sounddevice` (ghi đè cái này)."""
+    mod = types.ModuleType("sounddevice")
+
+    class PortAudioError(Exception):
+        pass
+
+    class CallbackStop(Exception):
+        pass
+
+    def no_stream(**kwargs):
+        raise PortAudioError("no sound device in tests (tests/conftest.py)")
+
+    mod.PortAudioError = PortAudioError
+    mod.CallbackStop = CallbackStop
+    mod.query_devices = lambda: []
+    mod.OutputStream = mod.InputStream = no_stream
+    mod.play = mod.stop = lambda *a, **kw: None
+    return mod
+
+
+@pytest.fixture(autouse=True)
+def inline_audio_engine(monkeypatch):
+    """Mỗi test một luồng thiết bị `inline` (lệnh chạy ngay trong luồng gọi): tất định, và không test
+    nào để lại stream hay trạng thái "đang nghe" cho test sau. Test luồng thiết bị THẬT (hạn giờ,
+    driver kẹt) tự dựng `AudioEngine()` riêng. Không test nào chạm PortAudio thật (`_no_audio_module`)."""
+    from morsedesk.audio.engine import AudioEngine, set_default_engine
+
+    monkeypatch.setitem(sys.modules, "sounddevice", _no_audio_module())
+    engine = AudioEngine(inline=True)
+    set_default_engine(engine)
+    yield engine
+    set_default_engine(None)
+
+
 @pytest.fixture
 def fake_sounddevice(monkeypatch):
     """Thay `sounddevice` bằng module giả trong `sys.modules`.

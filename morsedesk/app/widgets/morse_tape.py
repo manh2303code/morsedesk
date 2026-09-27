@@ -47,6 +47,7 @@ class MorseTape(QWidget):
         self._units: list[list[float]] = []     # độ dài (đơn vị dit) từng chữ, tính một lần
         self._items: list[tuple[float, float, str, str]] = []   # (x, y, chữ, mẫu), theo thứ tự y
         self._item_ys: list[float] = []
+        self._breaks: list[tuple[float, float]] = []    # (x, y) cuối dòng nơi một từ dài bị ngắt
         self._laid_width = -1
         self._active: tuple[int, int, bool] | None = None      # (chữ, dấu, tone đang kêu)
         self.placeholder = ""
@@ -74,8 +75,14 @@ class MorseTape(QWidget):
         return sum(3.0 if s == "-" else 1.0 for s in pattern) + (len(pattern) - 1)
 
     def _layout(self, width: float) -> list[tuple[float, float, str, str]]:
-        """(x, y, chữ, mẫu) cho từng chữ; xuống dòng nguyên từ khi hết chỗ."""
+        """(x, y, chữ, mẫu) cho từng chữ; xuống dòng nguyên từ khi hết chỗ.
+
+        Từ dài hơn CẢ một dòng (dãy số liền `1232142345V23`, 27/09) thì xuống dòng GIỮA từ, ở ranh
+        giới chữ, và đánh dấu nối ở cuối dòng (`_breaks`). Trước đó phần đuôi của từ vẽ ra ngoài mép
+        phải và biến mất: người dùng thấy chữ `V` không có trên băng.
+        """
         out = []
+        self._breaks = []
         x, y = 8.0, TOP
         right = max(width - 8.0, 60.0)
         for word, units in zip(self._words, self._units, strict=True):
@@ -84,6 +91,9 @@ class MorseTape(QWidget):
                 x, y = 8.0, y + LINE_H
             last = len(word) - 1
             for i, ((ch, pat), u) in enumerate(zip(word, units, strict=True)):
+                if i and x + u * UNIT > right:
+                    self._breaks.append((x - LETTER_GAP * UNIT, y))
+                    x, y = 8.0, y + LINE_H
                 out.append((x, y, ch, pat))
                 x += (u + (LETTER_GAP if i < last else 0)) * UNIT
             x += WORD_GAP * UNIT
@@ -221,6 +231,14 @@ class MorseTape(QWidget):
             span = self._char_units(pat) * UNIT
             p.setPen(lamp if is_active else text)
             p.drawText(QRectF(x - 6, y + 14, span + 12, 18), Qt.AlignmentFlag.AlignHCenter, ch)
+        # Dấu nối (như gạch nối khi ngắt từ): từ này còn tiếp ở dòng dưới, không phải hết từ. Nằm ở HÀNG
+        # CHỮ CÁI, không ở hàng dấu: ở hàng dấu nó trông như một gạch Morse (ảnh chụp 27/09).
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(MUTED))
+        for bx, by in self._breaks:
+            if clip.top() - LINE_H <= by <= clip.bottom():
+                w = min(1.5 * UNIT, self.width() - 2 - (bx + 0.5 * UNIT))
+                p.drawRoundedRect(QRectF(bx + 0.5 * UNIT, by + 22, w, 2.5), 1.25, 1.25)
         p.end()
 
 

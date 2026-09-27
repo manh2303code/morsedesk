@@ -120,12 +120,10 @@ class SettingsPage(QWidget):
         lm_dir = MODELS_DIR / "lm"
         lms = [f"{code.upper()} {(lm_dir / f'{code}.bin').stat().st_size / 1e6:.1f} MB"
                for code in ("en", "ru", "kk") if (lm_dir / f"{code}.bin").is_file()]
-        try:
-            from morsedesk.app.live_worker import input_devices
+        # Danh sách đã liệt kê (trang Nghe liệt kê ở luồng thiết bị): trang này KHÔNG gọi PortAudio.
+        from morsedesk.app.live_worker import known_input_devices
 
-            devices = [name for _, name in input_devices()]
-        except Exception:
-            devices = []
+        devices = [name for _, name in known_input_devices() or []]
         model_text = self.tr("version {v}").format(v=version)
         if params:
             model_text += ", " + self.tr("{n} parameters").format(n=f"{params:,}".replace(",", " "))
@@ -164,3 +162,8 @@ class SettingsPage(QWidget):
         if event.type() == QEvent.Type.LanguageChange:
             self.retranslate()
         super().changeEvent(event)
+
+    def showEvent(self, event) -> None:
+        # Danh sách micro tới sau khi dựng trang (liệt kê ở luồng thiết bị): mở tab là đọc lại.
+        self.retranslate()
+        super().showEvent(event)

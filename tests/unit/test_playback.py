@@ -194,10 +194,24 @@ def test_seek_while_stretched_and_finish_at_the_end():
     assert pb.finished and pb.position_s == pb.duration_s
 
 
-def _pumped(fake, p, blocks: int, t0: float = 10.0):
-    """Bơm `blocks` khối 0,1 s (sr 1000, block 100); khối k tới loa lúc t0 + 0,1 k."""
+class _Clock:
+    """Đồng hồ của AudioPlayback do test đặt (thay `time.perf_counter`)."""
+
+    def __init__(self) -> None:
+        self.t = 0.0
+
+    def __call__(self) -> float:
+        return self.t
+
+
+def _pumped(fake, clock: _Clock, blocks: int, t0: float = 10.0):
+    """Bơm `blocks` khối 0,1 s (sr 1000, block 100); khối k tới loa lúc t0 + 0,1 k theo `clock`.
+
+    Stream giả báo DAC sau currentTime 0,3 s (độ trễ thiết bị), nên lúc bơm khối k đồng hồ ở
+    t0 + 0,1 k − 0,3."""
     stream = fake.OutputStream.instances[-1]
     for k in range(blocks):
+        clock.t = t0 + 0.1 * k - 0.3
         stream.pump(100, dac=t0 + 0.1 * k)
     return stream
 
@@ -205,25 +219,28 @@ def _pumped(fake, p, blocks: int, t0: float = 10.0):
 @pytest.mark.parametrize("rate", [1.0, 2.0, 0.5])
 def test_position_is_what_is_heard_not_what_was_sent(fake_sounddevice, rate):
     """Đo 24/09: đếm theo khung đã gửi làm karaoke/vệt quét 3D đi trước tiếng 315 ms ở 1×, 628 ms
-    ở 2×. Nay vị trí là giây của file đang ra loa theo mốc thời gian của thiết bị, nội suy mượt."""
-    p = AudioPlayback(sample_rate=1000, block=100)
+    ở 2×. Nay vị trí là giây của file đang ra loa theo mốc thời gian của thiết bị, nội suy mượt —
+    và (27/09) "bây giờ" là đồng hồ của ta, không phải `stream.time` (lời gọi PortAudio)."""
+    clock = _Clock()
+    p = AudioPlayback(sample_rate=1000, block=100, clock=clock)
     p.load(_ramp(5000))
     p.set_speed(rate)
     p.play()
-    stream = _pumped(fake_sounddevice, p, 4)          # đã gửi 0,4 s tiếng, loa mới tới đâu tùy lúc
-    stream.time = 10.0 - 0.05
+    _pumped(fake_sounddevice, clock, 4)               # đã gửi 0,4 s tiếng, loa mới tới đâu tùy lúc
+    clock.t = 10.0 - 0.05
     assert p.position_s == pytest.approx(0.0)         # khối đầu chưa tới loa
     for now in (10.05, 10.15, 10.25):
-        stream.time = now
+        clock.t = now
         assert p.position_s == pytest.approx((now - 10.0) * rate, abs=0.012 * max(rate, 1.0))
 
 
 def test_pause_stops_at_what_was_heard_and_resumes_there(fake_sounddevice):
-    p = AudioPlayback(sample_rate=1000, block=100)
+    clock = _Clock()
+    p = AudioPlayback(sample_rate=1000, block=100, clock=clock)
     p.load(_ramp(1000))
     p.play()
-    stream = _pumped(fake_sounddevice, p, 4)          # gửi 0,4 s, nhưng mới nghe tới 0,15 s
-    stream.time = 10.15
+    _pumped(fake_sounddevice, clock, 4)               # gửi 0,4 s, nhưng mới nghe tới 0,15 s
+    clock.t = 10.15
     p.pause()
     assert p.position_s == pytest.approx(0.15, abs=0.001) and not p.playing
     p.play()
@@ -238,7 +255,8 @@ def test_finished_only_when_the_last_sample_has_played(fake_sounddevice):
     p.load(_ramp(250))
     p._callback(np.zeros((100, 1), np.float32), 100, None, None)
     p._finished = True                                # như vừa gửi khối cuối
-    p._stream = object()                              # stream vẫn còn đang xả đệm
+    p._active = True                                  # stream vẫn còn đang xả đệm
+    p._stream = object()
     assert p.playing and not p.finished
     p._on_stream_finished()
     assert p.finished and not p.playing

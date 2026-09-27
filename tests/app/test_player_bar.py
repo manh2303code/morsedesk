@@ -65,7 +65,7 @@ def test_missing_output_device_disables_controls(qtbot, monkeypatch):
     seen: list[str] = []
     bar.error.connect(seen.append)
     bar.play()
-    assert seen and "sounddevice" in seen[0].lower()
+    assert seen and "PortAudio (libportaudio2)" in seen[0]     # lời cho người vận hành, không phải OSError
     assert not bar.play_button.isEnabled() and not bar.slider.isEnabled()
 
 

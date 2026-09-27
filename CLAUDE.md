@@ -78,7 +78,8 @@ HamNoise) cũng chưa chạy.
 
 ```bash
 uv sync --all-extras
-PYTHONUTF8=1 uv run pytest -p no:warnings          # ~558 test; -p no:warnings để đọc được kết quả
+PYTHONUTF8=1 uv run pytest -p no:warnings          # ~700 test; -p no:warnings để đọc được kết quả
+MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL="*" wsl.exe -d Ubuntu-26.04 --   bash /mnt/c/Users/Admin/morsedesk/scripts/test_linux.sh   # cùng bộ test trên LINUX (venv riêng, ~25 phút)
 PYTHONUTF8=1 uv run python -m morsedesk.cli bench --manifest <m> --engine onnx --out-dir runs/<tên>
                                                    # song song mọi lõi (mặc định); --workers 1 = nghiệm thu
 PYTHONUTF8=1 uv run python tools/long_random_eval.py   # bản tin ~2 phút x 3 ngôn ngữ, ~4 phút
@@ -109,6 +110,13 @@ MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL="*" wsl.exe -d Ubuntu-26.04 -- \
   và bộ đo chạy được trên máy không có màn hình.
 - `sounddevice` **import trễ trong hàm**, không bao giờ ở đầu module: máy air-gap thiếu
   `libportaudio2` thì `import sounddevice` ném ngay lúc nạp module và kéo sập cả CLI lẫn GUI.
+- **MỌI lời gọi PortAudio chạy ở MỘT luồng thiết bị** (`audio/engine.py`, 27/09) — kể cả `import
+  sounddevice` (= `Pa_Initialize`), liệt kê thiết bị, mở/dừng/đóng. Luồng giao diện không bao giờ gọi
+  PortAudio và không bao giờ chờ luồng đó (chỉ đọc trạng thái Python; vị trí phát tính từ đồng hồ callback
+  ghi lại, KHÔNG `stream.time` — trên ALSA nó gọi vào driver). PortAudio cấm gọi từ nhiều luồng; driver âm
+  thanh có thể treo vĩnh viễn (máy dev 27/09: mở micro lúc loa phát -> audiodg kẹt tới khi khởi động lại).
+  Phát và thu KHÔNG BAO GIỜ mở cùng lúc (engine.claim_input/claim_output). Thoát: `main.finish` đóng có
+  hạn giờ, kẹt thì TerminateProcess (atexit của sounddevice gọi `Pa_Terminate` và treo theo driver).
 - **Hai QThread độc lập**: `DecoderWorker` (file, một lượt dài, hủy được) và `LiveWorker` (nghe,
   vòng lặp không dứt). Không `moveToThread` cái này sang cái kia — một bản tin 37 phút đang giải
   sẽ chặn đứng dòng chữ đang chạy. Mỗi luồng giữ `Decoder` riêng vì `Decoder` không an toàn khi
@@ -285,6 +293,14 @@ mình**. Trong một phiên đã có hai kết luận research không sống só
 - Test GUI chờ `result_ready` rồi kiểm nút ngay sẽ **flaky** — `busy(False)` tới sau; phải chờ nút
   bật lại.
 - Vét hàng đợi trong khi luồng còn chạy = vòng lặp vô hạn. `stop()` trước rồi mới vét.
+- **Không test nào chạm PortAudio thật** (tests/conftest.py thay `sounddevice` bằng module rỗng cho MỌI
+  test; `fake_sounddevice` ghi đè khi cần stream). Trước 27/09 mọi test dựng MainWindow gọi `Pa_Initialize`
+  thật: driver máy dev treo là cả bộ test đứng im ở test_contrast. Test luồng thiết bị thật (hạn giờ, driver
+  kẹt) tự dựng `AudioEngine()` và giả "treo" bằng stream chờ một Event.
+- **Đừng thử âm thanh thật bừa bãi trên máy dev**: mở micro lúc loa đang phát từng làm sập dịch vụ âm thanh
+  Windows 3 lần (27/09), audiodg kẹt trong driver tới khi khởi động lại máy. Âm thanh WSLg (PulseAudio qua
+  RDP) cũng kẹt theo. Thử PortAudio thật trên Linux mà không phụ thuộc Windows: giải nén libportaudio2
+  (22.04 = bản trong AppImage) vào /tmp, `.asoundrc` với `pcm.!default { type null }`, `PULSE_SERVER` giả.
 
 ### Công cụ và môi trường
 - **Git Bash (MSYS) tự dịch đối số trông như đường dẫn POSIX**: `/mnt/c/...` tới tay `wsl.exe` đã
