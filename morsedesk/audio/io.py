@@ -37,13 +37,31 @@ def normalize(x: np.ndarray, peak: float = 0.9) -> np.ndarray:
     return x
 
 
+def _source(path: Path):
+    """Nguồn cho libsndfile. MP3 VBR không header Xing: libsndfile đoán độ dài theo khung đầu và cắt
+    mất tới ~30 % file (audio/mp3len.py) — đưa bản đã ghi đúng số khung."""
+    if path.suffix.lower() != ".mp3":
+        return str(path)
+    import io
+
+    from morsedesk.audio.mp3len import with_true_length
+
+    data = path.read_bytes()
+    try:
+        reported = sf.info(str(path)).frames
+    except Exception:
+        reported = None
+    fixed = with_true_length(data, reported)
+    return io.BytesIO(fixed) if fixed is not None else str(path)
+
+
 def load_audio(path: str | Path, target_sr: int = SAMPLE_RATE) -> tuple[np.ndarray, int]:
     """Đọc file bất kỳ libsndfile hỗ trợ (WAV/FLAC/OGG/MP3), trả (mono float32 8 kHz, 8000)."""
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"không tìm thấy file: {path}")
     try:
-        data, sr = sf.read(str(path), dtype="float32", always_2d=True)
+        data, sr = sf.read(_source(path), dtype="float32", always_2d=True)
     except sf.LibsndfileError as e:
         raise UnsupportedAudio(
             f"không đọc được {path.name}: {e}. Định dạng hỗ trợ: {', '.join(SUPPORTED_EXT)}"
@@ -57,6 +75,7 @@ def load_audio(path: str | Path, target_sr: int = SAMPLE_RATE) -> tuple[np.ndarr
 # `.aif` thuộc `AIFF`, `.oga` thuộc `OGG`. Viết hoa đuôi file để suy tên thì hai đuôi này ném
 # `TypeError: No format specified and unable to get format from file extension` (CP-07).
 EXT_TO_FORMAT = {".aif": "AIFF", ".oga": "OGG"}
+WRITE_BLOCK = 16384          # mẫu mỗi lần ghi (xem save_audio)
 
 
 def _sndfile_writes_mp3() -> bool:
@@ -118,9 +137,24 @@ def save_audio(path: str | Path, x: np.ndarray, sample_rate: int) -> None:
         return
     fmt = EXT_TO_FORMAT.get(ext, ext.lstrip(".").upper())   # WAV, FLAC, OGG, AIFF…
     subtype = "PCM_16" if sf.check_format(fmt, "PCM_16") else None
-    sf.write(str(path), np.clip(x, -1.0, 1.0), sample_rate, format=fmt, subtype=subtype)
+    y = np.clip(np.asarray(x, dtype=np.float32), -1.0, 1.0)
+    # Ghi theo KHỐI: bộ mã hóa Vorbis của libsndfile làm SẬP tiến trình (crash native, không bắt được)
+    # khi một lần gọi ghi quá nhiều mẫu — đo 27/09: OGG 8 kHz 110 s sập, 60 s còn chạy.
+    with sf.SoundFile(str(path), "w", samplerate=sample_rate, channels=1, format=fmt, subtype=subtype) as f:
+        for i in range(0, len(y), WRITE_BLOCK):
+            f.write(y[i:i + WRITE_BLOCK])
 
 
 def audio_info(path: str | Path) -> tuple[int, int, float]:
+    """(tần số lấy mẫu, số kênh, giây). MP3: độ dài đếm theo khung, không theo ước lượng của libsndfile."""
     info = sf.info(str(path))
-    return int(info.samplerate), int(info.channels), float(info.duration)
+    seconds = float(info.duration)
+    if Path(path).suffix.lower() == ".mp3":
+        from morsedesk.audio.mp3len import layout
+
+        lay = layout(Path(path).read_bytes())
+        # chỉ khi libsndfile cắt ngắn thật (27/09: 30 %); lệch vài khung là độ trễ + đệm của bộ mã hóa
+        frame_s = lay.samples_per_frame / lay.sample_rate if lay is not None else 0.0
+        if lay is not None and lay.seconds > seconds * 1.05 + 3 * frame_s:
+            seconds = lay.seconds
+    return int(info.samplerate), int(info.channels), seconds

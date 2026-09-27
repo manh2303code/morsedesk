@@ -28,6 +28,15 @@ from morsedesk.dsp.windowing import WINDOW_PAD_FRAMES
 from morsedesk.encode.synth import add_noise, elements_to_audio, tone_power
 from morsedesk.encode.text import text_to_tokens
 from morsedesk.encode.timing import TimingParams, tokens_to_elements
+from morsedesk.keyed import MIN_SNR_DB as KEYED_MIN_SNR_DB
+from morsedesk.keyed import (
+    NOT_MORSE_MAX_CONF,
+    NOT_MORSE_MIN_S_WEAK,
+    not_morse_clip,
+    read_keying,
+    reconcile,
+    speechlike,
+)
 from morsedesk.lm.beam import BeamParams, Hypothesis, beam_search
 from morsedesk.lm.langid import LangIdResult, detect, detect_tokens, split_segments
 from morsedesk.lm.ngram import CharNGramLM
@@ -284,6 +293,33 @@ def numbers_words(words: list[Word], profile: Profile) -> list[Word] | None:
     return out
 
 
+def apply_keying(result: DecodeResult, x8: np.ndarray, profile: Profile) -> DecodeResult:
+    """Đối chiếu với âm thanh (morsedesk/keyed.py): bỏ từ đọc ra từ giọng nói/nhạc; khi tín hiệu sạch thì
+    đối chiếu từng ký tự với nhịp phím đo được (sửa ký tự, chèn ký tự bỏ sót, dấu cách)."""
+    f0 = float(result.tone_hz)
+    words = result.words
+    env = keyed = None
+    if max(w.confidence for w in words) < NOT_MORSE_MAX_CONF and len(x8) / SAMPLE_RATE >= NOT_MORSE_MIN_S_WEAK:
+        env = mix_envelope(x8, f0)
+        keyed = read_keying(x8, env, f0)
+        if not_morse_clip(words, keyed, profile, len(x8) / SAMPLE_RATE):
+            codes = list(result.warning_codes) + [warn(WarningCode.NO_SIGNAL)]
+            return replace(result, words=[], text="", warnings=[w.vi() for w in codes], warning_codes=codes)
+    if (result.snr_db or 0.0) >= KEYED_MIN_SNR_DB:
+        if keyed is None:
+            keyed = read_keying(x8, mix_envelope(x8, f0), f0)
+        if keyed.stable:                        # fading: đáy fading cũng "kém chắc, không thuần tone"
+            drop = speechlike(words, x8, f0)
+            if any(drop):
+                words = [w for w, d in zip(words, drop, strict=True) if not d]
+            rec = reconcile(words, keyed, profile) if words else None
+            if rec is not None:
+                words = rec
+    if words is result.words:
+        return result
+    return replace(result, words=words, text=" ".join(w.text for w in words))
+
+
 def apply_numbers(result: DecodeResult, profile: Profile) -> DecodeResult:
     words = numbers_words(result.words, profile)
     if words is None:
@@ -305,12 +341,16 @@ class Decoder:
         self, profile: str | Profile = "en", engine: str = "baseline", model_path: Path | None = None,
         fallback: bool = True, lm: bool = True, beam: int = 64, lm_dir: Path | None = None,
         acoustic_model: AcousticModel | None = None, lm_store: LMStore | None = None,
-        skip_silent_windows: bool = False, numbers: bool = True,
+        skip_silent_windows: bool = False, numbers: bool = True, keyed: bool = True,
     ) -> None:
         """lm_store: dùng chung LM giữa nhiều Decoder (GUI); khi có thì bỏ qua lm_dir.
 
         numbers: xử lý điện số (morsedesk/numbers.py — số viết tắt, nhóm độ dài cố định). Chế độ nghe
         tắt nó ở đây và làm ở StreamDecoder với ngữ cảnh cả phiên (bộ đệm ~9 s quá ít nhóm).
+
+        keyed: đối chiếu với nhịp phím đo được (morsedesk/keyed.py). Chế độ nghe TẮT: StreamDecoder nhận
+        ký tự đã chốt bằng mốc thời gian của mô hình, mà đối chiếu đổi mốc và bộ đệm cắt ngang ký tự ở hai
+        đầu — đo 27/09: chữ số nhân đôi (`00000` -> `000000`), số ở chế độ nghe 0,0 -> 11,8 % lỗi.
 
         skip_silent_windows: cửa sổ không dò ra tone thì ép thành blank thay vì chạy mô hình.
         Chặn được chuyện mô hình đọc nhiễu nền thành chữ (30 giây nhiễu trắng thuần ra `WE ARE`),
@@ -324,6 +364,7 @@ class Decoder:
         self.lm_enabled = bool(lm)
         self.skip_silent_windows = bool(skip_silent_windows)
         self.numbers = bool(numbers)
+        self.keyed = bool(keyed)
         self.beam_params = BeamParams(beam=int(beam))
         self._baseline = BaselineDecoder()
         self._model: AcousticModel | None = acoustic_model
@@ -405,6 +446,10 @@ class Decoder:
         """`continued`: `x` nối tiếp âm thanh đã có trước nó (bộ đệm chế độ nghe sau khi cắt phần đầu),
         nên mép đầu là mép TRONG — đệm nhiễu nền như mép giáp cửa sổ khác (frontend.repad_window)."""
         result = self._decode_array(x, sample_rate, progress, continued)
+        if self.keyed and result.words and result.tone_hz:
+            x8 = x if sample_rate == SAMPLE_RATE else resample(np.asarray(x, dtype=np.float32), sample_rate, SAMPLE_RATE)
+            profile = self._profiles.get(result.language) or self.profile or next(iter(self._profiles.values()))
+            result = apply_keying(result, x8, profile)
         if self.numbers and result.words:
             profile = self._profiles.get(result.language) or self.profile or next(iter(self._profiles.values()))
             result = apply_numbers(result, profile)

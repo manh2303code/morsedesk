@@ -90,3 +90,23 @@ def test_save_roundtrip_for_every_container(tmp_path, ext, subtype):
     assert sf.info(str(p)).subtype == subtype
     y, sr2 = sf.read(p)
     assert sr2 == 8000 and len(y) == len(x)
+
+
+def test_vbr_mp3_without_xing_header_is_read_to_the_end():
+    """libsndfile đoán độ dài MP3 VBR không header Xing theo bitrate KHUNG ĐẦU và dừng đọc ở đó: bài tập
+    số tải từ internet (27/09) mất ~30 % (89,4 / 130,7 s). File mẫu: 1,5 s nhiễu (khung đầu bitrate cao)
+    + 6 s im lặng, LAME VBR `-write_xing 0` — libsndfile báo 1,32 s."""
+    from pathlib import Path
+
+    from morsedesk.audio.io import audio_info
+    from morsedesk.audio.mp3len import layout
+
+    path = Path(__file__).resolve().parents[1] / "data" / "vbr_no_xing.mp3"
+    assert sf.info(str(path)).duration < 2.0                  # tiền đề: libsndfile đoán sai
+    lay = layout(path.read_bytes())
+    assert lay is not None and abs(lay.seconds - 7.55) < 0.05
+    x, sr = load_audio(path)
+    assert abs(len(x) / sr - 7.54) < 0.05
+    assert abs(audio_info(path)[2] - 7.55) < 0.05
+    # phần nhiễu 1,5 s đầu vẫn nguyên, phần sau là im lặng thật chứ không phải rác
+    assert np.abs(x[: int(1.4 * sr)]).mean() > 0.1 and np.abs(x[int(2 * sr):]).max() < 0.01

@@ -48,6 +48,15 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
 20. **Auto với nhóm chữ-số và số có định dạng**: phần chữ không có từ nào để LM chọn bảng chữ, nên có
     bản tin Latin bị nhận là Kirin (đã biết ở #2). Hướng: hòa điểm thì theo ngôn ngữ giao diện.
 
+21. **Chế độ nghe: chữ rời lặng RẤT dài** (bài học phát qua micro, lặng 40–59 dit): vẫn ra mảnh vỡ
+    (`8 3 I R ES TO 6 1`); bộ đệm 9 s chỉ chứa ~2 chữ, mốc giữa các lần giải xê dịch. Lặng 30/49 dit gần
+    đúng. Chế độ nghe chưa dùng đối chiếu nhịp phím (keyed=False): cần làm ở LÚC CHỐT (giữ mốc mô hình,
+    bỏ ký tự ở mép bộ đệm). Đo: tools/numeric_edge_bench.py --configs live --only B3.
+22. **Khoảng lặng ĐỀU giữa các chữ là nhập nhằng thật** (một từ Farnsworth = chữ rời cách đều): app để mô
+    hình quyết. Cần tùy chọn giao diện "chữ rời" / "nhóm N chữ số" cho bài học và điện số.
+23. **T4 Fedyai: bản chép ghi `.` ở cuối bài, âm thanh là `<SK>`** (ảnh đường bao 27/09) — app nay đọc đúng
+    nên T4 "xấu" 1,25 -> 1,30 %. Sửa bản chép khi soát lại T4.
+
 ## Đang mở — trung bình
 
 5. **Model âm học: hướng tiếp theo (P2–P7 trong .superpowers/sdd/research-acoustic-2026-09-24.md).**
@@ -100,6 +109,15 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
 
 ## Đã xong (phiên 24/09)
 
+- **Bộ test chuẩn cho số + đối chiếu nhịp phím** (27/09 chiều, người dùng: "thuật toán tối ưu tuyệt đối,
+  bộ test mọi edgecase, file tải về, LLM as judge"): docs/research/05-numbers.md.
+  - tools/numeric_edge_bench.py (122 ca, must/hard/ambiguous); T6 = 8 file tải về, đáp án do 2 giám khảo
+    LLM độc lập đọc ảnh đường bao mù (tools/envelope_strips.py, tools/multi_decode.py), 5/5 cặp khớp 100 %.
+  - Lỗi thật tìm ra: MP3 VBR không Xing bị libsndfile cắt 30 % (audio/mp3len.py); xuất OGG dài làm sập
+    app (ghi theo khối); bài học chữ số rời bị ghép sai, số 0 đọc thành Ч/Ш/9, giọng nói/nhạc đọc thành
+    chữ số (morsedesk/keyed.py, chỉ chế độ file).
+  - Kết quả: must 96/110 -> 109/109 (0/3341 lỗi chữ số); T6 lỗi chữ số 18,66 -> 0,69 %; T5 17,00/73,25
+    -> 16,13/73,89; T1/dev/dev-OOV/T2/bản tin dài/chế độ nghe không đổi.
 - **Nhận diện SỐ** (27/09, người dùng 26/09: "giải mã số học cực kỳ kém"). Research + đo:
   .superpowers/sdd/research-numbers-2026-09-27.md. Bộ đo mới: `tools/numeric_eval.py` (số tổng hợp,
   5 loại nội dung) và `tools/real_numbers_eval.py` (T5: trạm số thật M01/M12/M14, so ggmorse).

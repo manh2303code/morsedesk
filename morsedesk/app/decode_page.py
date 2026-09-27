@@ -57,9 +57,9 @@ SAMPLE_FILES = {"en": "hello_en.wav", "ru": "hello_ru.wav", "kk": "hello_kk.wav"
 def audio_duration_s(path: Path) -> float | None:
     """Thời lượng file mà không đọc cả file; None nếu libsndfile không đọc được đầu file."""
     try:
-        import soundfile as sf
+        from morsedesk.audio.io import audio_info
 
-        return float(sf.info(str(path)).duration)
+        return audio_info(path)[2]                  # MP3: độ dài đếm theo khung (audio/mp3len.py)
     except Exception:
         return None
 

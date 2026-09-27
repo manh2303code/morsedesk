@@ -38,3 +38,13 @@ def test_roundtrip_every_supported_extension(tmp_path, ext):
         return float(np.sqrt(np.mean((v / peak) ** 2))) if peak else 0.0
 
     assert abs(shape(y) - shape(x)) < 0.05
+
+
+def test_long_ogg_export_does_not_crash(tmp_path):
+    """Bộ mã hóa Vorbis của libsndfile SẬP tiến trình (crash native) khi một lần ghi quá nhiều mẫu:
+    OGG 8 kHz 110 s làm chết cả ứng dụng lúc xuất ở trang Tạo mã (27/09). save_audio ghi theo khối."""
+    x = (0.5 * np.sin(2 * np.pi * 700 * np.arange(150 * 8000) / 8000)).astype(np.float32)
+    path = tmp_path / "long.ogg"
+    save_audio(path, x, 8000)
+    y, sr = load_audio(path)
+    assert sr == 8000 and abs(len(y) - len(x)) < 2000

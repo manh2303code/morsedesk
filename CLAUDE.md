@@ -191,6 +191,19 @@ audio → dò tone 14 ms → dither nếu SNR>25dB → đặc trưng 11 chiều,
 - **Mốc CTC của một chữ phát SỚM hơn chữ** (~0,23 x độ dài chữ trước điểm bắt đầu): chế độ nghe chốt
   theo chữ phải lùi mép 2 khoảng cách chữ (`ripe_edge` trong model/stream.py), nếu không chữ số 0
   (năm gạch) bị chốt khi mới nghe được ba gạch -> `Ш`/`#`.
+- **File thật từ internet lộ lỗi mà bộ đo tổng hợp không bao giờ lộ** (27/09, testdata/private/t6):
+  libsndfile đọc MP3 VBR không header Xing theo bitrate KHUNG ĐẦU rồi DỪNG — mất 30 % bài tập số (sửa:
+  audio/mp3len.py đếm khung, chèn khung Xing); xuất OGG dài làm SẬP app (libsndfile Vorbis; sửa: ghi theo
+  khối). Không có bản chép thì dựng đáp án bằng hai giám khảo LLM độc lập đọc ảnh đường bao "mù"
+  (tools/envelope_strips.py) + tools/multi_decode.py; 5/5 cặp khớp 100 %.
+- **Đối chiếu với nhịp phím (morsedesk/keyed.py) chỉ khi CHẮC tín hiệu sạch** — mỗi cổng có một hồi quy
+  T1 đứng sau: SNR >= 15 dB (nhiễu xung 10 dB), biên độ ổn định (fading), độ phủ bên trong bản tin (fading
+  giấu ký tự dưới ngưỡng phím), nhịp như MÁY mới được sửa/chèn chữ (gõ tay: nhịp phím gộp hai chữ làm
+  một), lặng THẬT phải không thuần tone (đáy fading vẫn là tone). Bản đầu không cổng: T1 8,36 -> 14,56 %.
+- **Khoảng lặng dài ĐỀU giữa các chữ là nhập nhằng thật**: cùng âm thanh với một từ Farnsworth (T1 có
+  loại này). Chỉ tách thành chữ rời khi lặng dài LỆCH nhau như bài học thật (30/49, 40/59, 23–59 dit).
+- **Mốc CTC với chữ rời lặng dài**: mô hình phát mốc ký tự k+1 ngay ĐẦU khoảng lặng trước nó (ký tự đầu ở
+  khung 0) — ghép mô hình với nhịp phím theo THỨ TỰ (quy hoạch động), không theo mốc thời gian.
 - **Mô hình đọc nhiễu nền thành chữ.** 30 giây nhiễu trắng thuần ra `WE ARE`. Nó chưa bao giờ
   được dạy nói "ở đây không có gì", còn AGC thì kéo nhiễu lên ngang tín hiệu. `skip_silent_windows`
   chặn được, nhưng **chỉ bật cho chế độ nghe** — ở chế độ file nó làm CER xấu 3,6 điểm.
@@ -316,6 +329,7 @@ mình**. Trong một phiên đã có hai kết luận research không sống só
 | So với model có sẵn (DeepCW, QuartzNet) | `docs/research/04-pretrained-baselines.md` |
 | Research realtime và đóng gói | `.superpowers/sdd/research-*.md` |
 | Số / điện số / trạm số thật (T5) | `.superpowers/sdd/research-numbers-2026-09-27.md`, `tools/numeric_eval.py`, `tools/real_numbers_eval.py` |
+| Bộ test chuẩn cho số (122 ca, mức must/hard/ambiguous) + file thật T6 có đáp án giám khảo LLM | `docs/research/05-numbers.md`, `tools/numeric_edge_bench.py`, `testdata/private/t6/manifest.jsonl` |
 | Nhật ký từng task (gitignored) | `.superpowers/sdd/progress.md` |
 
 ## Hiện trạng
@@ -333,7 +347,8 @@ giới câu; điện số đọc thẳng từ mô hình (không LM). Ba bộ t�
 
 **T4 (bản ghi thật từ internet, 40 file) 1,25 %**: đề thi SRR tiếng Nga 0,55 %, ARRL 0,05 %, K7QO/SKCC
 0 %, VK6FLAB 0,79 %, **SAQ gõ tay on-air 14,67 %** (khoảng cách lớn nhất còn lại). **T5 trạm số thật
-(6 file) sai 17,00 % chữ số, 73,25 % nhóm đúng** (26/09: 25,12 / 42,36; ggmorse 28,79 / 36,78). Chế độ
+(6 file) sai 16,13 % chữ số, 73,89 % nhóm đúng** (26/09: 25,12 / 42,36; ggmorse 28,79 / 36,78). **T6 file
+tải về (đáp án giám khảo LLM) 0,69 %; bộ test biên số must 109/109**. Chế độ
 nghe: điện số 0,0 % lỗi chữ số / 95,4 % nhóm đúng (26/09: 24,8 / 62,7), văn bản 3,21 % (18 bản tin). Không có bản ghi
 Kazakh thật nào. T2 **1,84 %** (bản ghi ARRL thật 0,95 %, 18–40 WPM không sai ký tự nào; trước 23/09 báo 3,93 % vì đáp án Kazakh bị viết phẳng — xem 02-baseline-numbers). **Không kênh nào qua cổng 2 % một cách chắc chắn** — trên T1 bốn kênh
 chạm dưới 2 % nhưng dev độc lập cho 2,6–3,1 %.

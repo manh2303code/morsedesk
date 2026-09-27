@@ -159,9 +159,9 @@ def _decoders(pid: str) -> dict[str, Decoder]:
             # đúng cấu hình LiveWorker._ensure_decoder
             # đúng như LiveWorker._ensure_decoder: số viết tắt do StreamDecoder làm theo cả phiên
             "live": Decoder(pid, engine="onnx", model_path=_MODEL, lm=True, fallback=False,
-                            skip_silent_windows=True, numbers=False),
+                            skip_silent_windows=True, numbers=False, keyed=False),
             "live-auto": Decoder("auto", engine="onnx", model_path=_MODEL, lm=True, fallback=False,
-                                 skip_silent_windows=True, numbers=False),
+                                 skip_silent_windows=True, numbers=False, keyed=False),
         }
     return _DECODERS[pid]
 

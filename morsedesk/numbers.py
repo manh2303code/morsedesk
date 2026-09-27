@@ -35,6 +35,7 @@ NUMERIC_SHARE = 0.5             # ... và phải là ít nhất nửa số nhóm
 MAX_ALPHA_SHARE = 0.25          # nhóm có số mà lẫn chữ KHÔNG viết tắt được: quá ngần này là nhóm mã
 FIXED_LEN_SHARE = 0.5           # một độ dài chiếm ngần này nhóm số thuần = điện nhóm cố định
 MIN_FIXED_GROUPS = 4
+STRONG_SHARE = 0.8              # tỉ lệ nhóm đúng độ dài cố định để coi là điện nhóm số thuần
 
 _PROSIGN = re.compile(r"<[A-Z]+>")
 
@@ -43,6 +44,7 @@ _PROSIGN = re.compile(r"<[A-Z]+>")
 class NumericContext:
     numeric: bool
     group_len: int | None        # độ dài nhóm cố định (5 với điện số), None nếu không có
+    strong: bool = False         # gần như mọi nhóm đúng độ dài cố định: nhóm chỉ gồm chữ viết tắt cũng là số
 
 
 def letters_of(text: str) -> list[str]:
@@ -81,12 +83,20 @@ def analyze(groups: list[list[str]], profile) -> NumericContext:
     if alpha > MAX_ALPHA_SHARE * len(numeric):
         return NumericContext(False, None)
     pure = [len(g) for g in numeric if all(c.isdigit() for c in g)]
+    cut_like = [g for g in numeric
+                if all(c.isdigit() or (_is_alpha(c) and p in CUT_PATTERNS) for c, p in zip(g, _patterns(g, profile), strict=True))]
+    if len(pure) < MIN_FIXED_GROUPS and len(cut_like) >= STRONG_SHARE * len(counted):
+        # bộ viết tắt đầy đủ (thi đấu): nhóm số gần như không còn nhóm thuần chữ số — tính độ dài theo
+        # nhóm chỉ gồm chữ số + chữ viết tắt được (đo 27/09: `N4TD6 TNT6U A4NBV …` không được đổi), CHỈ khi
+        # chúng chiếm gần hết bản tin — số có định dạng (`5NN 708`, `UN2`) không phải điện nhóm số
+        pure = [len(g) for g in cut_like]
     group_len = None
     if len(pure) >= MIN_FIXED_GROUPS:
         length, n = Counter(pure).most_common(1)[0]
         if n >= FIXED_LEN_SHARE * len(pure) and length >= 3:
             group_len = length
-    return NumericContext(True, group_len)
+    strong = group_len is not None and sum(1 for g in counted if len(g) == group_len) >= STRONG_SHARE * len(counted)
+    return NumericContext(True, group_len, strong)
 
 
 def expand_cut(group: list[str], profile, ctx: NumericContext) -> list[str]:
@@ -110,8 +120,8 @@ def expand_cut(group: list[str], profile, ctx: NumericContext) -> list[str]:
             return group            # chữ không viết tắt được, hoặc prosign
         else:
             punct = True
-    if not cut or n_digit == 0:
-        return group
+    if not cut or (n_digit == 0 and not (ctx.strong and len(group) == ctx.group_len and not punct)):
+        return group                # nhóm TOÀN chữ viết tắt chỉ đổi trong điện nhóm số thuần (`EETVT` = 55030)
     fixed = ctx.group_len is not None
     if fixed and len(group) == ctx.group_len and not punct:
         pass

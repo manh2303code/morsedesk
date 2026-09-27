@@ -340,6 +340,14 @@ traffic), fragments between two complete groups that add up exactly to that leng
 in number traffic they only pull what the network heard towards characters that are common in
 text (a bracket read as 9). The network's own reading is used instead; the language models still
 choose the alphabet.</li>
+<li><b>Checking against the keying.</b> On a clean file (at least 15&nbsp;dB, steady level, keyed
+by machine) MorseDesk also reads the on/off pattern of the tone itself, measuring the dit from the short
+gaps inside each character, so a lesson made only of dahs is read correctly. Where the network and the
+keying disagree by one element, the keying wins; a character sent on its own that the network missed
+is added; long, clearly silent gaps between characters sent one at a time become spaces; and letters
+the network read out of speech or music are dropped. Hand keying, fading and noisy recordings are left
+to the network. On six number lessons and exercises downloaded from the internet every digit and every
+group came out right.</li>
 </ul>
 <p>Messages longer than 30&nbsp;seconds are split only to vote on the language. The text is decoded
 in one pass over the whole message, so no group is cut at a split point.</p>
@@ -580,7 +588,7 @@ transcripts of two recordings (M14 and one M01) partly disagree with the audio, 
 are a floor.</p>
 <table class="data" width="100%" cellspacing="0" cellpadding="6">
 <tr><th>Decoder</th><th class="num">Digits wrong</th><th class="num">Groups entirely right</th></tr>
-<tr><td>MorseDesk 0.6.0</td><td class="num">17.00 %</td><td class="num">73.25 %</td></tr>
+<tr><td>MorseDesk 0.6.0</td><td class="num">16.13 %</td><td class="num">73.89 %</td></tr>
 <tr><td>MorseDesk before the number work (model 0.5.0, 26 September)</td><td class="num">25.12 %</td><td class="num">42.36 %</td></tr>
 <tr><td>ggmorse, an open-source signal-processing decoder</td><td class="num">28.79 %</td><td class="num">36.78 %</td></tr>
 </table>

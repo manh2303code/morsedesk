@@ -433,7 +433,10 @@ class StreamDecoder:
                 self._last_char_s = fresh[-1][1]
                 continue
             # chưa kết thúc: từ dài thì chốt phần đầu đã chín, phần còn lại tạm (nối tiếp, không cách)
-            if cont or self.audio_s - w.start_s >= LONG_WORD_S:
+            # Chỉ TỪ NHIỀU CHỮ (dãy số liền) mới chốt dần: một chữ đứng riêng (bài học, lặng 30–59 dit) có mốc
+            # phát từ ĐẦU khoảng lặng trước nó nên trông như "từ dài > 3 s" — chốt dần là chốt khi chữ còn
+            # đang gõ (số 1 mới được `.--` -> `W`; đo 27/09: bài học ở chế độ nghe ra `6 W E 4 I W I 7`).
+            if cont or (len(chars) >= 2 and self.audio_s - w.start_s >= LONG_WORD_S):
                 ripe = [(ch, t) for ch, t in fresh if t <= ripe_edge]
                 if ripe:
                     parts.append((_part(w, ripe, end_s=ripe[-1][1]), cont))

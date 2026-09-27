@@ -257,10 +257,10 @@ def _decoder(pid: str, name: str) -> Decoder | None:
             dec = Decoder(pid, engine="deepcw", lm=False) if pid == "en" else None
         elif name == "live":             # đúng cấu hình LiveWorker._ensure_decoder
             dec = Decoder(pid, engine="onnx", model_path=_MODEL, lm=True, fallback=False,
-                          skip_silent_windows=True, numbers=False)
+                          skip_silent_windows=True, numbers=False, keyed=False)
         elif name == "live-auto":
             dec = Decoder("auto", engine="onnx", model_path=_MODEL, lm=True, fallback=False,
-                          skip_silent_windows=True, numbers=False)
+                          skip_silent_windows=True, numbers=False, keyed=False)
         else:
             raise ValueError(name)
         _DECODERS[key] = dec
