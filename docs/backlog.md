@@ -73,10 +73,16 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
     chỉ-ALSA của Ubuntu 22.04 nên không dính, nhưng đừng nâng ảnh dựng mà không thử máy không có Pulse.
     App báo "không có âm thanh" (AudioUnavailable), không sập.
 
-26. **Điện văn mạng CW (M89/M95) + phím "nhẹ": app sai 23 %** (28/09, file thật T6 net_msg_cut_numbers.wav,
-    đáp án 2 giám khảo khớp 311/316). Chấm sau gạch 0,1–0,5 đơn vị -> C/G, Y/O, K/M; mô hình chưa từng học lối
-    phím này (phím chuẩn cùng nội dung: 0 % tới 8 dB). Nghiên cứu + số đo + kế hoạch 5 bước:
-    docs/research/06-net-traffic-light-keying.md (nhịp phím tự thích nghi 5,7 %; không làm MoE trong mạng).
+26. **Điện văn mạng CW (M89/M95) + phím "nhẹ"** (28/09; docs/research/06). ĐÃ LÀM (§5, 20535bc + sau đó):
+    bộ đo T7 (3 file thật + bản chép nhân viên, tools/net_eval.py, tools/copy_align.py), nhịp phím v2 có cổng
+    phím nhẹ + nhịp phím làm nguồn chính, tầng cấu trúc morsedesk/traffic.py; T7 nhóm bản chép đúng 46 -> 104/108,
+    351 theo mẫu 23,7 -> 2,5 %; T1/dev/dev-OOV/T2 giống hệt từng clip. CÒN MỞ:
+    - chế độ NGHE chưa có tầng cấu trúc (StreamDecoder chốt từng từ; nhóm dính liền vẫn hiện dính);
+    - bỏ phiếu hô hiệu lặp, kiểm `CK` = số nhóm (cảnh báo khi lệch), mào đầu `CK 3524` dính (CK 35 + ngày 24),
+      8 chấm xóa trong mào đầu mô hình đọc thành `EEEEEEEE`;
+    - trọng tài THEO ĐOẠN (347: fading sâu một đoạn — nhịp phím chỉ tin được ngoài đoạn đó);
+    - 352 còn 3 nhóm sai do MÔ HÌNH đọc `Л` thay `D`/`9` (phím hơi nhẹ, dưới cổng) -> E21 (lối phím đo thật);
+    - chấm sau gạch cực ngắn (1–2 khung, bộ tổng hợp khắc nghiệt) mất hẳn — file thật chưa gặp.
 
 ## Đang mở — trung bình
 

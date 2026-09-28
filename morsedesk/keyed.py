@@ -130,7 +130,8 @@ def _light_fist(runs: list, unit: float) -> bool:
 def _marks(runs: list, env: np.ndarray, unit: float, lo: float, hi: float,
            allow_short: bool) -> list[tuple[int, int]]:
     """Xung giữ lại: >= 0,4 đơn vị như cũ; phím nhẹ (`allow_short`) giữ thêm xung NGẮN hơn (>= MIN_MARK_FRAMES)
-    khi đủ biên độ VÀ nằm sát xung khác — chấm ngắn sau gạch; gai nhiễu đứng riêng thì bỏ."""
+    khi đủ biên độ VÀ sát một xung khác (< 2 đơn vị) ở ÍT NHẤT một phía — chấm cuối ký tự cũng vậy (đòi cả hai
+    phía thì `5` mất chấm cuối 0,38 đơn vị thành `H`, tổng hợp lối phím 351, 28/09); gai nhiễu đứng riêng thì bỏ."""
     ons = [(s, s + n) for on, s, n in runs if on]
     keep = []
     for k, (a, b) in enumerate(ons):
@@ -144,8 +145,8 @@ def _marks(runs: list, env: np.ndarray, unit: float, lo: float, hi: float,
             continue
         near_prev = k > 0 and (a - ons[k - 1][1]) / FRAME_RATE < 2.0 * unit
         near_next = k + 1 < len(ons) and (ons[k + 1][0] - b) / FRAME_RATE < 2.0 * unit
-        if near_prev and near_next or near_prev and (ons[k - 1][1] - ons[k - 1][0]) / FRAME_RATE >= 2.0 * unit:
-            keep.append((a, b))                 # giữa hai xung, hoặc ngay sau một gạch
+        if near_prev or near_next:
+            keep.append((a, b))
     return keep
 
 

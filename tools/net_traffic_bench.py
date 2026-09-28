@@ -1,7 +1,8 @@
 """Bộ tổng hợp điện văn mạng CW (M89/M95) x lối phím x SNR — chấm theo NGHĨA (Kirin->Latin, số viết tắt->số).
 
-Vì sao (docs/research/06): cùng nội dung, phím CHUẨN thì app đúng tuyệt đối tới 8 dB, phím NHẸ (file thật T7:
-chấm 0,72 đơn vị, chấm ngay sau gạch 0,15–0,55) thì sai 36–53 %. Lối phím đo từ 3 file thật T7.
+Vì sao (docs/research/06): cùng nội dung, phím CHUẨN thì app đúng tuyệt đối tới 8 dB, phím NHẸ thì không.
+Lối phím ĐO trên 3 file thật T7 (28/09, docs/research/06 §5) và dùng CHUNG mô hình với dữ liệu huấn luyện
+(morsedesk/data/keyer.apply_fist): t7light ~ file 351, t7mid ~ file 352.
 
     uv run python tools/net_traffic_bench.py [--n 6] [--snrs 30,20,12,8,4] [--model models/eval_E20.onnx]
 """
@@ -23,12 +24,12 @@ from tools.net_eval import lev_ops, semantic, text_tokens  # noqa: E402
 
 LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 CUT = {"1": "A", "2": "U", "3": "V", "8": "D", "9": "N", "0": "T"}
-# (tên, dit_scale, after_dah (khoảng), lặng giữa chữ/từ kéo dài) — đo 28/09 trên T7: file 1 chấm 0,72 sau
-# gạch p10 0,54 (xuống 0,15); file 3 chấm 0,85 sau gạch p10 0,69; file 2 chuẩn 0,96.
-FISTS = {
-    "std": (1.0, (1.0, 1.0), (1.0, 1.0)),
-    "t7mid": (0.85, (0.6, 0.9), (1.0, 1.4)),
-    "t7light": (0.72, (0.15, 0.6), (1.0, 1.5)),
+# Đo 28/09 (đơn vị nhịp): 351 chấm 0,6 gạch 2,65, lặng sau gạch 0,87 / sau chấm 1,27, giữa chữ 4,3, giữa từ nén
+# vào ~5–6; 352 chấm 0,75 gạch 2,8, lặng sau gạch 0,8–1,0, giữa chữ 3,5–4,5, giữa từ 7–14; 347 gần chuẩn.
+FISTS: dict[str, dict | None] = {
+    "std": None,
+    "t7mid": dict(mark_offset=-0.25, dah_gap_cut=0.3, char_stretch=1.15, word_stretch=1.2),
+    "t7light": dict(mark_offset=-0.4, dah_gap_cut=0.5, char_stretch=1.3, word_stretch=0.8),
 }
 
 
@@ -68,6 +69,7 @@ def message(rng: np.random.Generator) -> str:
 
 def render(text: str, fist: str, snr: float, seed: int) -> np.ndarray:
     from morsedesk.api import Encoder
+    from morsedesk.data.keyer import KeyerParams, apply_fist
     from morsedesk.encode.synth import add_noise, elements_to_audio, tone_power
     from morsedesk.encode.timing import Element, TimingParams, tokens_to_elements, unit_seconds
     from morsedesk.lm.profile import load_profile
@@ -75,24 +77,11 @@ def render(text: str, fist: str, snr: float, seed: int) -> np.ndarray:
     wpm = float(rng.uniform(15, 20))
     u = unit_seconds(wpm)
     el = tokens_to_elements(Encoder(load_profile("en")).to_tokens(text), TimingParams(wpm))
-    dit_scale, (a_lo, a_hi), (g_lo, g_hi) = FISTS[fist]
-    out, prev_dah, carry = [], False, 0.0
-    for e in el:
-        if e.on:
-            is_dah = e.duration > 2 * u
-            d = e.duration * (1.0 if is_dah else dit_scale * (rng.uniform(a_lo, a_hi) if prev_dah else 1.0))
-            d *= float(np.exp(rng.normal(0, 0.06)))
-            out.append(Element(True, d))
-            carry = e.duration - d
-            prev_dah = is_dah
-        else:
-            g = e.duration + carry
-            if e.duration > 1.5 * u:
-                g *= rng.uniform(g_lo, g_hi)
-                prev_dah = False
-            out.append(Element(False, max(0.3 * u, g)))
-            carry = 0.0
-    x = elements_to_audio(out, float(rng.uniform(700, 1100)), 8000, 0.5)
+    el = [Element(e.on, e.duration * float(np.exp(rng.normal(0, 0.06)))) for e in el]
+    if FISTS[fist]:
+        el = apply_fist(el, KeyerParams(wpm=wpm, farnsworth_wpm=None, weight=3.0, jitter=0.0, bug=False, drift=0.0,
+                                        spacing_error_rate=0.0, **FISTS[fist]), u)
+    x = elements_to_audio(el, float(rng.uniform(700, 1100)), 8000, 0.5)
     x = np.concatenate([np.zeros(4000, np.float32), x, np.zeros(4000, np.float32)])
     return add_noise(x, snr, tone_power(0.5), rng=rng)
 

@@ -79,3 +79,64 @@ sạch nhưng sụp khi nhiễu -> mô hình phải học phím nhẹ.
 
 Công cụ tạm (scratchpad, sẽ đưa vào tools/ ở bước 1): score theo mẫu, semscore theo nghĩa, exp_keyed_adaptive
 (E1), exp_synth (E2 — bộ tổng hợp điện mạng + lối phím nhẹ).
+
+## 5. Làm theo kế hoạch (28/09 chiều) — T7, số đo trên 3 file thật + bản chép nhân viên
+
+**Bộ đo T7** (`testdata/private/t7`, gitignored): net1_351 (file trên), net2_347, net3_352 — người dùng gửi thêm
+2 file cùng kiểu và BẢN CHÉP của nhân viên cho cả ba. Đáp án = 2 giám khảo LLM (351: 311/316 khớp; 352: 93 %;
+347: 80 %, fading sâu 0:57–1:13) + bản chép căn vào vùng nhóm số (`tools/copy_align.py`: chỉ đổi chữ số khi
+bản chép lệch <= 1 phần tử so với cách đọc của một giám khảo — lỗi phím nhẹ `V`/`U`, `D`/`N`, `6`/`5`; lệch xa
+thì sửa nhưng giữ "không chắc"). Hô hiệu KHÔNG sửa theo bản chép: 352 bản chép ghi RY2J nhưng nhịp phím đo được
+`-.- -.- ...-- .---` = KK3J cả 3 lần. `tools/net_eval.py` chấm: mẫu (số viết tắt = chữ số), nghĩa, nhóm theo
+mẫu, và **nhóm bản chép đúng NHƯ HIỆN RA** (thước đo gần người dùng nhất: nhóm dính liền = sai).
+
+**Lối phím THẬT (đo, đơn vị nhịp)** — bác bỏ giả thuyết "chấm sau gạch bị rút" của §2:
+
+| | chấm | gạch | lặng sau chấm | lặng sau gạch (trong ký tự) | giữa chữ | giữa từ |
+|---|---|---|---|---|---|---|
+| 351 | 0,60 | 2,65 | 1,27 | **0,87** | 4,3 | nén vào ~5–6 |
+| 352 | 0,75 | 2,8 | 1,14 | 0,8–1,0 | 3,5–4,5 | 7–14 |
+| 347 | 0,77 | 2,9 | 1,23 | 0,9–1,0 | ~4 | 6–8 |
+
+Chấm NGAY SAU gạch dài y như chấm khác (351: 0,60 và 0,60); cái bị rút là LẶNG giữa gạch và phần tử sau (phần tử
+tới sớm ~0,5 đơn vị). Mọi xung hụt ~0,4 đơn vị, phần hụt dồn sang lặng sau (chấm -> chấm vẫn 1,93). Mô hình lối
+phím của data/keyer.py (E21), tools/net_traffic_bench.py và test sửa theo bảng này; E20 đã học mô hình đoán sai.
+
+**Các bước và số đo** (app = auto + LM; nhóm bản chép: 35 + 36 + 37 = 108):
+
+| bước | 351 mẫu / nghĩa | nhóm bản chép 351 / 347 / 352 |
+|---|---|---|
+| trước (E18, 27/09) | 23,73 / 30,70 % | 9 / 10 / 27 |
+| + nhịp phím v2, chỉ bật khi phím nhẹ (cổng) | 3,80 / 8,86 % | 9 / 10 / 27 |
+| + tầng cấu trúc (chia nhóm sau RMKS, số viết tắt -> số) | 3,80 / 5,06 % | 31 / 34 / 32 |
+| + nhịp phím làm nguồn CHÍNH khi phím nhẹ tách bạch | 2,85 / 3,48 % | 31 / 34 / 32 |
+| + giữ chấm ngắn sát xung khác ở MỘT phía | 2,53 / 3,16 % | 31 / 34 / 32 |
+| + `TO` là từ, dãy số đủ nhóm tách khỏi chữ lạ | (như trên) | **34 / 36 / 34** |
+
+- **Cổng phím nhẹ** (keyed.py `_light_fist`): >= 60 chấm, chấm/lặng trong ký tự < 0,7 VÀ hụt >= 2,5 khung (ngưỡng
+  cắt tự làm hụt ~1 khung: ebook2cw 35 WPM có tỉ lệ 0,75). Quét T1/dev/oov/T2/T4/T5/T6/T7 (1 588 clip): chỉ
+  net1_351 qua cổng. Không cổng: T1 +0,04, dev +0,06 (5 clip xấu: nhiễu xung thành "chấm" giữa hai gạch). Có
+  cổng: T1/dev/dev-OOV/T2 **giống hệt từng clip** (ghép cặp, scripts/regress_pair.sh).
+- **Nhịp phím làm nguồn chính** (`reconcile`, khi `separable`): mô hình chưa học phím nhẹ khớp nhịp phím < 80 %
+  nên cổng mức đồng ý (lập 27/09 cho trạm số M14 thu sóng ngắn) từ chối đúng lúc nhịp phím đúng còn mô hình sai.
+- **Tầng cấu trúc** (`morsedesk/traffic.py`): chỉ khi có mốc RMKS (theo MẪU — 352 bị tự nhận là tiếng Nga,
+  `РМКС`) và vùng sau nó >= 80 % ký tự số. Không đụng mào đầu/hô hiệu.
+
+**Đã thử và BỊ SỐ ĐO BÁC BỎ:** đo khoảng lặng "theo nhịp" (từ đầu xung trừ độ dài danh nghĩa, giả định phần hụt
+của chấm dồn sang lặng sau): 351 xấu 3,80 -> 7,28 %. Người gửi thật không dồn như thế (bảng trên).
+
+**Bộ tổng hợp với lối phím ĐO THẬT** (tools/net_traffic_bench.py, 6 điện x 5 SNR, CER theo NGHĨA — chấm theo bản
+chữ số do bộ sinh ra: nhóm toàn chữ viết tắt `TVVV` = 0333; trước đó thước đo tính nhầm cả chỗ app ĐÚNG là lỗi):
+
+| mã hiện tại + | chuẩn | t7mid (~352) | t7light (~351) |
+|---|---|---|---|
+| E18 | 0,00 % | 0,28 % | 2,21 % (0 % ở 30/20 dB — nhịp phím làm chính; 2,8–4,6 % ở 12–4 dB) |
+| E20 | 0,00 % | 0,13 % | 0,08 % |
+
+Trước khi sửa luật giữ chấm ngắn (đòi sát xung khác ở CẢ HAI phía -> chấm CUỐI ký tự 0,38 đơn vị bị bỏ: `5` ->
+`H`, `6` -> `B`) t7light ở 30/20 dB sai 7,8–8,3 % với cả hai mô hình.
+
+**T7 thật, mã cuối (nhóm bản chép 351 / 347 / 352):** E18 34 / 36 / 34 = **104/108**, 351 theo mẫu 2,53 %;
+E20 34 / 35 / 30 = 99/108 (tổng hợp tốt hơn nhưng file thật 352 KÉM: `1360` -> `Е36Т`, `5390` -> `5399`)
+-> không dùng E20. 4 nhóm còn sai đều do đọc sai ký tự: `2094` -> `2093` (351), `Л` thay `D`/`9` và
+`3408` -> `3498` (352).

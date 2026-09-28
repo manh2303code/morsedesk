@@ -87,6 +87,9 @@ PYTHONUTF8=1 uv run python tools/long_random_eval.py   # bản tin ~2 phút x 3 
 PYTHONUTF8=1 uv run python tools/make_t1.py --out testdata/generated/t1oov --seed-base 700000 --holdout-text
                                                    # dev-OOV: văn bản model CHƯA thấy (xem Gotchas)
 PYTHONUTF8=1 uv run python tools/make_t4.py        # T4: bản ghi THẬT từ internet (SRR ru, ARRL, SAQ...)
+PYTHONUTF8=1 uv run python tools/net_eval.py [--model models/eval_X.onnx]   # T7 điện văn mạng thật (3 file + bản chép)
+PYTHONUTF8=1 uv run python tools/net_traffic_bench.py [--model ...]  # điện văn tổng hợp x lối phím đo thật x SNR (~10 phút)
+bash scripts/regress_pair.sh <worktree mốc> runs/<ra> 8   # hồi quy GHÉP CẶP hai phiên bản mã: T1/dev/dev-OOV/T2/T4 (~1 giờ)
 PYTHONUTF8=1 uv run python tools/calibrate_confidence.py   # % "từ ở mức này đúng khoảng" trong tooltip (~25 phút)
                                                    # CHẠY LẠI sau MỖI lần đổi model âm học/LM
 PYTHONUTF8=1 uv run ruff check .
@@ -208,6 +211,17 @@ audio → dò tone 14 ms → dither nếu SNR>25dB → đặc trưng 11 chiều,
   T1 đứng sau: SNR >= 15 dB (nhiễu xung 10 dB), biên độ ổn định (fading), độ phủ bên trong bản tin (fading
   giấu ký tự dưới ngưỡng phím), nhịp như MÁY mới được sửa/chèn chữ (gõ tay: nhịp phím gộp hai chữ làm
   một), lặng THẬT phải không thuần tone (đáy fading vẫn là tone). Bản đầu không cổng: T1 8,36 -> 14,56 %.
+- **Nhịp phím v2 (keyed.py) CHỈ bật với phím NHẸ** (`_light_fist`: >= 60 chấm, chấm/lặng trong ký tự < 0,7 và hụt
+  >= 2,5 khung): cho mọi tín hiệu thì nhiễu xung thành "chấm" giữa hai gạch (T1/dev xấu 5 clip). Phím nhẹ tách
+  bạch (`separable`) thì nhịp phím là nguồn CHÍNH của `reconcile` — mô hình chưa học lối phím đó mới là bên sai.
+- **Phím nhẹ THẬT (T7, đo 28/09): mọi xung hụt ~0,4 đơn vị, LẶNG SAU GẠCH rút ~0,5** — chấm sau gạch KHÔNG ngắn
+  hơn chấm khác (giả thuyết ban đầu sai; E20 học theo giả thuyết đó). Đo khoảng lặng "theo nhịp" bị bác (351:
+  3,80 -> 7,28 %). Mô hình lối phím dùng CHUNG ở data/keyer.apply_fist, tools/net_traffic_bench.py và test.
+- **Điện văn mạng: ký tự đúng nhưng NHÓM DÍNH LIỀN** (`67A3TD3D6746`): thước đo bỏ dấu cách không thấy — T7 chấm
+  thêm "nhóm bản chép đúng như hiện ra" (46/108 trước tầng cấu trúc morsedesk/traffic.py). Tầng này chỉ bật khi
+  có mốc RMKS theo MẪU (352 bị tự nhận tiếng Nga: `РМКС`); `TO` giữa các nhóm RMKS là một từ (cả 3 file).
+- **Bản chép nhân viên KHÁC âm thanh ở chỗ không phải nhóm số**: hô hiệu (352 phát KK3J — đo nhịp phím — bản chép
+  ghi RY2J), bỏ `TO`, bỏ nhóm đánh hỏng. `tools/copy_align.py` chỉ căn vùng nhóm sau RMKS.
 - **Khoảng lặng dài ĐỀU giữa các chữ là nhập nhằng thật**: cùng âm thanh với một từ Farnsworth (T1 có
   loại này). Chỉ tách thành chữ rời khi lặng dài LỆCH nhau như bài học thật (30/49, 40/59, 23–59 dit).
 - **Mốc CTC với chữ rời lặng dài**: mô hình phát mốc ký tự k+1 ngay ĐẦU khoảng lặng trước nó (ký tự đầu ở
@@ -348,6 +362,7 @@ mình**. Trong một phiên đã có hai kết luận research không sống só
 | Research realtime và đóng gói | `.superpowers/sdd/research-*.md` |
 | Số / điện số / trạm số thật (T5) | `.superpowers/sdd/research-numbers-2026-09-27.md`, `tools/numeric_eval.py`, `tools/real_numbers_eval.py` |
 | Bộ test chuẩn cho số (122 ca, mức must/hard/ambiguous) + file thật T6 có đáp án giám khảo LLM | `docs/research/05-numbers.md`, `tools/numeric_edge_bench.py`, `testdata/private/t6/manifest.jsonl` |
+| Điện văn mạng CW (M89/M95) + phím nhẹ: T7 (3 file thật + bản chép nhân viên), lối phím đo thật, tầng cấu trúc | `docs/research/06-net-traffic-light-keying.md`, `tools/net_eval.py`, `tools/net_traffic_bench.py`, `testdata/private/t7` |
 | Nhật ký từng task (gitignored) | `.superpowers/sdd/progress.md` |
 
 ## Hiện trạng

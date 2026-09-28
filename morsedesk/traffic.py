@@ -11,6 +11,10 @@ theo số ký tự lệch; dấu cách của mô hình là gợi ý (ranh giới
 một từ ngắn mô hình đã tách riêng (mảnh rác trước `<AR>`) được giữ riêng với giá rẻ; phần cuối dãy ngay trước
 `?`/xóa là lần đánh hỏng nên được ngắn.
 
+`TO` giữa các nhóm RMKS (cả 3 file T7: `8981 TO 8836`, bản chép bỏ đi) là một từ, không phải số 0 + `O`. Dãy
+số ĐỦ nhóm dính chữ lạ (`1345RNQSL`, `4236ST ?`) thì tách; dãy lẻ nhóm giữ chỗ nối (chữ lạ có thể là chữ số
+đọc nhầm: `DN5S4`).
+
 CHỈ áp khi có mốc `RMKS` (theo MẪU: đúng cả khi bảng tự nhận là Kirin `РМКС`) và vùng sau nó gần như toàn số.
 Hô hiệu, phần đầu điện, văn bản thường không bị đụng. Chế độ nghe chưa có tầng này (backlog).
 """
@@ -25,6 +29,7 @@ from morsedesk.model.vocab import DIGITS
 NET_CUT: dict[str, str] = {"-": "0", ".-": "1", "..-": "2", "...-": "3", "-..": "8", "-.": "9"}
 DIGIT_OF: dict[str, str] = {p: d for d, p in DIGITS.items()}
 RMKS = [".-.", "--", "-.-", "..."]
+TO = ["-", "---"]
 AR = ".-.-."
 BT = "-...-"
 QUERY = "..--.."
@@ -123,14 +128,18 @@ def regroup(letters: list[str], patterns: list[str | None], spaces: list[bool]) 
         return Regrouped(list(letters), list(spaces), False)
     start, end = span
     out_l, out_s = list(letters), list(spaces)
+    word_to = {i for i in range(start, end - 1) if patterns[i:i + 2] == TO}
+
+    def numeric(k: int) -> bool:
+        return k not in word_to and digit_of(patterns[k]) is not None
     runs: list[list[int]] = []
     i = start
     while i < end:
-        if digit_of(patterns[i]) is None:
+        if not numeric(i):
             i += 1
             continue
         j = i
-        while j < end and digit_of(patterns[j]) is not None:
+        while j < end and numeric(j):
             j += 1
         runs.append(list(range(i, j)))
         i = j
@@ -142,13 +151,20 @@ def regroup(letters: list[str], patterns: list[str | None], spaces: list[bool]) 
         starts = set(segment(len(run), local, g, tail))
         for k in run:
             out_s[k] = (k - a) in starts
-        if a != start and patterns[a - 1] not in HARD:
-            out_s[a] = spaces[a]        # dãy số bị cắt bởi một chữ lạ (`DN5S4`): giữ nguyên chỗ nối đó
+        whole = len(run) % g == 0
+        if whole and b < len(out_s):
+            out_s[b] = True             # đủ nhóm: chữ lạ theo sau đứng riêng (`1345 RNQSL`)
+        if a != start and patterns[a - 1] not in HARD and not whole:
+            out_s[a] = spaces[a]        # dãy lẻ nhóm bị cắt bởi một chữ lạ (`DN5S4`): giữ nguyên chỗ nối đó
         for s in sorted(starts):
             e = min([t for t in starts if t > s], default=len(run))
             if e - s == g:
                 for k in range(a + s, a + e):
                     out_l[k] = digit_of(patterns[k]) or out_l[k]
+    for k in word_to:                                 # từ `TO` đứng riêng
+        out_s[k], out_s[k + 1] = True, False
+        if k + 2 < len(out_s):
+            out_s[k + 2] = True
     for k in range(start, end):                       # dấu cấu trúc đứng riêng
         if patterns[k] in HARD:
             out_s[k] = True

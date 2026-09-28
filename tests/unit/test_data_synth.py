@@ -224,31 +224,34 @@ def test_fist_off_draws_no_extra_randomness():
     """fist_p = 0 không rút thêm số ngẫu nhiên nào: T1/dev và dữ liệu E18 sinh lại y hệt."""
     a, b = np.random.default_rng(7), np.random.default_rng(7)
     pa, pb = sample_keyer_params(a), sample_keyer_params(b, fist_p=0.0)
-    assert pa == pb and pa.dit_scale == 1.0 and pa.after_dah == 1.0
+    assert pa == pb and pa.mark_offset == 0.0 and pa.dah_gap_cut == 0.0
     assert a.random() == b.random()
 
 
-def test_fist_shortens_dits_and_keeps_rhythm():
+def test_fist_matches_measured_real_keying():
+    """Mô hình đo trên file thật 351: mọi xung hụt, phần hụt dồn sang lặng sau; lặng sau gạch trong ký tự bị
+    rút (phần tử sau tới sớm); lặng giữa chữ giãn, giữa từ nén."""
     from morsedesk.data.keyer import apply_fist
     from morsedesk.encode.timing import Element
     u = 0.08
-    el = [Element(True, 3 * u), Element(False, u), Element(True, u), Element(False, 3 * u),   # N, rồi E
-          Element(True, u)]
+    el = [Element(True, 3 * u), Element(False, u), Element(True, u), Element(False, 3 * u),     # N | E
+          Element(True, u), Element(False, u), Element(True, u), Element(False, 7 * u),         # I || T
+          Element(True, 3 * u)]
     p = KeyerParams(wpm=15.0, farnsworth_wpm=None, weight=1.0, jitter=0.0, bug=False, drift=0.0,
-                    spacing_error_rate=0.0, dit_scale=0.7, after_dah=0.5)
-    out = apply_fist(el, p, u)
-    assert len(out) == len(el) and out[0].duration == 3 * u
-    assert abs(out[2].duration - 0.35 * u) < 1e-9                   # chấm ngay sau gạch: 0,7 x 0,5
-    assert abs(out[4].duration - 0.7 * u) < 1e-9                    # chấm đầu ký tự: chỉ 0,7
-    assert abs(sum(e.duration for e in out[:4]) - sum(e.duration for e in el[:4])) < 1e-9   # nhịp giữ
+                    spacing_error_rate=0.0, mark_offset=-0.4, dah_gap_cut=0.5, char_stretch=1.3, word_stretch=0.8)
+    out = [e.duration / u for e in apply_fist(el, p, u)]
+    want = [2.6, 1.0 - 0.5 + 0.4, 0.6, 3 * 1.3 + 0.4, 0.6, 1.4, 0.6, 7 * 0.8 + 0.4, 2.6]
+    assert np.allclose(out, want)
+    assert abs(sum(out[4:6]) - 2.0) < 1e-9                         # chấm -> chấm: nhịp giữ
 
 
 def test_fist_sampled_when_asked():
     rng = np.random.default_rng(3)
     ps = [sample_keyer_params(rng, fist_p=1.0) for _ in range(200)]
-    assert all(0.5 <= p.dit_scale <= 1.15 for p in ps)
-    light = [p for p in ps if p.after_dah < 1.0]
-    assert 60 < len(light) < 140 and all(0.15 <= p.after_dah <= 0.75 for p in light)
+    assert all(-0.5 <= p.mark_offset <= 0.1 and 1.0 <= p.char_stretch <= 1.5 and 0.7 <= p.word_stretch <= 1.4
+               for p in ps)
+    cut = [p for p in ps if p.dah_gap_cut > 0]
+    assert 110 < len(cut) < 170 and all(p.dah_gap_cut <= 0.6 for p in cut)
 
 
 def test_net_traffic_text_is_encodable(profiles):

@@ -173,33 +173,35 @@ def test_reconcile_stays_out_of_fading_and_hand_keying():
     assert out is None or "9" in " ".join(w.text for w in out)
 
 
-# --- Phím NHẸ (T7, 28/09): chấm 0,6 đơn vị, chấm ngay sau gạch 0,3; phần hụt dồn sang khoảng lặng (nhịp giữ) ---
+# --- Phím NHẸ (T7, 28/09) — mô hình ĐO trên file thật 351 (data/keyer.apply_fist): mọi xung hụt 0,4 đơn vị
+# (phần hụt dồn sang lặng sau), lặng sau gạch trong ký tự rút 0,5, giữa chữ giãn 1,3, giữa từ nén 0,8 ---
 
 UL = 0.075
 NET_TEXT = "VV CYHM DE NJWY RMKS 8981 8836 8417 8047 6713 0838 6746 7223 7681 3098 8140 7617 8954 2713"
+LIGHT = dict(mark_offset=-0.4, dah_gap_cut=0.5, char_stretch=1.3, word_stretch=0.8)
 
 
-def light_audio(patterns: list[str], gaps_units: list[float], dit: float = 0.6, after_dah: float = 0.3,
-                snr_db: float = 30.0, seed: int = 0) -> np.ndarray:
+def light_audio(patterns: list[str], gaps_units: list[float], fist: dict | None = LIGHT,
+                snr_db: float = 30.0, seed: int = 0, jitter: float = 0.0) -> np.ndarray:
+    """`jitter`: độ lệch log-normal của độ dài xung (file thật 351: chấm p10 0,47 so với trung vị 0,6)."""
+    from morsedesk.data.keyer import KeyerParams, apply_fist
     el: list[Element] = []
-    carry = 0.0
     for k, p in enumerate(patterns):
-        prev_dah = False
         for j, s in enumerate(p):
-            nominal = UL if s == "." else 3 * UL
-            d = nominal if s == "-" else UL * dit * (after_dah if prev_dah else 1.0)
-            el.append(Element(True, d))
-            if j < len(p) - 1:
-                el.append(Element(False, UL + nominal - d))
-            else:
-                carry = nominal - d
-            prev_dah = s == "-"
+            if j:
+                el.append(Element(False, UL))
+            el.append(Element(True, UL if s == "." else 3 * UL))
         if k < len(patterns) - 1:
-            el.append(Element(False, gaps_units[k] * UL + carry))
+            el.append(Element(False, gaps_units[k] * UL))
+    if fist:
+        el = apply_fist(el, KeyerParams(wpm=16.0, farnsworth_wpm=None, weight=3.0, jitter=0.0, bug=False, drift=0.0,
+                                        spacing_error_rate=0.0, **fist), UL)
+    rng = np.random.default_rng(seed)
+    if jitter:
+        el = [Element(True, e.duration * float(np.exp(rng.normal(0, jitter)))) if e.on else e for e in el]
     x = elements_to_audio(el, 700.0, SAMPLE_RATE, 0.8)
     pad = np.zeros(SAMPLE_RATE // 2, dtype=np.float32)
     x = np.concatenate([pad, x, pad])
-    rng = np.random.default_rng(seed)
     return (x + 0.8 / np.sqrt(2) * 10 ** (-snr_db / 20) * rng.standard_normal(len(x))).astype(np.float32)
 
 
@@ -214,29 +216,30 @@ def net_patterns() -> tuple[list[str], list[float]]:
 
 
 def test_light_fist_is_read_by_the_adaptive_path():
-    """Chấm sau gạch chỉ 0,3 đơn vị: đường cũ (ngưỡng cố định 0,4 đơn vị, ngắt chữ 2 đơn vị) sai hàng loạt;
-    đường phím nhẹ đọc đúng mọi ký tự, và ranh giới chữ đủ tách bạch để sửa xa (`separable`)."""
+    """Phím nhẹ, xung dao động như file thật (log-normal 0,15): đường phím nhẹ đọc đúng mọi ký tự, ranh giới
+    chữ đủ tách bạch để làm nguồn chính."""
     pats, gaps = net_patterns()
-    x = light_audio(pats, gaps)
+    x = light_audio(pats, gaps, jitter=0.15)
     k = read_keying(x, mix_envelope(x, 700.0), 700.0)
     assert [c.pattern for c in k.chars] == pats
     assert k.separable
 
 
 def test_light_path_needed(monkeypatch):
+    """Cùng âm thanh, đường cũ (cửa sổ chấm 0,5–1,8 đơn vị cố định): chấm hụt dưới 0,5 thành "không rõ"."""
     import morsedesk.keyed as keyed
     pats, gaps = net_patterns()
-    x = light_audio(pats, gaps)
+    x = light_audio(pats, gaps, jitter=0.15)
     monkeypatch.setattr(keyed, "_light_fist", lambda *a, **kw: False)
     got = [c.pattern for c in read_keying(x, mix_envelope(x, 700.0), 700.0).chars]
-    assert sum(a != b for a, b in zip(got, pats, strict=False)) > 20
+    assert sum(a != b for a, b in zip(got, pats, strict=False)) >= 8
 
 
 def test_standard_fist_keeps_the_old_path():
     """Phím chuẩn: cổng phím nhẹ tắt (T1/dev giống hệt từng clip, 28/09), vẫn đọc đúng."""
     from morsedesk.keyed import _light_fist, keying
     pats, gaps = net_patterns()
-    x = light_audio(pats, gaps, dit=1.0, after_dah=1.0)
+    x = light_audio(pats, gaps, fist=None)
     env = mix_envelope(x, 700.0)
     runs, unit, _, _ = keying(env)
     assert not _light_fist(runs, unit)

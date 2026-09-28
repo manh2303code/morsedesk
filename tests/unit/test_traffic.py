@@ -80,3 +80,15 @@ def test_words_rebuilt_with_letter_times():
     assert abs(b.end_s - words[3].end_s) < 1e-9
     assert a.chars[1] == ("7", 3.1) and a.confidence == 0.7
     assert traffic_words([w("HELLO", 0.0, 0.9)], EN) is None
+
+
+def test_to_between_remark_groups_is_a_word():
+    """Cả 3 file T7 có `TO` giữa các nhóm RMKS; mô hình dính nó vào số (`8981TO8836`, T = số 0 viết tắt)."""
+    assert run("RMKS 8981TO8836 8417 8047 = 6713 <AR>") == "RMKS 8981 TO 8836 8417 8047 = 6713 <AR>"
+    assert run("РМКС 6229 ТО5652И = 3198 1360 9218", RU) == "РМКС 6229 ТО 5652 И = 3198 1360 9218"
+
+
+def test_whole_groups_split_from_stray_letters_but_odd_runs_kept():
+    out = run("RMKS 1234 = 8104 3129 0401 7376 8732 8930 6781 5416 1345RNQSL ? K")
+    assert out == "RMKS 1234 = 8104 3129 0401 7376 8732 8930 6781 5416 1345 RNQSL ? K"
+    assert run("RMKS 1234 = 5620 DN5S4 2713 <AR>") == "RMKS 1234 = 5620 DN5S4 2713 <AR>"
