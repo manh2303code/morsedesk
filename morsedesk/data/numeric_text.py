@@ -87,8 +87,12 @@ def punct_groups(rng: np.random.Generator, n: int) -> str:
     return " ".join(out)
 
 
-def numeric_text(letters: list[str], rng: np.random.Generator, n: int) -> str:
-    """Một mẩu văn bản số; `letters`: chữ đơn của bảng mã (cho nhóm chữ-số)."""
+def numeric_text(letters: list[str], rng: np.random.Generator, n: int, net_share: float = 0.0) -> str:
+    """Một mẩu văn bản số; `letters`: chữ đơn của bảng mã (cho nhóm chữ-số). `net_share`: phần điện văn
+    mạng CW (E20)."""
+    u = rng.random()
+    if u < net_share:                       # E20: điện văn mạng CW; 0 = phân bố y hệt E18
+        return net_traffic(letters, rng, n)
     u = rng.random()
     if u < 0.35:
         return digit_groups(rng, n)
@@ -99,6 +103,57 @@ def numeric_text(letters: list[str], rng: np.random.Generator, n: int) -> str:
     if u < 0.88:
         return formatted(rng, n)
     return punct_groups(rng, n)
+
+
+# ---- Điện văn mạng CW (28/09): định dạng M89/M95 của các file thật testdata/private/t7 ----
+# Số viết tắt kiểu mạng này: 0 1 2 8 9 (và đôi khi 3) viết tắt, 4–7 đủ; bảng chung của app đọc lại được.
+NET_CUT = {"0": "T", "1": "A", "2": "U", "3": "V", "8": "D", "9": "N"}
+NET_PHRASES = ["HR MSG GA", "QSL?", "MSG AGN", "PSE CY", "GA", "K", "R", "QRU?", "QSL", "HR", "NIL"]
+
+
+def _net_call(letters: list[str], rng: np.random.Generator) -> str:
+    """Hô hiệu 4 ký tự: đa số toàn chữ Latin (CYHM, NJWY), đôi khi có số (MW3D, 2SLC)."""
+    latin = [c for c in letters if "A" <= c <= "Z"] or list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    if rng.random() < 0.75:
+        return "".join(latin[int(rng.integers(len(latin)))] for _ in range(4))
+    abc = latin + list(DIGITS)
+    return "".join(abc[int(rng.integers(len(abc)))] for _ in range(4))
+
+
+def net_group(rng: np.random.Generator, cut_p: float) -> str:
+    """Nhóm 4 ký tự của thân điện: chữ số, mỗi chữ số 0/1/2/3/8/9 viết tắt với xác suất `cut_p`."""
+    return "".join(NET_CUT[c] if c in NET_CUT and rng.random() < cut_p else c for c in _d(rng, 4))
+
+
+def net_traffic(letters: list[str], rng: np.random.Generator, n: int) -> str:
+    """Một mẩu điện văn mạng CW (clip huấn luyện 4–12 s chỉ chứa một đoạn): gọi đài, mào đầu, thân điện
+    nhóm 4 ký tự số viết tắt, kết; có tín hiệu xóa 8 chấm và `?` báo đánh lại như bản ghi thật."""
+    cut_p = float(rng.choice([0.0, 0.35, 0.6, 0.9]))
+    c1, c2 = _net_call(letters, rng), _net_call(letters, rng)
+    k = int(rng.integers(6))
+    if k == 0:
+        parts = ["VV" if rng.random() < 0.6 else "VVV", c1, c1, "DE", c2, c2]
+    elif k == 1:
+        parts = [c1, "DE", c2, str(rng.choice(NET_PHRASES))]
+    elif k == 2:
+        dtg = f"{int(rng.integers(1, 40)):02d} {int(rng.integers(1, 13)):02d}{int(rng.integers(1, 32)):02d} " \
+              f"{int(rng.integers(0, 24)):02d}{int(rng.integers(0, 60)):02d}"
+        parts = ["NR", f"{int(rng.integers(1, 1000)):03d}/CK", str(int(rng.integers(5, 120))), dtg]
+        if rng.random() < 0.5:
+            parts = ["HR MSG GA"] + parts
+    elif k == 3:
+        parts = ["RMKS"] + [net_group(rng, cut_p) for _ in range(int(rng.integers(1, 5)))] + ["="]
+    else:
+        parts = [net_group(rng, cut_p) for _ in range(max(2, n))]
+    if rng.random() < 0.15:                     # xóa: 8 chấm rồi đánh lại nhóm cuối
+        i = int(rng.integers(len(parts)))
+        parts = parts[:i + 1] + ["<ERR>"] + parts[i:]
+    elif rng.random() < 0.1:                    # nhóm hỏng + `?` + đánh lại
+        i = int(rng.integers(len(parts)))
+        parts = parts[:i] + [parts[i][: max(1, len(parts[i]) // 2)] + " ?"] + parts[i:]
+    if rng.random() < 0.15:
+        parts.append(str(rng.choice(["<AR>", "<AR> HR", "K", "=", "<BT>"])))
+    return " ".join(parts)
 
 
 def is_numeric_heavy(text: str) -> bool:

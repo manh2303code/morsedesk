@@ -47,6 +47,7 @@ from morsedesk.model.protocol import AcousticModel
 from morsedesk.model.vocab import SPACE, UNK, VOCAB
 from morsedesk.numbers import analyze, letters_of, normalize_groups
 from morsedesk.progress import STAGE_ACOUSTIC, STAGE_LANGUAGE, DecodeProgress, StageProgress
+from morsedesk.traffic import traffic_words
 from morsedesk.warnings import DecodeWarning, WarningCode, warn
 
 LOW_CONFIDENCE = 0.6
@@ -320,6 +321,14 @@ def apply_keying(result: DecodeResult, x8: np.ndarray, profile: Profile) -> Deco
     return replace(result, words=words, text=" ".join(w.text for w in words))
 
 
+def apply_traffic(result: DecodeResult, profile: Profile) -> DecodeResult:
+    """Điện văn mạng (morsedesk/traffic.py): chia lại nhóm thân điện sau RMKS, số viết tắt -> số."""
+    words = traffic_words(result.words, profile)
+    if words is None:
+        return result
+    return replace(result, text=" ".join(w.text for w in words), words=words)
+
+
 def apply_numbers(result: DecodeResult, profile: Profile) -> DecodeResult:
     words = numbers_words(result.words, profile)
     if words is None:
@@ -452,7 +461,7 @@ class Decoder:
             result = apply_keying(result, x8, profile)
         if self.numbers and result.words:
             profile = self._profiles.get(result.language) or self.profile or next(iter(self._profiles.values()))
-            result = apply_numbers(result, profile)
+            result = apply_numbers(apply_traffic(result, profile), profile)
         return result
 
     def _decode_array(self, x: np.ndarray, sample_rate: int = SAMPLE_RATE,

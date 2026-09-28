@@ -171,3 +171,92 @@ def test_reconcile_stays_out_of_fading_and_hand_keying():
     hand.precise = False
     out = reconcile(words, hand, EN)
     assert out is None or "9" in " ".join(w.text for w in out)
+
+
+# --- Phím NHẸ (T7, 28/09): chấm 0,6 đơn vị, chấm ngay sau gạch 0,3; phần hụt dồn sang khoảng lặng (nhịp giữ) ---
+
+UL = 0.075
+NET_TEXT = "VV CYHM DE NJWY RMKS 8981 8836 8417 8047 6713 0838 6746 7223 7681 3098 8140 7617 8954 2713"
+
+
+def light_audio(patterns: list[str], gaps_units: list[float], dit: float = 0.6, after_dah: float = 0.3,
+                snr_db: float = 30.0, seed: int = 0) -> np.ndarray:
+    el: list[Element] = []
+    carry = 0.0
+    for k, p in enumerate(patterns):
+        prev_dah = False
+        for j, s in enumerate(p):
+            nominal = UL if s == "." else 3 * UL
+            d = nominal if s == "-" else UL * dit * (after_dah if prev_dah else 1.0)
+            el.append(Element(True, d))
+            if j < len(p) - 1:
+                el.append(Element(False, UL + nominal - d))
+            else:
+                carry = nominal - d
+            prev_dah = s == "-"
+        if k < len(patterns) - 1:
+            el.append(Element(False, gaps_units[k] * UL + carry))
+    x = elements_to_audio(el, 700.0, SAMPLE_RATE, 0.8)
+    pad = np.zeros(SAMPLE_RATE // 2, dtype=np.float32)
+    x = np.concatenate([pad, x, pad])
+    rng = np.random.default_rng(seed)
+    return (x + 0.8 / np.sqrt(2) * 10 ** (-snr_db / 20) * rng.standard_normal(len(x))).astype(np.float32)
+
+
+def net_patterns() -> tuple[list[str], list[float]]:
+    pats, gaps = [], []
+    for w in NET_TEXT.split():
+        for c in w:
+            pats.append(EN.letter_to_pattern[c])
+            gaps.append(3.0)
+        gaps[-1] = 7.0
+    return pats, gaps[:-1]
+
+
+def test_light_fist_is_read_by_the_adaptive_path():
+    """Chấm sau gạch chỉ 0,3 đơn vị: đường cũ (ngưỡng cố định 0,4 đơn vị, ngắt chữ 2 đơn vị) sai hàng loạt;
+    đường phím nhẹ đọc đúng mọi ký tự, và ranh giới chữ đủ tách bạch để sửa xa (`separable`)."""
+    pats, gaps = net_patterns()
+    x = light_audio(pats, gaps)
+    k = read_keying(x, mix_envelope(x, 700.0), 700.0)
+    assert [c.pattern for c in k.chars] == pats
+    assert k.separable
+
+
+def test_light_path_needed(monkeypatch):
+    import morsedesk.keyed as keyed
+    pats, gaps = net_patterns()
+    x = light_audio(pats, gaps)
+    monkeypatch.setattr(keyed, "_light_fist", lambda *a, **kw: False)
+    got = [c.pattern for c in read_keying(x, mix_envelope(x, 700.0), 700.0).chars]
+    assert sum(a != b for a, b in zip(got, pats, strict=False)) > 20
+
+
+def test_standard_fist_keeps_the_old_path():
+    """Phím chuẩn: cổng phím nhẹ tắt (T1/dev giống hệt từng clip, 28/09), vẫn đọc đúng."""
+    from morsedesk.keyed import _light_fist, keying
+    pats, gaps = net_patterns()
+    x = light_audio(pats, gaps, dit=1.0, after_dah=1.0)
+    env = mix_envelope(x, 700.0)
+    runs, unit, _, _ = keying(env)
+    assert not _light_fist(runs, unit)
+    k = read_keying(x, env, 700.0)
+    assert [c.pattern for c in k.chars] == pats and not k.separable
+
+
+def test_light_fist_run_on_vv_split_and_erase():
+    """`VV` đánh liền (`...-...-` không phải ký tự) tách thành hai V; 8 chấm là tín hiệu xóa."""
+    pats, _ = net_patterns()
+    p2 = ["...-...-"] + pats[2:] + ["........"] + pats[-4:]
+    x = light_audio(p2, [7.0] + [3.0] * (len(p2) - 2))
+    got = [c.pattern for c in read_keying(x, mix_envelope(x, 700.0), 700.0).chars]
+    assert got[:2] == ["...-", "...-"]
+    assert got[-5:] == ["........"] + pats[-4:]
+
+
+def test_light_fist_gate_needs_many_dits():
+    """Clip ngắn (nhiễu 0 dB có tỉ lệ chấm/lặng 0,43 trên 50 chấm): không đủ bằng chứng -> đường cũ."""
+    from morsedesk.keyed import _light_fist, keying
+    x = light_audio(["...-", "-.-.", "-.--"] * 4, [3.0] * 11)
+    runs, unit, _, _ = keying(mix_envelope(x, 700.0))
+    assert not _light_fist(runs, unit)

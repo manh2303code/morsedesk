@@ -205,6 +205,10 @@ def main(argv: list[str] | None = None) -> int:
                     help="phần văn bản 'điện số' (data/numeric_text.py): nhóm số, dãy số, số định dạng")
     ap.add_argument("--tight-group-p", type=float, default=0.3,
                     help="phần mẫu điện số rút khoảng giữa nhóm (data/synth.py TIGHT_GROUP_P)")
+    ap.add_argument("--net-share", type=float, default=0.0,
+                    help="phần điện văn mạng CW (gọi đài, NR/CK, nhóm số viết tắt, xóa) TRONG phần điện số (E20)")
+    ap.add_argument("--fist-p", type=float, default=0.0,
+                    help="xác suất clip có lối phím nhẹ/nặng + rút chấm sau gạch (data/keyer.py, E20)")
     ap.add_argument("--init-from", type=Path, default=None,
                     help="tinh chỉnh: chỉ nạp TRỌNG SỐ từ checkpoint (optimizer mới, bắt đầu bước 0)")
     ap.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto",
@@ -267,7 +271,8 @@ def main(argv: list[str] | None = None) -> int:
                                      min_seconds=a.min_seconds, max_seconds=a.max_seconds, corpus=corpus,
                                      ham_ratio=a.ham_ratio, random_ratio=a.random_ratio,
                                      builtin_ratio=a.builtin_ratio, group_len=(int(lo), int(hi or lo)),
-                                     numeric_ratio=a.numeric_ratio, tight_group_p=a.tight_group_p))
+                                     numeric_ratio=a.numeric_ratio, tight_group_p=a.tight_group_p,
+                                     net_share=a.net_share, fist_p=a.fist_p))
     val_items = []
     for i in range(a.val_clips):
         ex = gen.generate(VAL_SEED_BASE + i)

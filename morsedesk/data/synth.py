@@ -87,6 +87,8 @@ class SynthConfig:
     builtin_ratio: float = 0.0
     group_len: tuple[int, int] = (5, 5)
     numeric_ratio: float = 0.0          # phần "điện số" (E18); 0 = hành vi cũ
+    net_share: float = 0.0              # phần điện văn mạng CW TRONG điện số (E20); 0 = hành vi cũ
+    fist_p: float = 0.0                 # xác suất "lối phím" nhẹ/nặng + rút chấm sau gạch (E20); 0 = cũ
     tight_group_p: float = TIGHT_GROUP_P  # phần mẫu điện số rút khoảng giữa nhóm (E19: 0)
     mp3_enabled: bool = True
     channel_sampling: ChannelSampling | None = None
@@ -101,7 +103,8 @@ class SynthGenerator:
         self.profiles: dict[str, Profile] = {pid: load_profile(pid) for pid in ids}
         self.text = TextSampler(self.profiles, cfg.corpus, ham_ratio=cfg.ham_ratio,
                                 random_ratio=cfg.random_ratio, builtin_ratio=cfg.builtin_ratio,
-                                group_len=cfg.group_len, numeric_ratio=cfg.numeric_ratio)
+                                group_len=cfg.group_len, numeric_ratio=cfg.numeric_ratio,
+                                net_share=cfg.net_share)
         self._mp3 = cfg.mp3_enabled and ffmpeg_available()
         if cfg.mp3_enabled and not self._mp3:
             logging.getLogger(__name__).warning("không có ffmpeg: bỏ tăng cường MP3")
@@ -176,7 +179,7 @@ class SynthGenerator:
         rng = np.random.default_rng(seed)
         pid = profile_id or self.cfg.profile_ids[int(rng.integers(len(self.cfg.profile_ids)))]
         profile = self.profiles[pid]
-        keyer = keyer or sample_keyer_params(rng)
+        keyer = keyer or sample_keyer_params(rng, self.cfg.fist_p)
         channel = channel or sample_channel_params(rng, self.cfg.channel_sampling)
         if channel.mp3_kbps and not self._mp3:
             channel = replace(channel, mp3_kbps=None)

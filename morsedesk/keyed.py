@@ -59,12 +59,25 @@ LESSON_MAX_OVER_MEDIAN = 2.0   # ... và khoảng dài nhất < ngần này lầ
 TONAL_MIN = 0.5            # ký tự thuần tone (Morse sạch đo 0,85–0,92; giọng nói 0,02–0,37)
 MIN_AGREEMENT = 0.8        # mô hình khớp nhịp phím ở ngần này ký tự Morse rõ thì mới tin phép căn (27/09:
                            # file sạch 0,87–1,0; trạm số M14 thu sóng ngắn 0,735 — nhịp phím đọc nhầm nhiễu)
+PRIMARY_VALID = 0.9        # nhịp phím làm chính (phím nhẹ tách bạch) khi ngần này ký tự Morse của nó là mẫu hợp lệ
 MIN_COVERAGE = 0.85        # ... và nhịp phím có đối ứng cho ngần này ký tự mô hình (trong khoảng Morse)
 SPAN_MARGIN_S = 1.0        # khoảng Morse = từ ký tự nhịp phím Morse đầu tới cuối, nới ngần này giây
 KEEP_CONF = 0.9            # chữ thuộc từ mô hình chắc chắn thì không bỏ
 BAND = 30                  # nửa bề rộng băng quy hoạch động (ký tự)
 SPEECHLIKE_CONF = 0.6      # (mọi SNR) từ kém chắc VÀ không thuần tone = giọng nói/nhạc
 SPEECHLIKE_TONAL = 0.4
+# Phím "nhẹ" (28/09, điện văn mạng CW thật T7: chấm 0,6 đơn vị, chấm NGAY SAU gạch 0,1–0,5): ngưỡng chấm/gạch
+# CỐ ĐỊNH (DIT_UNITS/DAH_UNITS) coi các chấm đó là "không rõ", còn cổng 0,4 đơn vị VỨT chúng — `C` -.-.
+# thành `G` --. (một mẫu hợp lệ nhưng sai). Khi xung tách bạch hai cụm, phân loại theo CHÍNH tín hiệu.
+MIN_MARK_FRAMES = 2        # xung ngắn nhất được giữ (10 ms) khi nằm TRONG ký tự và đủ biên độ
+SHORT_MARK_LEVEL = 0.6     # ... biên độ >= ngần này x (mức tone - nền) — gai nhiễu thấp vẫn bị bỏ
+SEP_MARK_RATIO = 2.0       # hai cụm xung: p10 gạch / p90 chấm >= ngần này thì "tách bạch"
+SEP_GAP_RATIO = 1.3        # lặng giữa chữ p10 / lặng trong ký tự p95 >= ngần này thì ranh giới chữ tin được
+LIGHT_RATIO = 0.7          # "phím nhẹ": trung vị chấm / trung vị lặng TRONG ký tự dưới ngần này...
+LIGHT_MIN_FRAMES = 2.5     # ...VÀ chấm hụt >= ngần này khung (ngưỡng cắt tự làm hụt ~1 khung: ebook2cw 35 WPM 0,75)
+LIGHT_MIN_DITS = 60        # ...trên đủ chấm (clip ngắn nhiễu 0 dB có tỉ lệ 0,43). Đo 28/09 trên T1/dev/oov/T2/T4/
+                           # T5/T6/T7: chỉ net1_351 (0,56, 4,2 khung) qua cổng. Cho MỌI tín hiệu đi đường v2 thì
+                           # T1/dev xấu 5 clip (nhiễu xung thành "chấm" giữa hai gạch, gõ tay 35 WPM)
 
 
 # ---------------- nhịp phím ----------------
@@ -96,6 +109,130 @@ def keying(env: np.ndarray) -> tuple[list[tuple[bool, int, int]], float, float, 
 
     unit = shortest(offs) if len(offs) >= 4 else shortest(ons) if len(ons) >= 2 else 0.0
     return runs, unit, lo, hi
+
+
+def _light_fist(runs: list, unit: float) -> bool:
+    """Phím NHẸ: chấm ngắn hẳn so với lặng trong ký tự (đo trên xung >= 0,4 đơn vị, như đường cũ)."""
+    fpu = unit * FRAME_RATE
+    ons = [(s, s + n) for on, s, n in runs if on and n >= 0.4 * fpu]
+    dits, inner = [], []
+    for (a0, b0), (a1, _b1) in zip(ons, ons[1:], strict=False):
+        if (a1 - b0) / fpu < 2.0:
+            inner.append((a1 - b0) / fpu)
+        if (b0 - a0) / fpu < 2.0:
+            dits.append((b0 - a0) / fpu)
+    if len(dits) < LIGHT_MIN_DITS or len(inner) < LIGHT_MIN_DITS:
+        return False
+    r = float(np.median(dits)) / float(np.median(inner))
+    return r < LIGHT_RATIO and fpu * (1 - r) / (1 + r) >= LIGHT_MIN_FRAMES
+
+
+def _marks(runs: list, env: np.ndarray, unit: float, lo: float, hi: float,
+           allow_short: bool) -> list[tuple[int, int]]:
+    """Xung giữ lại: >= 0,4 đơn vị như cũ; phím nhẹ (`allow_short`) giữ thêm xung NGẮN hơn (>= MIN_MARK_FRAMES)
+    khi đủ biên độ VÀ nằm sát xung khác — chấm ngắn sau gạch; gai nhiễu đứng riêng thì bỏ."""
+    ons = [(s, s + n) for on, s, n in runs if on]
+    keep = []
+    for k, (a, b) in enumerate(ons):
+        n = b - a
+        if n / FRAME_RATE >= 0.4 * unit:
+            keep.append((a, b))
+            continue
+        if not allow_short:
+            continue
+        if n < MIN_MARK_FRAMES or float(env[a:b].max()) < lo + SHORT_MARK_LEVEL * (hi - lo):
+            continue
+        near_prev = k > 0 and (a - ons[k - 1][1]) / FRAME_RATE < 2.0 * unit
+        near_next = k + 1 < len(ons) and (ons[k + 1][0] - b) / FRAME_RATE < 2.0 * unit
+        if near_prev and near_next or near_prev and (ons[k - 1][1] - ons[k - 1][0]) / FRAME_RATE >= 2.0 * unit:
+            keep.append((a, b))                 # giữa hai xung, hoặc ngay sau một gạch
+    return keep
+
+
+def _mark_split(groups: list, unit: float) -> float | None:
+    """Ngưỡng chấm/gạch (giây) theo chính tín hiệu khi độ dài xung có HAI cụm tách bạch; None nếu không."""
+    d = np.array([(b - a) / FRAME_RATE for els in groups for a, b in els])
+    if len(d) < 20:
+        return None
+    x = np.sort(np.log(d))
+    best, k_best = np.inf, 0
+    for k in range(3, len(x) - 3):
+        cost = x[:k].var() * k + x[k:].var() * (len(x) - k)
+        if cost < best:
+            best, k_best = cost, k
+    if not 3 <= k_best <= len(x) - 3:
+        return None
+    lo_c, hi_c = np.exp(x[:k_best]), np.exp(x[k_best:])
+    if np.percentile(hi_c, 10) < SEP_MARK_RATIO * np.percentile(lo_c, 90) or np.median(hi_c) > 5.0 * unit:
+        return None
+    return float(np.exp((x[k_best - 1] + x[k_best]) / 2))
+
+
+def _char_break(marks: list, unit: float) -> float:
+    """Ngưỡng (đơn vị) lặng TRONG ký tự / GIỮA ký tự theo chính tín hiệu (hai cụm log), kẹp 1,6–2,6.
+    Phím nhẹ: lặng trong ký tự 1,0–1,4 đơn vị nhưng có lúc 2,0 (tín hiệu xóa 8 chấm bị tách `H H`).
+    Lặng đo THÔ (cuối xung -> đầu xung): thử đo "theo nhịp" (từ đầu xung trừ độ dài danh nghĩa) 28/09 làm file
+    thật 351 xấu 3,80 -> 7,28 % — phím nhẹ thật không dồn phần hụt của chấm sang lặng sau như giả định."""
+    g = np.array([(s1 - e0) / FRAME_RATE / unit for (_, e0), (s1, _) in zip(marks, marks[1:], strict=False)])
+    g = g[(g > 0.3) & (g < 12.0)]
+    if len(g) < 20:
+        return 2.0
+    x = np.sort(np.log(g))
+    best, k_best = np.inf, 0
+    for k in range(3, len(x) - 3):
+        cost = x[:k].var() * k + x[k:].var() * (len(x) - k)
+        if cost < best:
+            best, k_best = cost, k
+    thr = float(np.exp((x[k_best - 1] + x[k_best]) / 2)) if 3 <= k_best <= len(x) - 3 else 2.0
+    return min(2.6, max(1.6, thr))
+
+
+def _valid_patterns() -> set[str]:
+    from morsedesk.model.vocab import VOCAB
+    return {VOCAB.token(i) for i in range(len(VOCAB)) if set(VOCAB.token(i)) <= {".", "-"}}
+
+
+ERASE = "........"
+
+
+def _split_runons(groups: list, gaps: list, unit: float, split: float) -> tuple[list, list]:
+    """Nhóm xung có mẫu KHÔNG có trong bảng mã nhưng tách được thành hai mẫu hợp lệ = hai chữ đánh liền
+    (người đánh bỏ khoảng giữa chữ: `VV` `...-...-`, `MSG` -> `--...` + `--.`). Ưu tiên cách tách mà hai
+    nửa đều là chữ/số (<= 5 phần tử) và dài gần nhau."""
+    valid = _valid_patterns()
+    out_g, out_gap = [], []
+    for k, els in enumerate(groups):
+        pat = "".join(_element(b - a, unit, split) for a, b in els)
+        cands = [i for i in range(1, len(pat)) if "?" not in pat and pat not in valid
+                 and pat[:i] in valid and pat[i:] in valid and set(pat) != {"."}]
+        if cands:
+            i = min(cands, key=lambda i: (max(i, len(pat) - i) > 5, abs(len(pat) - 2 * i)))
+            inner = (els[i][0] - els[i - 1][1]) / FRAME_RATE / unit
+            out_g += [els[:i], els[i:]]
+            out_gap.append((inner, False))      # "lặng không sạch": không dùng để quyết dấu cách
+        else:
+            out_g.append(els)
+        if k < len(gaps):
+            out_gap.append(gaps[k])
+    return out_g, out_gap
+
+
+def _element(n_frames: int, unit: float, split: float | None) -> str:
+    u = n_frames / FRAME_RATE / unit
+    if split is None:
+        return "." if DIT_UNITS[0] <= u <= DIT_UNITS[1] else "-" if DAH_UNITS[0] <= u <= DAH_UNITS[1] else "?"
+    if u > DAH_UNITS[1]:                        # dài hơn gạch dài nhất: sóng mang / hai phần tử dính
+        return "?"
+    return "." if n_frames / FRAME_RATE < split else "-"
+
+
+def _separable(groups: list, gaps: list, unit: float, split: float) -> bool:
+    """Lặng TRONG ký tự và lặng GIỮA chữ tách bạch (gõ tay dính chữ thì không)."""
+    inner = [(s1 - e0) / FRAME_RATE / unit for els in groups for (_, e0), (s1, _) in zip(els, els[1:], strict=False)]
+    outer = [u for u, _ in gaps if np.isfinite(u)]
+    if len(inner) < 10 or len(outer) < 10:
+        return False
+    return float(np.percentile(outer, 10)) >= SEP_GAP_RATIO * float(np.percentile(inner, 95))
 
 
 def two_clusters(log_gaps: np.ndarray) -> float | None:
@@ -154,6 +291,8 @@ class Keyed:
     unit: float
     stable: bool = False         # biên độ các ký tự Morse ổn định (không fading): tin được nhịp phím
     precise: bool = False        # nhịp như máy (chấm, gạch tụ chặt): nhịp phím được SỬA/CHÈN ký tự
+    separable: bool = False
+    spaced: bool = False         # phím nhẹ tách bạch VÀ khoảng lặng có hai cụm: `breaks` là mọi dấu cách      # chấm/gạch và ranh giới chữ tách bạch theo CHÍNH tín hiệu (phím nhẹ T7)
     track: tuple = ()            # (mốc, năng lượng dải hẹp, độ thuần tone) — xem tonality_track
 
     def toned_at(self, t: float) -> bool:
@@ -178,22 +317,35 @@ def read_keying(x8: np.ndarray, env: np.ndarray, f0: float) -> Keyed:
     if unit <= 0 or hi <= lo:
         return Keyed([], set(), set(), 0.0)
     quiet = lo + QUIET * (hi - lo)
-    raw = [(s, s + n) for on, s, n in runs if on and n / FRAME_RATE >= 0.4 * unit]
+    light = _light_fist(runs, unit)
+    raw = _marks(runs, env, unit, lo, hi, allow_short=light)
     if not raw:
         return Keyed([], set(), set(), unit)
     # Rớt tín hiệu giữa một phần tử (khoảng lặng < DROPOUT_UNITS dit — khoảng lặng hợp lệ ngắn nhất là 1
     # dit) là MỘT phần tử: gạch vỡ thành gạch + chấm (`...--.`), số 0 vỡ thành `--..--` (dấu phẩy).
+    # Phím nhẹ (T7, 28/09): chấm ngắn NGAY SAU một gạch trọn vẹn có khi chỉ cách 0,47–0,8 đơn vị — không
+    # phải rớt tín hiệu. Rớt tín hiệu cắt gạch thành hai mẩu mà mẩu đầu CHƯA đủ gạch, khe ~0,2 dit.
+    long_marks = [b - a for a, b in raw if (b - a) / FRAME_RATE / unit >= 2.0]
+    dah_frames = float(np.median(long_marks)) if len(long_marks) >= 5 else 3.0 * unit * FRAME_RATE
     marks = [raw[0]]
     for s1, e1 in raw[1:]:
-        if (s1 - marks[-1][1]) / FRAME_RATE / unit < DROPOUT_UNITS:
+        gap_u = (s1 - marks[-1][1]) / FRAME_RATE / unit
+        whole = e1 - marks[-1][0]
+        # gộp khi mẩu trước CHƯA đủ gạch và cả hai mẩu cộng lại vẫn chỉ dài cỡ một gạch (gạch vỡ đôi);
+        # gạch trọn vẹn + chấm ngắn sát sau (phím nhẹ `C` = 2,7 0,7 2,7 0,6) thì không
+        incomplete = (marks[-1][1] - marks[-1][0]) < 0.8 * dah_frames and whole <= 1.25 * dah_frames
+        if gap_u < DROPOUT_UNITS and (incomplete or not light):
             marks[-1] = (marks[-1][0], e1)
         else:
             marks.append((s1, e1))
+    # None: phím chuẩn hoặc xung không tách bạch -> ngưỡng cố định, đúng như đường cũ
+    split = _mark_split([marks], unit) if light else None
+    brk = _char_break(marks, unit) if split is not None else 2.0
     groups: list[list[tuple[int, int]]] = [[marks[0]]]
     gaps: list[tuple[float, bool]] = []
     for (_, e0), (s1, e1) in zip(marks, marks[1:], strict=False):
         units = (s1 - e0) / FRAME_RATE / unit
-        if units < 2.0:
+        if units < brk:
             groups[-1].append((s1, e1))
             continue
         core = env[e0 + (s1 - e0) // 5:s1 - (s1 - e0) // 5]      # bỏ đuôi tone đang tắt ở hai đầu
@@ -208,11 +360,13 @@ def read_keying(x8: np.ndarray, env: np.ndarray, f0: float) -> Keyed:
         tone_in_gap = bool(sel.any()) and float(np.median(ratio[sel])) >= NON_MORSE_TONAL
         fixed_gaps.append((units, quiet_ok and not tone_in_gap))
     gaps = fixed_gaps
+    if split is not None:                       # phím tách bạch: tách hai chữ đánh liền (`VV` = `...-...-`)
+        groups, gaps = _split_runons(groups, gaps, unit, split)
     chars = []
     for k, els in enumerate(groups):
-        pat = "".join("." if DIT_UNITS[0] <= (b - a) / FRAME_RATE / unit <= DIT_UNITS[1]
-                      else "-" if DAH_UNITS[0] <= (b - a) / FRAME_RATE / unit <= DAH_UNITS[1] else "?"
-                      for a, b in els)
+        pat = "".join(_element(b - a, unit, split) for a, b in els)
+        if split is not None and len(pat) >= 7 and set(pat) == {"."}:
+            pat = ERASE                         # 7–10 chấm liền: tín hiệu xóa (6 chấm là dấu chấm câu Nga)
         s0, s1 = els[0][0] / FRAME_RATE, els[-1][1] / FRAME_RATE
         sel = (t >= s0 - 0.02) & (t <= s1 + 0.02)
         if sel.any():                           # chỉ khung phím NHẤN (ký tự 35 WPM ngắn hơn khung 64 ms)
@@ -230,7 +384,7 @@ def read_keying(x8: np.ndarray, env: np.ndarray, f0: float) -> Keyed:
                  for c in chars]
     morse = [c for c in chars if c.tonal >= TONAL_MIN and c.pattern is not None]
     toned = [c for c in chars if c.tonal >= STABLE_TONAL]     # gồm cả ký tự trong đáy fading (0 dB: 0,47)
-    stable = precise = False
+    stable = precise = separable = False
     if len(morse) >= 3 and len(toned) >= 3:
         lv = np.array([c.level for c in toned])
         stable = float(np.percentile(lv, 90) / max(np.percentile(lv, 10), 1e-9)) <= STABLE_RATIO
@@ -244,6 +398,10 @@ def read_keying(x8: np.ndarray, env: np.ndarray, f0: float) -> Keyed:
 
         parts = [v for v in (dits, dahs) if len(v) >= 3]
         precise = bool(parts) and all(spread(v) <= PRECISE_SPREAD for v in parts)
+        # Phím nhẹ: chấm tản rộng (0,1–0,8) nên không "như máy", nhưng chấm/gạch tách bạch hẳn và ranh giới
+        # chữ rõ -> nhịp phím đọc được từng ký tự đáng tin như gõ máy (file thật T7: 5,7 % so với 23 %).
+        separable = split is not None and _separable(groups, gaps, unit, split)
+        precise = precise or separable
     ok = [(k, c.gap_after) for k, c in enumerate(chars) if c.clean_gap and np.isfinite(c.gap_after)]
     breaks: set[int] = set()
     joins: set[int] = set()
@@ -265,7 +423,14 @@ def read_keying(x8: np.ndarray, env: np.ndarray, f0: float) -> Keyed:
             # thật — cùng âm thanh với một từ Farnsworth (T1: `СПАСИБО` từng bị tách thành `С П А С И Б О`,
             # `TNX FER` thành `T N X F E R`, 27/09) — để mô hình quyết.
             breaks = {k for k, g in ok if g * unit >= LONG_GAP_S}
-    return Keyed(chars, breaks, joins, unit, stable, precise, (t, pn, ratio))
+    spaced = False
+    if separable and ok and split is not None:
+        # phím nhẹ tách bạch: nhịp phím là nguồn CHÍNH (reconcile) nên nó quyết cả dấu cách theo hai cụm
+        # khoảng lặng — mô hình đọc sai phím nhẹ thì dấu cách của nó cũng sai (T7 tổng hợp 28/09)
+        breaks |= {k for k, g in ok if np.log(g) > split}
+        spaced = True
+    return Keyed(chars, breaks, joins, unit, stable, precise, separable=separable, spaced=spaced,
+                 track=(t, pn, ratio))
 
 
 # ---------------- đối chiếu ----------------
@@ -398,10 +563,15 @@ def reconcile(words: list, keyed: Keyed, profile) -> list | None:
     # Mức đồng ý chỉ tính trên ký tự TRONG NHÓM: ký tự đứng riêng giữa hai khoảng lặng dài và sạch là chỗ
     # nhịp phím đáng tin nhất (bài học số 0: mô hình đọc 3/14 số 0 thành M/G), không để chúng kéo mức
     # đồng ý xuống; trong nhóm, mức đồng ý thấp = nhịp phím đọc nhầm nhiễu (M14 thu sóng ngắn: 0,735).
+    # Phím nhẹ tách bạch (T7, 28/09): nhịp phím là nguồn CHÍNH. Mô hình chưa học lối phím này đọc sai hàng
+    # loạt (`7` -> `MI`, tổng hợp 30 dB: 64 % lỗi) nên mức đồng ý thấp là do MÔ HÌNH, không phải nhịp phím đọc
+    # nhầm nhiễu; cổng phím nhẹ + tách bạch + gần như mọi ký tự nhịp phím là mẫu hợp lệ thay cho mức đồng ý.
+    morse_kinds = [kd for kd in kind if kd >= 1]
+    primary = keyed.separable and bool(morse_kinds) and morse_kinds.count(2) >= PRIMARY_VALID * len(morse_kinds)
     grouped = [j for j in clear if not _isolated(K, j)]
     agree = sum(1 for a, b in path if a is not None and b is not None and b in set(grouped)
                 and pat_of.get(D[a][0]) == K[b].pattern)
-    if len(grouped) >= 3 and agree < MIN_AGREEMENT * len(grouped):
+    if not primary and len(grouped) >= 3 and agree < MIN_AGREEMENT * len(grouped):
         return None
     # Độ phủ BÊN TRONG bản tin Morse: fading giấu ký tự dưới ngưỡng phím (T1 qsb 20 dB: 7/15 ký tự) —
     # chữ mô hình "không có xung" ở đó là do nhịp phím thiếu, không phải bịa. Chữ NGOÀI khoảng Morse (giọng
@@ -425,7 +595,7 @@ def reconcile(words: list, keyed: Keyed, profile) -> list | None:
     # - không có tone (giọng nói, nhạc, im lặng) -> rác.
     hidden = {a for a in range(n) if a not in backed and not on_keyed(D[a][1]) and keyed.toned_at(D[a][1])}
     inside = [a for a in range(n) if span[0] <= D[a][1] <= span[1] and (a in backed or a in hidden)]
-    if inside and sum(1 for a in inside if a in backed) < MIN_COVERAGE * len(inside):
+    if not primary and inside and sum(1 for a in inside if a in backed) < MIN_COVERAGE * len(inside):
         return None
     out = []                                    # (chữ, mốc, chỉ số nhịp phím|None, chỉ số từ|None, tin cậy)
     for a, b in path:
@@ -442,6 +612,9 @@ def reconcile(words: list, keyed: Keyed, profile) -> list | None:
                 # mô hình ra ký hiệu không có mẫu) thì phải SẮC NÉT — bài học Nga (T4): dấu chấm cuối bài
                 # `.-.-.-` bị "sửa" thành `<SK>` `...-.-` vì một gạch cuối bản tin đọc thành chấm.
                 far_ok = K[b].crisp and (_isolated(K, b) or _opens(K, b) or known is None)
+                # phím tách bạch (T7): nhịp phím đọc từng ký tự đáng tin -> sửa cả lệch nhiều phần tử
+                # (`7` đọc thành `I`, 8 chấm xóa đọc thành `S`)
+                far_ok = far_ok or keyed.separable
                 fix = not same and keyed.precise and (near or far_ok)
                 out.append((_render(profile, K[b].pattern) if fix else ch, K[b].start_s, b, wi, conf))
             elif kind[b] == 1 or conf >= KEEP_CONF:
@@ -452,8 +625,10 @@ def reconcile(words: list, keyed: Keyed, profile) -> list | None:
             fragment = on_keyed(t)                  # chồng lên ký tự nhịp phím: mảnh vỡ (chỉ tin khi nhịp máy;
             silent = not fragment and a not in hidden   # gõ tay thì nhịp phím hay gộp hai ký tự làm một)
             garbage = outside or silent or (fragment and keyed.precise)
-            if conf >= KEEP_CONF or not garbage:
+            if not garbage or (conf >= KEEP_CONF and not primary):   # nhịp phím chính: mảnh vỡ `I` của `MI`
                 out.append((ch, t, None, wi, conf))
+        elif kind[b] == 2 and primary:
+            out.append((_render(profile, K[b].pattern), K[b].start_s, b, None, 0.9))
         elif kind[b] == 2 and keyed.precise and _isolated(K, b):
             # chèn ký tự mô hình bỏ sót CHỈ khi nó đứng riêng giữa hai khoảng lặng dài và sạch (bài học);
             # trong nhóm bình thường, ký tự nhịp phím mà mô hình không đọc thường là nhiễu/đài khác (M14)
@@ -467,6 +642,8 @@ def reconcile(words: list, keyed: Keyed, profile) -> list | None:
             if kb > ka + 1 and K[kb].start_s - K[ka].end_s >= SKIPPED_BREAK_S:
                 new = True                      # giữa hai chữ có đoạn dài bị bỏ (giọng nói...); nhiễu lụp bụp
                                                 # ngắn giữa một từ (SAQ gõ tay) thì không
+            elif primary and keyed.spaced:
+                new = ka in keyed.breaks
             elif ka in keyed.breaks and (keyed.precise or K[ka].gap_after >= HAND_LONG_GAP_UNITS):
                 new = True                      # gõ tay: người gõ hay ngừng giữa từ (SAQ `N OVEMBER`)
             elif ka in keyed.joins:

@@ -98,6 +98,7 @@ class TextSampler:
         builtin_ratio: float = 0.0,
         group_len: tuple[int, int] = (5, 5),
         numeric_ratio: float = 0.0,
+        net_share: float = 0.0,
     ) -> None:
         """`builtin_ratio`: phần văn bản lấy từ danh sách dựng sẵn BUILTIN_WORDS ngay cả khi có corpus
         (không có corpus thì phần "từ" vốn đã là danh sách đó). `group_len`: độ dài nhóm mã ngẫu
@@ -113,6 +114,7 @@ class TextSampler:
         self.group_len = group_len
         # Phần "điện số" (data/numeric_text.py, E18 27/09). 0 = hành vi cũ, T1/dev sinh lại y hệt.
         self.numeric_ratio = numeric_ratio
+        self.net_share = net_share      # E20: phần điện văn mạng CW TRONG phần điện số
         self.corpus: dict[str, list[str]] = {}
         for pid, path in (corpus or {}).items():
             lines = [ln.strip() for ln in Path(path).read_text(encoding="utf-8").splitlines()]
@@ -157,7 +159,7 @@ class TextSampler:
         u = rng.random()
         if u < self.numeric_ratio:
             letters = sorted(c for c in self.profiles["en"].letter_to_pattern if len(c) == 1 and c.isalpha())
-            raw = numeric_text(letters, rng, n)
+            raw = numeric_text(letters, rng, n, self.net_share)
             en = self.profiles.get("en")
             if profile.id != "en" and en is not None:
                 raw = translit_via_patterns(raw, en, profile)
