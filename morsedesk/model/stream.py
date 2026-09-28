@@ -223,6 +223,7 @@ class StreamDecoder:
     _evidence: dict = field(default_factory=dict, init=False)    # pid -> (tổng điểm x chữ, tổng chữ)
     _pinned: str | None = field(default=None, init=False)
     _warnings: list = field(default_factory=list, init=False)
+    _net: object = field(default=None, init=False)    # tầng cấu trúc điện văn mạng (traffic.LiveNet)
 
     @property
     def committed(self) -> str:
@@ -264,6 +265,7 @@ class StreamDecoder:
         self._tentative_words = []
         self._reset_stats()
         self._evidence = {}
+        self._net = None
         if self._pinned is not None and hasattr(self.decoder, "pin_language"):
             self.decoder.pin_language(None)
         self._pinned = None
@@ -385,9 +387,10 @@ class StreamDecoder:
             return
         choosing = self._choosing()
         target = self._pending if choosing else None
-        for w, cont in parts:
+        for w, cont, net in self._net_parts(parts, decoded_in):
             src = decoded_in
-            w = self._numbers_word(w, src)
+            if not net:
+                w = self._numbers_word(w, src)
             if choosing:
                 if cont and target:
                     prev, psrc = target[-1]
@@ -452,6 +455,32 @@ class StreamDecoder:
             self._committed_until = parts[-1][0].end_s
         self._accept(parts, decoded_in, res)
         return rest
+
+    def _net_parts(self, parts: list, language: str) -> list:
+        """Điện văn mạng (morsedesk/traffic.LiveNet): tách nhóm số dính liền trong thân điện, lúc CHỐT.
+        Trả [(Word, nối tiếp?, đã xử lý như thân điện?)]."""
+        profile = self._profile(language) if (self.numbers and language) else None
+        if profile is None:
+            return [(w, cont, False) for w, cont in parts]
+        from morsedesk.numbers import letters_of
+        from morsedesk.traffic import LiveNet
+        if self._net is None:
+            self._net = LiveNet()
+        out = []
+        for w, cont in parts:
+            letters = letters_of(w.text)
+            chars = list(getattr(w, "chars", None) or [])
+            if len(chars) != len(letters):
+                chars = [(c, w.start_s) for c in letters]
+            pats = [profile.letter_to_pattern.get(c) or profile.prosign_to_pattern.get(c) for c, _ in chars]
+            segs, touched = self._net.feed(chars, pats, cont)
+            if not touched:
+                out.append((w, cont, False))
+                continue
+            for k, (seg, join) in enumerate(segs):
+                end = segs[k + 1][0][0][1] if k + 1 < len(segs) else w.end_s
+                out.append((_part(w, seg, end_s=end), join, True))
+        return out
 
     def _numbers_word(self, w, language: str):
         """Số viết tắt theo ngữ cảnh CẢ PHIÊN (từ đã chốt + đang chờ + từ này). Chỉ đổi từ MỚI chốt,

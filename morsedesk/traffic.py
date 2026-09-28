@@ -22,7 +22,7 @@ Hô hiệu, phần đầu điện, văn bản thường không bị đụng. Ch�
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from morsedesk.model.vocab import DIGITS
 
@@ -209,3 +209,69 @@ def traffic_words(words: list, profile) -> list | None:
                            space_p=first_w.space_p if orig_boundary else 1.0))
         k = e
     return out
+
+
+@dataclass
+class LiveNet:
+    """Tầng cấu trúc cho chế độ NGHE (model/stream.py): chữ đã chốt KHÔNG BAO GIỜ đổi (người vận hành chép tay
+    theo nó), nên chỉ quyết TIẾN — lúc một phần từ được chốt:
+    - sau mốc RMKS (4 chữ chốt gần nhất, theo mẫu) là thân điện, cho tới `<AR>`;
+    - trong thân: một từ của mô hình có quá `group` ký tự số liền thì TÁCH (`67A3TD3D6746` -> ba nhóm); nhóm đủ
+      rồi gặp chữ lạ cũng tách (`1345 RN`). Gộp qua dấu cách của mô hình CHỈ khi từ trước là nhóm số chưa đủ VÀ
+      tổng ký tự số chia hết cho `group` (`T` + `743A5NT` -> `0743 1590`; `671` + `0838` thì không: một chữ số
+      bị mất không được làm lệch mọi nhóm sau — chế độ file có quy hoạch động, ở đây không nhìn trước được);
+    - `?`, `=`, `<AR>`, 8 chấm xóa, `TO` đứng riêng; số viết tắt đổi ngay lúc chốt khi từ tới đó toàn số."""
+    group: int = DEFAULT_GROUP
+    body: bool = False
+    recent: list = field(default_factory=list)     # mẫu vài chữ chốt gần nhất (dò RMKS)
+    run: int = 0                                   # số ký tự số của từ hiện tại; -1 = từ có chữ lạ
+    brk: bool = False                              # chữ kế tiếp phải mở từ mới
+    to_o: bool = False                             # chữ kế tiếp là `O` của `TO`
+
+    def feed(self, chars: list, patterns: list, cont: bool) -> tuple[list, bool]:
+        """`chars` [(chữ, giây)] của một phần từ vừa chốt, `cont` = nối tiếp từ trước. Trả ([(đoạn chữ, nối
+        tiếp?)], đã xử lý như thân điện?)."""
+        segs: list[list] = []
+        touched = False
+        lead = 0                                     # số ký tự số đầu phần này (để gộp mảnh nhóm)
+        while lead < len(patterns) and digit_of(patterns[lead]) is not None and not (
+                patterns[lead] == TO[0] and lead + 1 < len(patterns) and patterns[lead + 1] == TO[1]):
+            lead += 1
+        for k, ((ch, t), p) in enumerate(zip(chars, patterns, strict=True)):
+            join = cont if k == 0 else True
+            if (k == 0 and not cont and self.body and not self.brk and 0 < self.run < self.group
+                    and lead and (self.run + lead) % self.group == 0):
+                join = True                          # mảnh nhóm + phần kế ghép khít thành nhóm đủ
+            if not join:
+                self.run = 0
+            if self.body:
+                touched = True
+                if self.brk:
+                    join, self.brk, self.run = False, False, 0
+                if self.to_o or p == TO[1]:          # `O` chỉ có trong `TO`: luôn đóng từ
+                    join = join if not self.to_o else True
+                    self.to_o, self.brk, self.run = False, True, -1
+                elif p in HARD:
+                    join, self.brk, self.run = False, True, -1
+                    if p == AR:
+                        self.body = False
+                elif p == TO[0] and k + 1 < len(patterns) and patterns[k + 1] == TO[1]:
+                    join, self.to_o, self.run = False, True, -1
+                elif digit_of(p) is not None:
+                    if join and self.run == self.group:
+                        join, self.run = False, 0
+                    if self.run >= 0:
+                        ch = digit_of(p)
+                        self.run += 1
+                else:
+                    if join and self.run == self.group:
+                        join = False
+                    self.run = -1
+            if join and segs:
+                segs[-1][0].append((ch, t))
+            else:
+                segs.append([[(ch, t)], join])
+            self.recent = (self.recent + [p])[-4:]
+            if not self.body and self.recent == RMKS:
+                self.body, self.brk = True, True
+        return [(c, j) for c, j in segs], touched

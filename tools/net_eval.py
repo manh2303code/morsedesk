@@ -199,6 +199,8 @@ CONFIGS = {
     "app": dict(profile="auto", lm=True),        # đúng như trang Giải mã mặc định
     "en": dict(profile="en", lm=True),
     "greedy": dict(profile="en", lm=False),
+    # chế độ NGHE đúng như LiveWorker: StreamDecoder bọc Decoder không nhịp phím, không xử lý số (tự làm)
+    "live": dict(profile="auto", lm=True, live=True),
 }
 _DEC: dict = {}
 
@@ -208,13 +210,27 @@ def run_one(args):
     from morsedesk.api import Decoder
     from morsedesk.audio.io import load_audio
     key = (cfg_name, model)
+    c = CONFIGS[cfg_name]
     if key not in _DEC:
-        c = CONFIGS[cfg_name]
         kw = dict(engine="onnx", lm=c["lm"])
+        if c.get("live"):
+            kw.update(fallback=False, skip_silent_windows=True, numbers=False, keyed=False)
         if model:
             kw["model_path"] = model
         _DEC[key] = Decoder(c["profile"], **kw)
     x, sr = load_audio(path)
+    if c.get("live"):
+        from morsedesk.audio.io import resample
+        from morsedesk.model.stream import StreamDecoder
+        from tools.long_random_eval import LIVE_BLOCK
+        x = resample(x, sr, 8000) if sr != 8000 else x
+        stream = StreamDecoder(decoder=_DEC[key])
+        try:
+            for i in range(0, len(x), LIVE_BLOCK):
+                stream.push(x[i:i + LIVE_BLOCK])
+            return path, cfg_name, stream.flush().text
+        finally:
+            stream.reset()
     return path, cfg_name, _DEC[key].decode_array(x, sr).text
 
 
