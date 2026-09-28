@@ -94,10 +94,27 @@ def _shift_chars(word, offset: float) -> list:
     return [(ch, t + offset) for ch, t in (getattr(word, "chars", None) or [])]
 
 
+def _probs_of(word, chars: list) -> list | None:
+    """Xác suất các chữ `chars` — một đoạn LIỀN của `word.chars`, nhận theo mốc thời gian (chữ có thể đã đổi,
+    vd. số viết tắt -> số)."""
+    wc = list(getattr(word, "chars", None) or [])
+    wp = list(getattr(word, "char_probs", None) or [])
+    if not chars or len(wp) != len(wc):
+        return None
+    ts = [t for _, t in chars]
+    for i in range(len(wc) - len(chars) + 1):
+        if [t for _, t in wc[i:i + len(chars)]] == ts:
+            return wp[i:i + len(chars)]
+    return None
+
+
 def _part(word, chars: list, end_s: float | None = None):
-    """Phần của `word` gồm các chữ `chars` [(chữ, giây)]."""
+    """Phần của `word` gồm các chữ `chars` [(chữ, giây)]; độ tin cậy tính từ CHÍNH các chữ đó nếu biết."""
+    probs = _probs_of(word, chars)
+    extra = {} if probs is None else {
+        "char_probs": probs, "confidence": float(np.exp(np.mean(np.log(np.maximum(probs, 1e-6)))))}
     return _with(word, text="".join(ch for ch, _ in chars), start_s=chars[0][1],
-                 end_s=word.end_s if end_s is None else end_s, chars=list(chars))
+                 end_s=word.end_s if end_s is None else end_s, chars=list(chars), **extra)
 
 
 def _join(a, b):
@@ -106,7 +123,9 @@ def _join(a, b):
     cb = list(getattr(b, "chars", None) or [])
     na, nb = max(1, len(ca)), max(1, len(cb))
     conf = float(np.exp((na * np.log(max(a.confidence, 1e-6)) + nb * np.log(max(b.confidence, 1e-6))) / (na + nb)))
-    return _with(a, text=a.text + b.text, end_s=b.end_s, confidence=conf, chars=ca + cb)
+    pa, pb = list(getattr(a, "char_probs", None) or []), list(getattr(b, "char_probs", None) or [])
+    extra = {"char_probs": pa + pb} if len(pa) == len(ca) and len(pb) == len(cb) and ca and cb else {}
+    return _with(a, text=a.text + b.text, end_s=b.end_s, confidence=conf, chars=ca + cb, **extra)
 
 
 def _char_spacing(words: list) -> float:

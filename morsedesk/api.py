@@ -79,6 +79,10 @@ class Word:
     # Xác suất của dấu cách ĐỨNG TRƯỚC từ này (1.0 nếu không biết): khoảng cách từ thật gần như luôn
     # ~1,0; dấu cách chèn nhầm giữa nhóm số gõ tay thì lưỡng lự — dùng khi ghép lại nhóm vỡ.
     space_p: float = field(default=1.0, compare=False, repr=False)
+    # Xác suất từng chữ (cùng thứ tự `chars`): tách/ghép từ (nhóm số, điện văn mạng, nhịp phím) thì mỗi từ mới
+    # tính độ tin cậy từ CHÍNH các chữ của nó. Trước 28/09 từ mới lấy mức thấp nhất của cả từ gốc: một từ gốc
+    # dính cả bản tin (351, nhịp phím làm chính) làm mọi nhóm, đúng lẫn sai, cùng 0,23. Không xuất JSON.
+    char_probs: list = field(default_factory=list, compare=False, repr=False)
 
 
 @dataclass
@@ -104,6 +108,7 @@ class DecodeResult:
         d = asdict(self)
         for w in d["words"]:
             w.pop("chars", None)
+            w.pop("char_probs", None)
         return json.dumps(d, ensure_ascii=False, indent=2)
 
 
@@ -229,6 +234,18 @@ def estimate_wpm_from_emissions(emissions: list[tuple[str, int, float]], frame_r
     return 1.2 * frame_rate / (span / units)
 
 
+def geo_conf(probs: list[float]) -> float:
+    """Độ tin cậy của một từ = trung bình nhân xác suất các chữ (như lúc giải mã)."""
+    return float(np.exp(np.mean(np.log(np.maximum(probs, 1e-6))))) if len(probs) else 0.0
+
+
+def char_confs(w: Word) -> list[float]:
+    """Xác suất từng chữ; từ không mang (bộ DSP, bộ giả trong test) thì mọi chữ = độ tin cậy của từ."""
+    n = len(getattr(w, "chars", None) or []) or len(letters_of(w.text))
+    p = list(getattr(w, "char_probs", None) or [])
+    return p if len(p) == n else [w.confidence] * n
+
+
 def _group_words(items: list[tuple[str, str, int, float]], frame_rate: int, end_frame: int) -> list[Word]:
     """items: (token, chữ hiển thị, khung đầu vào, xác suất). Tách từ tại SPACE; tin cậy = trung bình nhân."""
     words: list[Word] = []
@@ -240,9 +257,8 @@ def _group_words(items: list[tuple[str, str, int, float]], frame_rate: int, end_
     for tok, letter, f, p in list(items) + [(SPACE, " ", end_frame, 1.0)]:
         if tok == SPACE:
             if cur:
-                conf = float(np.exp(np.mean(np.log(np.maximum(probs, 1e-6)))))
-                words.append(Word("".join(cur), start / frame_rate, f / frame_rate, conf,
-                                  list(zip(cur, times, strict=True)), space_p))
+                words.append(Word("".join(cur), start / frame_rate, f / frame_rate, geo_conf(probs),
+                                  list(zip(cur, times, strict=True)), space_p, [float(q) for q in probs]))
                 cur, probs, times = [], [], []
             pending_space = float(p)
             continue
@@ -281,16 +297,22 @@ def numbers_words(words: list[Word], profile: Profile) -> list[Word] | None:
         key = tuple(src)
         base = [t for k in src for _, t in words[k].chars] or [words[src[0]].start_s] * sum(
             len(groups[k]) for k in src)
+        base_p = [q for k in src for q in char_confs(words[k])]
         off = offsets.get(key, 0)
         times = base[off:off + len(letters)]
+        probs = base_p[off:off + len(letters)] if len(base_p) == len(base) else []
         offsets[key] = off + len(letters)
         if len(times) < len(letters):
             times = times + [times[-1] if times else words[src[0]].start_s] * (len(letters) - len(times))
         start = times[0] if off else words[src[0]].start_s
         last = off + len(letters) >= len(base)
         end = words[src[-1]].end_s if last else times[-1]
-        conf = min(words[k].confidence for k in src)
-        out.append(Word("".join(letters), start, end, conf, list(zip(letters, times, strict=True))))
+        if len(probs) == len(letters):
+            conf = geo_conf(probs)
+        else:
+            conf, probs = min(words[k].confidence for k in src), []
+        out.append(Word("".join(letters), start, end, conf, list(zip(letters, times, strict=True)),
+                        words[src[0]].space_p, probs))
     return out
 
 

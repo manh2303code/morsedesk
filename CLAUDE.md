@@ -170,9 +170,12 @@ audio → dò tone 14 ms → dither nếu SNR>25dB → đặc trưng 11 chiều,
   đều; T1 nhóm mã −1,75 điểm; CZWCI → CQWCI). Corpus một câu một dòng → dấu chấm giữa bản tin bị phạt
   3–4,6 nat; đã sửa bằng ranh giới câu trong beam (`BeamParams.sentence_breaks`, 25/09).
   Chi tiết: .superpowers/sdd/research-lm-2026-09-24.md.
-- **Độ tin cậy thô của từ LẠC QUAN** (calibrate_confidence.py, 27/09 với model 0.6.0, ~9 000 từ): >= 0,97 đúng 95 %,
-  0,80–0,90 chỉ đúng 61 % (chế độ nghe 74 %). Ngưỡng gạch chân nay 0,97 / 0,8 (word_view);
-  tooltip đọc bảng đo ở morsedesk/app/data/confidence_calibration.json, không đặt tay con số.
+- **Độ tin cậy thô của từ LẠC QUAN** (calibrate_confidence.py, 28/09 với model 0.7.0, ~9 300 từ): >= 0,97 đúng 94 %
+  (chế độ nghe 88 %), 0,80–0,90 chỉ đúng 67 %. Ngưỡng gạch chân 0,97 / 0,8 (word_view); tooltip đọc bảng đo ở
+  morsedesk/app/data/confidence_calibration.json, không đặt tay con số. Độ tin cậy = mạng nghe RÕ đến đâu, KHÔNG
+  phải người gửi đánh đúng: T7 hai chữ số nhân viên sửa (2094->2093, 3408->3498, hai giám khảo cũng nghe như vậy)
+  được 0,97 / 0,999. **Tách/ghép từ phải giữ xác suất TỪNG CHỮ** (`Word.char_probs`, api.char_confs): trước 28/09
+  từ mới lấy mức thấp nhất của cả từ gốc — 351 (nhịp phím làm chính dồn cả bản tin thành một từ) mọi nhóm 0,23.
 - **Chế độ nghe tự nhận ngôn ngữ: CHƯA khóa thì CHƯA chốt** (model/stream.py `_pending`): mỗi lần giải
   bộ đệm ~9,5 s tự chọn ngôn ngữ riêng, chốt ngay là dòng chữ lẫn Latin/Kirin. Chữ chờ hiện dạng tạm,
   quy về một bảng chữ theo mẫu (`Profile.retarget`); quá PIN_FORCE_LETTERS thì khóa theo ngôn ngữ dẫn đầu.

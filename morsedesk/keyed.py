@@ -59,6 +59,7 @@ LESSON_MAX_OVER_MEDIAN = 2.0   # ... và khoảng dài nhất < ngần này lầ
 TONAL_MIN = 0.5            # ký tự thuần tone (Morse sạch đo 0,85–0,92; giọng nói 0,02–0,37)
 MIN_AGREEMENT = 0.8        # mô hình khớp nhịp phím ở ngần này ký tự Morse rõ thì mới tin phép căn (27/09:
                            # file sạch 0,87–1,0; trạm số M14 thu sóng ngắn 0,735 — nhịp phím đọc nhầm nhiễu)
+KEYED_CONF = 0.9           # độ tin cậy tối đa của chữ do nhịp phím sửa/chèn (mạng không nghe ra như vậy)
 PRIMARY_VALID = 0.9        # nhịp phím làm chính (phím nhẹ tách bạch) khi ngần này ký tự Morse của nó là mẫu hợp lệ
 MIN_COVERAGE = 0.85        # ... và nhịp phím có đối ứng cho ngần này ký tự mô hình (trong khoảng Morse)
 SPAN_MARGIN_S = 1.0        # khoảng Morse = từ ký tự nhịp phím Morse đầu tới cuối, nới ngần này giây
@@ -491,11 +492,14 @@ def reconcile(words: list, keyed: Keyed, profile) -> list | None:
         else:
             kind.append(1)
     D = []                                      # (chữ, mốc, chỉ số từ, độ tin cậy từ)
+    P = []                                      # xác suất TỪNG CHỮ (độ tin cậy từ mới tính từ đây)
     for wi, w in enumerate(words):
         chars = list(getattr(w, "chars", None) or [])
         if not chars or "".join(c for c, _ in chars) != w.text:
             return None
         D += [(c, t, wi, w.confidence) for c, t in chars]
+        cp = list(getattr(w, "char_probs", None) or [])
+        P += cp if len(cp) == len(chars) else [w.confidence] * len(chars)
     n, m = len(D), len(K)
     starts = np.array([c.start_s for c in K])
     center = np.searchsorted(starts, np.array([t for _, t, _, _ in D]) + 0.05)   # mốc phát sớm -> chữ kế tiếp
@@ -617,9 +621,11 @@ def reconcile(words: list, keyed: Keyed, profile) -> list | None:
                 # (`7` đọc thành `I`, 8 chấm xóa đọc thành `S`)
                 far_ok = far_ok or keyed.separable
                 fix = not same and keyed.precise and (near or far_ok)
-                out.append((_render(profile, K[b].pattern) if fix else ch, K[b].start_s, b, wi, conf))
+                # chữ nhịp phím SỬA: mạng không nghe ra như vậy -> không cao hơn KEYED_CONF (gạch vàng)
+                out.append((_render(profile, K[b].pattern) if fix else ch, K[b].start_s, b, wi,
+                            min(P[a], KEYED_CONF) if fix else P[a]))
             elif kind[b] == 1 or conf >= KEEP_CONF:
-                out.append((ch, K[b].start_s, b, wi, conf))
+                out.append((ch, K[b].start_s, b, wi, P[a]))
         elif a is not None:
             ch, t, wi, conf = D[a]
             outside = not span[0] <= t <= span[1]
@@ -627,13 +633,13 @@ def reconcile(words: list, keyed: Keyed, profile) -> list | None:
             silent = not fragment and a not in hidden   # gõ tay thì nhịp phím hay gộp hai ký tự làm một)
             garbage = outside or silent or (fragment and keyed.precise)
             if not garbage or (conf >= KEEP_CONF and not primary):   # nhịp phím chính: mảnh vỡ `I` của `MI`
-                out.append((ch, t, None, wi, conf))
+                out.append((ch, t, None, wi, P[a]))
         elif kind[b] == 2 and primary:
-            out.append((_render(profile, K[b].pattern), K[b].start_s, b, None, 0.9))
+            out.append((_render(profile, K[b].pattern), K[b].start_s, b, None, KEYED_CONF))
         elif kind[b] == 2 and keyed.precise and _isolated(K, b):
             # chèn ký tự mô hình bỏ sót CHỈ khi nó đứng riêng giữa hai khoảng lặng dài và sạch (bài học);
             # trong nhóm bình thường, ký tự nhịp phím mà mô hình không đọc thường là nhiễu/đài khác (M14)
-            out.append((_render(profile, K[b].pattern), K[b].start_s, b, None, 0.9))
+            out.append((_render(profile, K[b].pattern), K[b].start_s, b, None, KEYED_CONF))
     if not out:
         return []
     groups: list[list[tuple]] = [[out[0]]]
@@ -644,7 +650,9 @@ def reconcile(words: list, keyed: Keyed, profile) -> list | None:
                 new = True                      # giữa hai chữ có đoạn dài bị bỏ (giọng nói...); nhiễu lụp bụp
                                                 # ngắn giữa một từ (SAQ gõ tay) thì không
             elif primary and keyed.spaced:
-                new = ka in keyed.breaks
+                # nhịp phím chính: dấu cách theo cụm khoảng lặng HOẶC ranh giới từ của mô hình — chỉ theo nhịp
+                # phím thì 351 (lặng giữa từ nén vào lặng giữa chữ) dính cả mào đầu thành một từ (28/09)
+                new = ka in keyed.breaks or (wa is not None and wb is not None and wa != wb)
             elif ka in keyed.breaks and (keyed.precise or K[ka].gap_after >= HAND_LONG_GAP_UNITS):
                 new = True                      # gõ tay: người gõ hay ngừng giữa từ (SAQ `N OVEMBER`)
             elif ka in keyed.joins:
@@ -666,9 +674,10 @@ def reconcile(words: list, keyed: Keyed, profile) -> list | None:
         src = [words[wi] for *_, wi, _ in g if wi is not None]
         base = src[0] if src else template
         end_s = K[g[-1][2]].end_s if g[-1][2] is not None else (src[-1].end_s if src else g[-1][1])
-        conf = float(min(c for *_, c in g))
+        probs = [float(c) for *_, c in g]
+        conf = float(np.exp(np.mean(np.log(np.maximum(probs, 1e-6)))))
         new_words.append(replace(base, text=text, start_s=g[0][1], end_s=end_s, confidence=conf,
-                                 chars=[(c, t) for c, t, *_ in g]))
+                                 chars=[(c, t) for c, t, *_ in g], char_probs=probs))
     if [w.text for w in new_words] == [w.text for w in words]:
         return None
     return new_words

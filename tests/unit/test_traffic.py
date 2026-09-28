@@ -151,3 +151,28 @@ def test_live_merges_fragment_only_when_groups_tile():
 def test_live_o_closes_the_word():
     """`TO` bị chốt thành hai mẩu (`T` đã đổi thành 0): ít nhất các nhóm sau vẫn tách được."""
     assert live([("RMKS", False), ("1069", False), ("T", False), ("O19151178", True)]) == "RMKS 1069 0O 1915 1178"
+
+
+def test_each_regrouped_group_gets_its_own_confidence():
+    """28/09: từ mới từng lấy mức THẤP NHẤT của cả từ gốc — một chữ yếu làm cả khối dính (và mọi nhóm tách ra
+    từ nó) cùng bị gạch đỏ. Nay mỗi nhóm = trung bình nhân xác suất CHÍNH các chữ của nó."""
+    probs = [0.999] * 4 + [0.999, 0.40, 0.999, 0.999]
+    w = Word("67A3TD3D", 3.0, 3.8, 0.89, [(c, 3.0 + 0.1 * k) for k, c in enumerate("67A3TD3D")], 1.0, probs)
+    words = [Word("RMKS", 0.0, 0.4, 0.99, [(c, 0.1 * k) for k, c in enumerate("RMKS")]),
+             Word("1234", 1.0, 1.4, 0.98, [(c, 1.0 + 0.1 * k) for k, c in enumerate("1234")]),
+             Word("=", 2.0, 2.1, 0.99, [("=", 2.0)]), w]
+    out = traffic_words(words, EN)
+    a, b = out[3], out[4]
+    assert (a.text, b.text) == ("6713", "0838")
+    assert a.confidence > 0.99 and b.confidence < 0.85
+    assert b.char_probs == probs[4:]
+
+
+def test_stream_part_keeps_char_confidence():
+    from morsedesk.model.stream import _join, _part
+    probs = [0.99, 0.5, 0.99, 0.99]
+    w = Word("ABCD", 0.0, 0.4, 0.8, [(c, 0.1 * k) for k, c in enumerate("ABCD")], 1.0, probs)
+    head, tail = _part(w, w.chars[:2]), _part(w, w.chars[2:])
+    assert head.char_probs == probs[:2] and tail.char_probs == probs[2:]
+    assert tail.confidence > 0.98 and head.confidence < 0.71
+    assert _join(head, tail).char_probs == probs

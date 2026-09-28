@@ -178,15 +178,20 @@ def regroup(letters: list[str], patterns: list[str | None], spaces: list[bool]) 
 def traffic_words(words: list, profile) -> list | None:
     """Áp `regroup` lên danh sách Word (morsedesk.api.Word): dựng lại từ theo thời điểm từng chữ.
     None nếu không phải điện mạng hoặc không đổi gì."""
+    from morsedesk.api import char_confs, geo_conf
     from morsedesk.numbers import letters_of
 
     flat: list[tuple[str, float, int]] = []          # (chữ, giây, chỉ số từ gốc)
+    probs: list[float] = []                          # xác suất từng chữ: mỗi nhóm mới có độ tin cậy CỦA NÓ
     spaces: list[bool] = []
     for wi, w in enumerate(words):
         letters = letters_of(w.text)
         times = [t for _, t in w.chars] if len(w.chars) == len(letters) else [w.start_s] * len(letters)
+        cp = char_confs(w)
+        cp = cp if len(cp) == len(letters) else [w.confidence] * len(letters)
         for k, (ch, t) in enumerate(zip(letters, times, strict=True)):
             flat.append((ch, t, wi))
+            probs.append(cp[k])
             spaces.append(k == 0 and wi > 0)
     pats = [profile.letter_to_pattern.get(ch) or profile.prosign_to_pattern.get(ch) for ch, _, _ in flat]
     rg = regroup([ch for ch, _, _ in flat], pats, spaces)
@@ -198,14 +203,13 @@ def traffic_words(words: list, profile) -> list | None:
         e = k + 1
         while e < len(flat) and not rg.spaces[e]:
             e += 1
-        src = sorted({flat[q][2] for q in range(k, e)})
         first_w, last_w = words[flat[k][2]], words[flat[e - 1][2]]
         start = first_w.start_s if (k == 0 or flat[k - 1][2] != flat[k][2]) else flat[k][1]
         end = last_w.end_s if (e == len(flat) or flat[e][2] != flat[e - 1][2]) else flat[e][1]
         chars = [(rg.letters[q], flat[q][1]) for q in range(k, e)]
         orig_boundary = k == 0 or flat[k - 1][2] != flat[k][2]
         out.append(replace(first_w, text="".join(rg.letters[k:e]), start_s=start, end_s=max(end, start),
-                           confidence=min(words[s].confidence for s in src), chars=chars,
+                           confidence=geo_conf(probs[k:e]), chars=chars, char_probs=probs[k:e],
                            space_p=first_w.space_p if orig_boundary else 1.0))
         k = e
     return out
