@@ -73,6 +73,11 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
     chỉ-ALSA của Ubuntu 22.04 nên không dính, nhưng đừng nâng ảnh dựng mà không thử máy không có Pulse.
     App báo "không có âm thanh" (AudioUnavailable), không sập.
 
+26. **Điện văn mạng CW (M89/M95) + phím "nhẹ": app sai 23 %** (28/09, file thật T6 net_msg_cut_numbers.wav,
+    đáp án 2 giám khảo khớp 311/316). Chấm sau gạch 0,1–0,5 đơn vị -> C/G, Y/O, K/M; mô hình chưa từng học lối
+    phím này (phím chuẩn cùng nội dung: 0 % tới 8 dB). Nghiên cứu + số đo + kế hoạch 5 bước:
+    docs/research/06-net-traffic-light-keying.md (nhịp phím tự thích nghi 5,7 %; không làm MoE trong mạng).
+
 ## Đang mở — trung bình
 
 5. **Model âm học: hướng tiếp theo (P2–P7 trong .superpowers/sdd/research-acoustic-2026-09-24.md).**
