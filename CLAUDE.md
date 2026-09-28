@@ -428,8 +428,8 @@ nhận trên T1: T1 9,70 → 9,79 %, dev và T2 không đổi, 120/120 lần ch�
 cậy ~0,99 — về đường bao nó chính là Morse chữ E. Test cũ kiểm §7 bằng `engine="baseline"` nên không bắt
 được việc engine `onnx` bịa chữ; test mới chạy trên `onnx`.
 
-**Đóng gói (dựng lại 27/09 khuya, luồng thiết bị âm thanh + ngắt từ dài + khóa văn bản khi phát, 452949b; trước đó 9cf44ad = số + nhịp phím).** Windows `dist/MorseDesk.exe` một file
-139,8 MB (`scripts/build_windows.ps1`); Linux `dist/MorseDesk-x86_64.AppImage` 148 MB. Kiểm: chạy
+**Đóng gói (dựng lại 28/09 tối, model 0.7.0 + điện văn mạng, 6b80068; trước đó 27/09 khuya 452949b = luồng thiết bị âm thanh).** Windows `dist/MorseDesk.exe` một file
+139,7 MB (`scripts/build_windows.ps1`); Linux `dist/MorseDesk-x86_64.AppImage` 148 MB. Kiểm: chạy
 `scripts/test_windows_exe.ps1` TRƯỚC (nó sinh mẫu `dist/selftest/`), rồi `scripts/test_appimage.sh`
 — cả hai đòi `--self-test` ra văn bản giống hệt mã nguồn. Đổi model thì phải dựng lại CẢ HAI.
 Docker Desktop có lúc báo "running" mà máy ảo đã chết (lỗi 500): `docker desktop restart` — train
