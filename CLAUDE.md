@@ -223,6 +223,10 @@ audio → dò tone 14 ms → dither nếu SNR>25dB → đặc trưng 11 chiều,
 - **Điện văn mạng: ký tự đúng nhưng NHÓM DÍNH LIỀN** (`67A3TD3D6746`): thước đo bỏ dấu cách không thấy — T7 chấm
   thêm "nhóm bản chép đúng như hiện ra" (46/108 trước tầng cấu trúc morsedesk/traffic.py). Tầng này chỉ bật khi
   có mốc RMKS theo MẪU (352 bị tự nhận tiếng Nga: `РМКС`); `TO` giữa các nhóm RMKS là một từ (cả 3 file).
+  MÀO ĐẦU không có ranh giới từ trong âm thanh (người gửi để lặng giữa từ 3–4 chấm, đánh liền `MSG` -> `7G`): tách
+  theo ĐỊNH DẠNG (cụm thủ tục theo chuỗi chấm-gạch, CK/ngày/giờ/giờ đối chiếu số nhóm, hô hiệu bỏ phiếu). Chế độ
+  nghe chốt mào đầu dính từng mẩu 1–3 chữ: phải dò cụm thủ tục XUYÊN mẩu. Thước đo T7 chuẩn hóa cụm thủ tục CẢ HAI
+  phía (đáp án ghi `7G` như được đánh); cột `sem` thiên lệch ở mào đầu (quy số viết tắt theo cách ngắt từ của giám khảo).
 - **Bản chép nhân viên KHÁC âm thanh ở chỗ không phải nhóm số**: hô hiệu (352 phát KK3J — đo nhịp phím — bản chép
   ghi RY2J), bỏ `TO`, bỏ nhóm đánh hỏng. `tools/copy_align.py` chỉ căn vùng nhóm sau RMKS.
 - **Khoảng lặng dài ĐỀU giữa các chữ là nhập nhằng thật**: cùng âm thanh với một từ Farnsworth (T1 có

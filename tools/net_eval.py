@@ -3,8 +3,11 @@
 Chấm ba cách (docs/research/06-net-traffic-light-keying.md):
 - `pat`: CER theo MẪU chấm-gạch, bỏ dấu cách; số viết tắt của điện mạng coi như chữ số của nó (A = 1: app đổi
   số viết tắt trong thân điện thành chữ số, morsedesk/traffic.py); Kirin cùng mẫu = đúng;
+- cụm thủ tục đánh liền (`HR 7G GA` = HR MSG GA, cùng chuỗi chấm-gạch, chỉ khác chỗ ngắt ký tự) được chuẩn hóa
+  ở CẢ HAI phía trước khi so (morsedesk.traffic.PHRASES): đáp án ghi cái được đánh, app hiện ý định;
 - `sem`: CER theo NGHĨA — số viết tắt trong nhóm số quy về chữ số (A1 U2 V3 D8 N9 T0), bỏ dấu cách; ký tự đáp
-  án thuộc một nhóm của bản chép (`group`) luôn là chữ số;
+  án thuộc một nhóm của bản chép (`group`) luôn là chữ số; ở MÀO ĐẦU cột này thiên lệch: nó quy số viết tắt theo cách
+  ngắt từ của giám khảo (ngắt theo cảm nhận), `TT` đứng riêng trong đáp án không thành `00` — dùng `pat`;
 - `body`: số nhóm 4 ký tự của thân điện (giữa `=` và `<AR>`) đúng trọn, bỏ phần đánh hỏng trước `?`;
   đáp án đã căn bản chép (tools/copy_align.py) thì nhóm lấy theo trường `group` (RMKS + thân);
 - `copy`: số nhóm của BẢN CHÉP nhân viên (`copy_groups`) mà app ra đúng trọn theo nghĩa — căn chuỗi nhóm
@@ -168,23 +171,45 @@ def canon(p: str) -> str:
     return PATTERN_OF[CUT[c]] if c in CUT else p
 
 
+def phrase_norm(tokens: list[tuple[str, bool]]) -> tuple[list[tuple[str, bool]], list[int]]:
+    """Cụm thủ tục theo chuỗi chấm-gạch -> chữ của cụm (như app làm ở mào đầu). Trả (token mới, chỉ số token gốc
+    của từng token mới). Áp CẢ đáp án lẫn kết quả nên so công bằng."""
+    from morsedesk.traffic import _phrases
+    pats = [p for p, _ in tokens]
+    hits = _phrases(pats, list(range(len(pats))), lambda q: "\x00" + q)
+    out, owner = [], []
+    for i, (p, sp) in enumerate(tokens):
+        if i in hits:
+            text, start = hits[i]
+            parts = [q for q in text.split("\x00") if q]
+            for j, q in enumerate(parts):
+                out.append((q, (start or sp) if j == 0 else False))
+                owner.append(i)
+        else:
+            out.append((p, sp))
+            owner.append(i)
+    return out, owner
+
+
 def score(ref: list[dict], hyp_text: str, copy_groups: list[str] | None = None) -> dict:
-    a = [canon(it["pattern"]) for it in ref]
-    hyp = text_tokens(hyp_text)
+    rt, owner = phrase_norm([(it["pattern"], it.get("space_before", False)) for it in ref])
+    a = [canon(p) for p, _ in rt]
+    hyp, _ = phrase_norm(text_tokens(hyp_text))
     b = [canon(p) for p, _ in hyp]
     dist, ops = lev_ops(a, b)
-    ok = {i for op, i, _ in ops if op == "="}
+    bad_pos = {i for op, i, _ in ops if op in "SD"}
+    ok = {owner[i] for op, i, _ in ops if op == "="} - {owner[i] for i in bad_pos}
     ins_after, prev = set(), None
     for op, i, _ in ops:
         if op == "I" and prev is not None:
-            ins_after.add(prev)
+            ins_after.add(owner[prev])
         if i is not None:
             prev = i
-    sure_bad = sum(1 for op, i, _ in ops if op in "SD" and not ref[i].get("unsure"))
+    sure_bad = sum(1 for op, i, _ in ops if op in "SD" and not ref[owner[i]].get("unsure"))
     n_sure = sum(1 for it in ref if not it.get("unsure"))
     ins = sum(1 for op, *_ in ops if op == "I")
-    rs = semantic([(it["pattern"], it.get("space_before", False)) for it in ref])
-    rs = [CUT.get(c, c) if "group" in it else c for c, it in zip(rs, ref, strict=True)]
+    rs = semantic(rt)
+    rs = [CUT.get(c, c) if "group" in ref[owner[k]] else c for k, c in enumerate(rs)]
     hs = semantic(hyp)
     sdist, _ = lev_ops(rs, hs)
     groups = body_groups(ref)

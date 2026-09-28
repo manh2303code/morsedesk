@@ -148,3 +148,16 @@ ghép khít nhóm đủ — không gộp tùy tiện qua dấu cách vì một c
 **E21 (lối phím đo thật) -> model 0.7.0** (docs/research/03 "E20, E21"): T7 file 103/108 (mẫu 11,47 -> 9,91 %),
 T7 chế độ nghe **98/108** (351: 64,9 -> 20,9 % theo mẫu), tổng hợp t7light/t7mid 0,00/0,05 %; T4/dev-OOV/T2
 không kém; dev +0,82 (qsb 0–3 dB, E20 cũng vậy — do văn bản/tinh chỉnh, đúng thiên lệch quy tắc 4).
+
+**Mào đầu (29/09, người dùng hỏi vì sao còn cụm rất dài dính nhau).** Tầng cấu trúc ban đầu chỉ động vào thân
+(sau RMKS); cụm dính còn lại đều ở mào đầu/phần kết: `015/CCKCK 3116091419 TT`, `VV4ADJDE`, `7KND7GNR`,
+`CK 3524`, `HRWKNR`. Nguyên nhân ở chính người gửi: lặng giữa chữ 1,2–2 chấm, giữa từ 3–4 chấm, chữ đánh liền
+(`MSG` = `--` `...` `--.` -> `7G`) — âm thanh KHÔNG có ranh giới từ, nhân viên tách nhờ biết định dạng. Làm theo
+định dạng (traffic._header): cụm thủ tục khớp theo chuỗi chấm-gạch bỏ qua ranh giới ký tự và viết lại bằng bảng
+chữ của bản tin; CK cuối trước RMKS đứng riêng, dãy số sau = CK / ngày / giờ / giờ với CK đối chiếu số nhóm thân;
+hô hiệu bỏ phiếu (đứng riêng >= 1 lần, gặp >= 2 lần) tách khỏi VV/DE. Chế độ nghe (chữ chốt dần từng mẩu 1–3 ký
+tự): dò cụm thủ tục XUYÊN các mẩu để bật chế độ điện mạng, rồi chia nhóm giờ sau CK (coi CK hai chữ số) và nối số
+NR; không viết lại được chữ đã hiện (`7G` vẫn là `7G`). Kết quả: 351 `… HR MSG GA NR 015/CCK CK 31 16 0914 1900
+RMKS …`, 352 `VV 4ADJ DE … HR WK NR 171 HR MSG GA … MSG NR 0717 CK 35 24 0828 1827 RMKS`; chế độ nghe `CK 31
+16 0914 1900`, `NR 0717 CK 35 24 0828 1827`. 347 còn `RHRMEPGAG/57/CCK` (fading, mô hình đọc sai chữ). CER mẫu
+T7 KHÔNG đổi (net_eval chuẩn hóa cụm thủ tục cả hai phía); T1/T6/nghe 18 bản tin/điện số nghe giống hệt.

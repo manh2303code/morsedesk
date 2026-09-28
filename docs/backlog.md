@@ -79,8 +79,9 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
     E21 = 0.7.0. T7 nhóm bản chép đúng: file 46 -> 103/108, nghe 32 -> 98/108; T1/dev/dev-OOV/T2/T4/T6 giống hệt
     với mã mới (model cũ). CÒN MỞ:
     - chế độ NGHE chưa đọc nhịp phím (bộ đệm ~9,5 s dưới 60 chấm của cổng phím nhẹ) -> nhận phím nhẹ theo CẢ PHIÊN;
-    - bỏ phiếu hô hiệu lặp, kiểm `CK` = số nhóm (cảnh báo khi lệch), mào đầu `CK 3524` dính (CK 35 + ngày 24),
-      8 chấm xóa trong mào đầu mô hình đọc thành `EEEEEEEE`;
+    - mào đầu (29/09 ĐÃ LÀM: cụm thủ tục, CK + nhóm giờ, hô hiệu bỏ phiếu) — còn: CẢNH BÁO khi CK lệch số nhóm
+      (CK đã đo, chưa hiện), chữ đọc sai trong mào đầu (347 `RHRMEPGAG/57/CCK`), chế độ nghe không viết lại được
+      `7G` -> `MSG` vì chữ chốt dần từng mẩu, 8 chấm xóa trong mào đầu mô hình đọc thành `EEEEEEEE`;
     - trọng tài THEO ĐOẠN (347: fading sâu một đoạn — nhịp phím chỉ tin được ngoài đoạn đó);
     - 352 còn nhóm sai do đọc `Л` thay `D`/`9` (phím hơi nhẹ, dưới cổng); chế độ nghe 352: 28/37 (mô hình đặt
       dấu cách sai ở cả hai đầu một dãy — chỉ quy hoạch động của chế độ file gỡ được);

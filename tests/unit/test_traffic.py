@@ -19,7 +19,7 @@ def run(text: str, prof=EN) -> str:
             letters.append(c)
             spaces.append(k == 0 and wi > 0)
     pats = [prof.letter_to_pattern.get(c) or prof.prosign_to_pattern.get(c) for c in letters]
-    rg = regroup(letters, pats, spaces)
+    rg = regroup(letters, pats, spaces, render=lambda q: prof.render([q]))   # như traffic_words
     return "".join((" " if s and i else "") + c for i, (c, s) in enumerate(zip(rg.letters, rg.spaces, strict=True)))
 
 
@@ -176,3 +176,51 @@ def test_stream_part_keeps_char_confidence():
     assert head.char_probs == probs[:2] and tail.char_probs == probs[2:]
     assert tail.confidence > 0.98 and head.confidence < 0.71
     assert _join(head, tail).char_probs == probs
+
+
+# --- MÀO ĐẦU (28/09): định dạng thay cho ranh giới từ mà âm thanh không có ---
+
+def test_header_procedure_phrases_dtg_and_ck_check():
+    """`HR7GGA` (M và S đánh liền = `7`) -> HR MSG GA; dãy số sau CK cuối = CK / ngày / giờ / giờ, CK khớp số
+    nhóm thân đếm được (2)."""
+    rg_text = run("HR7GGA NR 015/CCKCK 2160914 19TT RMKS 8981 = 6713 0838 <AR>")
+    assert rg_text == "HR MSG GA NR 015/CCK CK 2 16 0914 1900 RMKS 8981 = 6713 0838 <AR>"
+
+
+def test_header_call_signs_voted_and_split():
+    out = run("VV4ADJDE KK3J VV 4ADJ DE KK3J HRWKNR 171 RMKS 6229 = 3198 1360 9218 <AR>")
+    assert out.startswith("VV 4ADJ DE KK3J VV 4ADJ DE KK3J HR WK NR 171 RMKS")
+
+
+def test_header_phrase_rewritten_in_message_alphabet():
+    """352 bị tự nhận là tiếng Nga: cụm đánh liền viết lại bằng chữ Kirin, không trộn bảng chữ."""
+    out = run("ХР7ГГА НР 0717 РМКС 6229 = 3198 1360 9218", RU)
+    assert out.startswith("ХР МСГ ГА НР 0717 РМКС")
+
+
+def test_tail_question_mark_is_a_question():
+    out = run("RMKS 1234 = 8104 3129 0401 7376 8732 8930 <AR> QSL? HRWKNR 28T")
+    assert out.endswith("<AR> QSL? HR WK NR 28T")
+
+
+def test_live_header_after_net_phrase_seen_across_parts():
+    """Chế độ nghe chốt mào đầu dính liền từng mẩu 1–3 chữ: cụm thủ tục dò XUYÊN mẩu; sau đó CK và dãy số theo
+    sau chia 2/2/4/4 bỏ qua dấu cách của mô hình, số NR nối lại."""
+    from morsedesk.traffic import LiveNet
+    net, words = LiveNet(), []
+
+    def render(p):
+        return EN.render([p])
+    for text, cont in [("H", False), ("R7", True), ("G", True), ("GA", False), ("NR", False), ("T", False),
+                       ("717", False), ("CK", False), ("3524", False), ("T", False), ("828", False), ("1827", False),
+                       ("RMKS", False)]:
+        letters = letters_of(text)
+        pats = [EN.letter_to_pattern.get(c) or EN.prosign_to_pattern.get(c) for c in letters]
+        segs, _ = net.feed([(c, 0.0) for c in letters], pats, cont, render=render)
+        for chars, join in segs:
+            s = "".join(c for c, _ in chars)
+            if join and words:
+                words[-1] += s
+            else:
+                words.append(s)
+    assert " ".join(words) == "HR7G GA NR 0717 CK 35 24 0828 1827 RMKS"

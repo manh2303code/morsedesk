@@ -405,6 +405,14 @@ mark allowed to be short; abbreviated digits in complete groups become digits, T
 groups stays a word, and the call signs and the header are left alone. Live, where committed text
 never changes, a word is split as soon as a group is complete, and a fragment is joined only when it
 completes a group exactly.</li>
+<li><b>The header.</b> Before RMKS these operators leave 1.2 to 2 dits between letters and 3 to 4 between
+words, and key some letters together (MSG as <i>7G</i>), so the sound has no word boundaries; operators
+separate them by the format. MorseDesk does the same: procedure phrases are matched by their dots and
+dashes whatever the character boundaries (<i>HR7GGA</i> becomes HR MSG GA, <i>HRWKNR</i> HR WK NR), the
+digits after the last CK are split into CK, day and two times with the CK checked against the number of
+body groups (<i>3116091419TT</i> becomes 31 16 0914 1900), and a four-character call sign heard alone at
+least once and seen at least twice is split from VV and DE (<i>VV4ADJDE</i> becomes VV 4ADJ DE). Live,
+only splits ahead of the text are possible: the date and times after CK and the NR number.</li>
 </ul>
 <p>On the three recordings, checked against the operators' own copies, the groups that come out
 exactly as copied rose from 46 to 103 of 108 in a file and from 32 to 98 live (model 0.7.0).</p>
@@ -759,9 +767,9 @@ two-minute messages, language chosen by hand); 1.3&nbsp;s behind the audio. It d
 keying, so light keying rests on the network alone (network traffic: 98 of 108 groups live against
 103 in a file). With the language on
 automatic, random code groups reach 24&nbsp;%; choose the language by hand for them.</li>
-<li><b>Network traffic</b>: only the body after RMKS is rearranged; call signs and the header
-(NR, CK, date and time) are shown as heard, and the CK count is not yet checked against the number of
-groups.</li>
+<li><b>Network traffic</b>: letters misheard in the header are not corrected, and live mode cannot
+rewrite letters already shown (MSG keyed together stays <i>7G</i>); a CK that disagrees with the number of
+groups is not yet reported as a warning.</li>
 <li><b>Key clicks</b>: recordings of a telegraph key or sounder clicking, with no tone, are
 recognised and reported, not decoded.</li>
 <li><b>Periodic noise</b> can be read as a string of E.</li>

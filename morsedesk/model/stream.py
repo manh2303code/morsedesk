@@ -492,13 +492,20 @@ class StreamDecoder:
             if len(chars) != len(letters):
                 chars = [(c, w.start_s) for c in letters]
             pats = [profile.letter_to_pattern.get(c) or profile.prosign_to_pattern.get(c) for c, _ in chars]
-            segs, touched = self._net.feed(chars, pats, cont)
+            segs, touched = self._net.feed(chars, pats, cont, render=lambda q: profile.render([q]))
             if not touched:
                 out.append((w, cont, False))
                 continue
             for k, (seg, join) in enumerate(segs):
                 end = segs[k + 1][0][0][1] if k + 1 < len(segs) else w.end_s
-                out.append((_part(w, seg, end_s=end), join, True))
+                part = _part(w, seg, end_s=end)
+                if any(len(letters_of(c)) != 1 for c, _ in seg):     # cụm đánh liền `7` = `MS`: bung từng chữ
+                    probs = list(getattr(part, "char_probs", None) or [])
+                    exp = [(c1, t) for c, t in seg for c1 in letters_of(c)]
+                    pexp = [q for (c, _), q in zip(seg, probs, strict=False) for _ in letters_of(c)]
+                    part = _with(part, text="".join(c for c, _ in exp), chars=exp,
+                                 **({"char_probs": pexp} if len(pexp) == len(exp) else {}))
+                out.append((part, join, True))
         return out
 
     def _numbers_word(self, w, language: str):
