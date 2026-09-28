@@ -147,7 +147,7 @@ audio → dò tone 14 ms → dither nếu SNR>25dB → đặc trưng 11 chiều,
 
 | | Là gì | Ghi chú |
 |---|---|---|
-| `models/acoustic.onnx` | CTC 65 lớp, BiGRU 1 lớp hai chiều × 384, 4,5 MB, 1 119 425 tham số (E18 v0.6.0 = E17 + 35 % điện số) | 65 lớp là **cả ký tự** (`.-`, `-...`), không phải từng chấm gạch |
+| `models/acoustic.onnx` | CTC 65 lớp, BiGRU 1 lớp hai chiều × 384, 4,5 MB, 1 119 425 tham số (E21 v0.7.0 = E18 + điện văn mạng + lối phím đo thật) | 65 lớp là **cả ký tự** (`.-`, `-...`), không phải từng chấm gạch |
 | `models/lm/{en,ru,kk}.bin` | n-gram ký tự bậc 6, 41 MB | **bảng đếm thống kê, không phải nơ-ron**; chấm cùng đáp án gốc thì đáng ~3,9 điểm CER (T1 13,57 → 9,70 %), riêng Kazakh ~8,5 điểm |
 | `models/deepcw/model.onnx` | model ngoài, 15 MB | chỉ profile `en`, dùng đối chứng |
 
@@ -367,24 +367,27 @@ mình**. Trong một phiên đã có hai kết luận research không sống só
 
 ## Hiện trạng
 
-Model **E18 v0.6.0** (27/09: E17 tinh chỉnh thêm 24 000 bước với 35 % văn bản "điện số" — nhóm số, dãy
-số, số viết tắt, số định dạng; cùng kiến trúc hidden 384, 1 119 425 tham số; E17 = 0.5.0 ở
-models/archive, xem 03-model-experiments), cửa sổ 12 s, beam `alpha` 0,3 / `char_bonus` 1,25 + ranh
-giới câu; điện số đọc thẳng từ mô hình (không LM). Ba bộ tổng hợp cùng ma trận:
+Model **E21 v0.7.0** (28/09: E18 tinh chỉnh thêm 24 000 bước, 30 % văn bản số là điện văn mạng M89/M95 và 35 %
+clip có lối phím ĐO trên 3 file thật T7 — data/keyer.apply_fist; E18 = 0.6.0 ở models/archive, xem
+03-model-experiments), cửa sổ 12 s, beam `alpha` 0,3 / `char_bonus` 1,25 + ranh giới câu; điện số đọc thẳng từ
+mô hình (không LM); nhịp phím v2 khi phím nhẹ; tầng cấu trúc điện văn mạng (morsedesk/traffic.py, cả chế độ
+nghe). Ba bộ tổng hợp cùng ma trận (ghép cặp 28/09):
 
 | | tổng | clean | mp3 | qrm | qrn | qsb |
 |---|---|---|---|---|---|---|
-| T1 (seed 1000) | **8,36 %** | 1,52 | 1,62 | 1,26 | 1,38 | 36,04 |
-| dev (seed 500000) | **8,79 %** | 2,76 | 2,69 | 2,80 | 2,46 | 33,24 |
-| dev-OOV (seed 700000, văn bản chưa thấy) | **8,99 %** | 1,80 | 1,19 | 3,39 | 2,26 | 36,32 |
+| T1 (seed 1000) | **8,72 %** | 1,74 | 1,68 | 1,47 | 1,47 | 37,26 |
+| dev (seed 500000) | **9,60 %** | 2,61 | 2,97 | 2,72 | 2,88 | 36,84 |
+| dev-OOV (seed 700000, văn bản chưa thấy) | **8,76 %** | 1,71 | 0,98 | 3,50 | 1,68 | 35,91 |
 
-**T4 (bản ghi thật từ internet, 40 file) 1,25 %**: đề thi SRR tiếng Nga 0,55 %, ARRL 0,05 %, K7QO/SKCC
-0 %, VK6FLAB 0,79 %, **SAQ gõ tay on-air 14,67 %** (khoảng cách lớn nhất còn lại). **T5 trạm số thật
-(6 file) sai 16,13 % chữ số, 73,89 % nhóm đúng** (26/09: 25,12 / 42,36; ggmorse 28,79 / 36,78). **T6 file
-tải về (đáp án giám khảo LLM) 0,69 %; bộ test biên số must 109/109**. Chế độ
-nghe: điện số 0,0 % lỗi chữ số / 95,4 % nhóm đúng (26/09: 24,8 / 62,7), văn bản 3,21 % (18 bản tin). Không có bản ghi
-Kazakh thật nào. T2 **1,84 %** (bản ghi ARRL thật 0,95 %, 18–40 WPM không sai ký tự nào; trước 23/09 báo 3,93 % vì đáp án Kazakh bị viết phẳng — xem 02-baseline-numbers). **Không kênh nào qua cổng 2 % một cách chắc chắn** — trên T1 bốn kênh
-chạm dưới 2 % nhưng dev độc lập cho 2,6–3,1 %.
+dev xấu hơn E18 (+0,82 có ý nghĩa, dồn ở `qsb` 0–3 dB — E20 cũng vậy: do văn bản/tinh chỉnh, xem
+03-model-experiments); dev-OOV tốt hơn (−0,23 ns). **T7 điện văn mạng thật (3 file, bản chép nhân viên): nhóm
+bản chép đúng 103/108 ở file, 98/108 ở chế độ nghe** (27/09 trước tầng cấu trúc: 46 và 32). **T4 1,26 %**: đề
+thi SRR 0,55 %, ARRL 0,05 %, K7QO/SKCC 0 %, VK6FLAB 0,79 %, **SAQ gõ tay on-air 13,46 %** (khoảng cách lớn
+nhất còn lại). **T5 trạm số thật (6 file) sai 16,27 % chữ số, 73,25 % nhóm đúng** (26/09: 25,12 / 42,36;
+ggmorse 28,79 / 36,78). **Bộ test biên số must 109/109**. Chế độ nghe: văn bản 3,18 % (18 bản tin; file 3,16),
+điện số 120 bản tin 0,2 % / 87,4 % nhóm đúng. Không có bản ghi Kazakh thật nào. T2 **1,41 %** (bản ghi ARRL thật
+0,95 %, 18–40 WPM không sai ký tự nào). **Không kênh nào qua cổng 2 % một cách chắc chắn** — trên T1 bốn kênh
+chạm dưới 2 % nhưng dev độc lập cho 2,6–3,0 %.
 
 ### Nhiễu đo — đọc trước khi tin một con số
 

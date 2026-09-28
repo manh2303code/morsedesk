@@ -140,3 +140,11 @@ Trước khi sửa luật giữ chấm ngắn (đòi sát xung khác ở CẢ HA
 E20 34 / 35 / 30 = 99/108 (tổng hợp tốt hơn nhưng file thật 352 KÉM: `1360` -> `Е36Т`, `5390` -> `5399`)
 -> không dùng E20. 4 nhóm còn sai đều do đọc sai ký tự: `2094` -> `2093` (351), `Л` thay `D`/`9` và
 `3408` -> `3498` (352).
+
+**Chế độ nghe** (`tools/net_eval.py --configs live`, đúng như LiveWorker — không nhịp phím, không tầng file):
+nhóm bản chép 32/108 -> 74/108 với tầng cấu trúc chỉ-quyết-tiến (traffic.LiveNet: tách nhóm đủ, gộp mảnh CHỈ khi
+ghép khít nhóm đủ — không gộp tùy tiện qua dấu cách vì một chữ số mất sẽ kéo lệch mọi nhóm sau).
+
+**E21 (lối phím đo thật) -> model 0.7.0** (docs/research/03 "E20, E21"): T7 file 103/108 (mẫu 11,47 -> 9,91 %),
+T7 chế độ nghe **98/108** (351: 64,9 -> 20,9 % theo mẫu), tổng hợp t7light/t7mid 0,00/0,05 %; T4/dev-OOV/T2
+không kém; dev +0,82 (qsb 0–3 dB, E20 cũng vậy — do văn bản/tinh chỉnh, đúng thiên lệch quy tắc 4).

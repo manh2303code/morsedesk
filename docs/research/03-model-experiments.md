@@ -510,3 +510,42 @@ Theo quy tắc 4 (dev-OOV + T4 + long_random) E18 không kém ở đâu và th�
 thêm trạm số thật (T5) là đúng thước đo của yêu cầu. E17 lưu ở `models/archive/acoustic-0.5.0-E17.*`.
 Nhược điểm đã biết: E18 đọc rác đầu/cuối điện (tiếng dò sóng) thành SỐ thay vì chữ (backlog #19),
 và tách dãy số gõ tay sớm hơn một chút (nhập nhằng thật, backlog #18).
+
+## E20, E21 — điện văn mạng CW + lối phím (28/09)
+
+Cả hai: E18 tinh chỉnh thêm 24 000 bước (seed 41, lr 3e-4 cosine), cấu hình dữ liệu như E18 cộng `--net-share 0.3`
+(30 % văn bản số là điện văn mạng M89/M95: gọi đài, NR/CK, RMKS, nhóm 4 ký tự số viết tắt, 8 chấm xóa, `?`) và
+`--fist-p 0.35` (35 % clip có "lối phím"). KHÁC NHAU ở mô hình lối phím (data/keyer.apply_fist):
+- **E20**: chấm ngắn lại, chấm ngay sau gạch rút thêm 0,15–0,75 lần — giả thuyết từ file đầu tiên;
+- **E21**: mô hình ĐO trên 3 file thật T7 — mọi xung lệch −0,5…+0,1 đơn vị (bù vào lặng sau), lặng sau gạch
+  trong ký tự rút 0–0,6, lặng giữa chữ x1,0–1,5, giữa từ x0,7–1,4 (docs/research/06 §5: chấm sau gạch KHÔNG
+  ngắn hơn chấm khác; E20 học sai).
+
+Ghép cặp cùng mã (28/09, sau tầng cấu trúc + nhịp phím v2), CER trung bình từng clip:
+
+| Bộ | E18 (0.6.0) | E20 | E21 | E18 -> E21 [95 %] |
+|---|---|---|---|---|
+| T7 điện văn thật, file: theo mẫu / nhóm bản chép | 11,47 % / 104 | 11,60 % / 99 | **9,91 %** / 103 | |
+| T7 chế độ NGHE: theo mẫu / nhóm bản chép | 39,50 % / 74 | — | **19,82 %** / **98** | 351: 64,9 -> 20,9 % |
+| điện văn tổng hợp, lối phím đo thật: t7light / t7mid | 2,21 / 0,28 % | 0,08 / 0,13 % | **0,00 / 0,05 %** | phím chuẩn 0 % cả ba |
+| T4 (40) | 1,30 % | | 1,26 % | −0,04 [−0,15; +0,02] |
+| dev-OOV | 8,98 % | | 8,76 % | −0,23 [−0,73; +0,26] |
+| T2 | 1,84 % | | **1,41 %** | −0,43 [−1,30; 0,00] |
+| bản tin 2 phút (54): app / tự nhận ngôn ngữ | 3,30 / 3,29 % | | 3,34 / 4,49 % | tự nhận: 1 bản tin nhóm mã Anh bị nhận nhầm |
+| T5 trạm số: lỗi chữ số / nhóm đúng | 16,13 / 73,89 % | | 16,27 / 73,25 % | |
+| bộ test biên số must | 109/109 | | 109/109 | |
+| T6 | 3,94 % | | 4,46 % | 1 file (bài học bảng chữ Nga) |
+| T1 | 8,37 % | | 8,72 % | +0,36 [−0,08; +0,80] |
+| dev | 8,79 % | 9,45 % | 9,60 % | **+0,82 [+0,28; +1,42]** |
+
+Dev xấu hơn có ý nghĩa, và **E20 xấu y như vậy** (+0,66) -> không do mô hình lối phím mà do phần chung (văn bản
+điện mạng + 24 000 bước tinh chỉnh). Mức xấu dồn vào `qsb` 0–3 dB (dev +8,5 / +5,9 điểm ở từng ô 20 clip; các kênh
+không fading ~0); dev-OOV ở cùng ô lẫn lộn. Ví dụ `TNX FER` (qsb 0 dB): E18 đọc đúng cụm thuộc danh sách 51 từ
+nó học thuộc, E21 thì không — đúng thiên lệch quy tắc 4 (CLAUDE.md).
+
+### Quyết định: E21 -> `models/acoustic.onnx` v0.7.0 (28/09)
+
+Theo quy tắc 4 (dev-OOV + T4 + long_random + file thật): không kém ở đâu có ý nghĩa, thắng rõ trên đúng thước đo
+của yêu cầu (điện văn mạng thật, nhất là chế độ nghe: nhóm bản chép 74 -> 98/108). Nhược điểm đã biết: dev `qsb`
+0–3 dB (xem trên), một lần tự nhận nhầm ngôn ngữ ở nhóm mã Anh ngẫu nhiên. E18 lưu ở
+`models/archive/acoustic-0.6.0-E18.*`.

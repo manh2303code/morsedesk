@@ -73,16 +73,18 @@ commit. Mỗi dòng: vấn đề — bằng chứng (số đo) — hướng làm
     chỉ-ALSA của Ubuntu 22.04 nên không dính, nhưng đừng nâng ảnh dựng mà không thử máy không có Pulse.
     App báo "không có âm thanh" (AudioUnavailable), không sập.
 
-26. **Điện văn mạng CW (M89/M95) + phím "nhẹ"** (28/09; docs/research/06). ĐÃ LÀM (§5, 20535bc + sau đó):
-    bộ đo T7 (3 file thật + bản chép nhân viên, tools/net_eval.py, tools/copy_align.py), nhịp phím v2 có cổng
-    phím nhẹ + nhịp phím làm nguồn chính, tầng cấu trúc morsedesk/traffic.py; T7 nhóm bản chép đúng 46 -> 104/108,
-    351 theo mẫu 23,7 -> 2,5 %; T1/dev/dev-OOV/T2 giống hệt từng clip. CÒN MỞ:
-    - chế độ NGHE chưa có tầng cấu trúc (StreamDecoder chốt từng từ; nhóm dính liền vẫn hiện dính);
+26. **Điện văn mạng CW (M89/M95) + phím "nhẹ"** (28/09; docs/research/06). ĐÃ LÀM (§5; 20535bc, 53d2f9a,
+    7b79ef0 + model 0.7.0): bộ đo T7 (3 file thật + bản chép nhân viên), nhịp phím v2 có cổng phím nhẹ + nhịp phím
+    làm nguồn chính, tầng cấu trúc morsedesk/traffic.py (file + chế độ nghe chỉ-quyết-tiến), lối phím đo thật ->
+    E21 = 0.7.0. T7 nhóm bản chép đúng: file 46 -> 103/108, nghe 32 -> 98/108; T1/dev/dev-OOV/T2/T4/T6 giống hệt
+    với mã mới (model cũ). CÒN MỞ:
+    - chế độ NGHE chưa đọc nhịp phím (bộ đệm ~9,5 s dưới 60 chấm của cổng phím nhẹ) -> nhận phím nhẹ theo CẢ PHIÊN;
     - bỏ phiếu hô hiệu lặp, kiểm `CK` = số nhóm (cảnh báo khi lệch), mào đầu `CK 3524` dính (CK 35 + ngày 24),
       8 chấm xóa trong mào đầu mô hình đọc thành `EEEEEEEE`;
     - trọng tài THEO ĐOẠN (347: fading sâu một đoạn — nhịp phím chỉ tin được ngoài đoạn đó);
-    - 352 còn 3 nhóm sai do MÔ HÌNH đọc `Л` thay `D`/`9` (phím hơi nhẹ, dưới cổng) -> E21 (lối phím đo thật);
-    - chấm sau gạch cực ngắn (1–2 khung, bộ tổng hợp khắc nghiệt) mất hẳn — file thật chưa gặp.
+    - 352 còn nhóm sai do đọc `Л` thay `D`/`9` (phím hơi nhẹ, dưới cổng); chế độ nghe 352: 28/37 (mô hình đặt
+      dấu cách sai ở cả hai đầu một dãy — chỉ quy hoạch động của chế độ file gỡ được);
+    - model 0.7.0: dev `qsb` 0–3 dB xấu hơn 0.6.0 (+0,82 tổng dev), một lần tự nhận nhầm ngôn ngữ ở nhóm mã Anh.
 
 ## Đang mở — trung bình
 

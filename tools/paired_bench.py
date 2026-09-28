@@ -1,7 +1,7 @@
 """So hai phiên bản MÃ trên cùng manifest, ghép cặp từng clip (bootstrap) — dùng đúng `morsedesk.bench.evaluate`.
 
     # 1) chạy và lưu kết quả từng clip (PYTHONPATH chọn phiên bản mã, vd. một git worktree của commit cũ)
-    uv run python tools/paired_bench.py run MANIFEST OUT.json [--profile auto] [--workers 12]
+    uv run python tools/paired_bench.py run MANIFEST OUT.json [--profile auto] [--workers 12] [--model X.onnx]
     # 2) so
     uv run python tools/paired_bench.py cmp BASE.json NEW.json
 
@@ -22,7 +22,7 @@ def cmd_run(a: argparse.Namespace) -> None:
     from morsedesk.bench import evaluate, load_rows
 
     rows = load_rows(Path(a.manifest))
-    res = evaluate(rows, "onnx", None, None, a.profile, True, 64, None, a.workers)
+    res = evaluate(rows, "onnx", Path(a.model) if a.model else None, None, a.profile, True, 64, None, a.workers)
     out = [{"path": r["path"], "ref": r["ref"], "hyp": r["hyp"], "cer": r["cer"],
             "channel": r.get("channel"), "snr": r.get("snr")} for r in res]
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
@@ -69,6 +69,7 @@ def main() -> None:
     r.add_argument("out")
     r.add_argument("--profile", default=None, help="ghi đè profile (vd. auto)")
     r.add_argument("--workers", type=int, default=None)
+    r.add_argument("--model", default=None, help="ONNX model âm học (mặc định models/acoustic.onnx)")
     c = sub.add_parser("cmp")
     c.add_argument("base")
     c.add_argument("new")

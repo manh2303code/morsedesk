@@ -2,7 +2,7 @@
 <body>
 
 <h1>MorseDesk technical reference</h1>
-<p class="meta">Application 0.1.0, acoustic model 0.6.0. Measurements dated 27 September 2026
+<p class="meta">Application 0.1.0, acoustic model 0.7.0. Measurements dated 28 September 2026
 unless noted.</p>
 <p class="lead">MorseDesk turns Morse code audio into text in English, Russian and Kazakh, and
 text back into Morse audio. It runs entirely offline on the processor. This document describes
@@ -224,7 +224,7 @@ errors fall from 22.9 to 16.2&nbsp;%, and on unseen text clean signals go from 4
 set, the generated Kazakh lines of T2), and in deep fading at 0–3&nbsp;dB, where both models lose
 more than half of the characters (unseen text at 0&nbsp;dB: 66.5 to 71.9&nbsp;%).</p>
 
-<h3>The current model (0.6.0)</h3>
+<h3>Model 0.6.0</h3>
 <p>Model 0.6.0 is model 0.5.0 trained for another 24,000 steps with number traffic as 35&nbsp;% of
 its text: groups of three to seven digits, runs of six to fourteen, mixed letter-and-digit groups,
 formatted numbers (coordinates, times, phone numbers, frequencies) and digits between punctuation.
@@ -247,6 +247,37 @@ over the air (SAQ) go from 16.21 to 14.67&nbsp;%. A second run without the short
 groups split long hand-sent runs less often (generated runs: 90.5 against 87.5&nbsp;% of groups
 right) but did worse on the real recordings (number stations 70.54&nbsp;% of groups right, T4
 1.31&nbsp;%), so it was not adopted.</p>
+
+<h3>The current model (0.7.0)</h3>
+<p>Model 0.7.0 is model 0.6.0 trained for another 24,000 steps with two additions, both taken from
+three real recordings of military network traffic (see Network traffic under Numbers). Three in ten
+of its number texts are network messages: call-ups, NR/CK headers, remarks, four-character groups
+with abbreviated digits, erase signals and groups sent again after a question mark. And 35&nbsp;% of
+its clips are keyed the way those operators key: every element about 0.4 of a dit short, the gap
+after a dah inside a character up to 0.6 of a dit shorter, wider gaps between characters and
+sometimes narrower gaps between words. Both models were decoded on the same clips with the decoder
+of 28 September.</p>
+<table class="data" width="100%" cellspacing="0" cellpadding="6">
+<tr><th>Set</th><th class="num">Model 0.6.0</th><th class="num">Model 0.7.0</th><th class="num">Difference, 95&nbsp;% interval</th><th>Verdict</th></tr>
+<tr><td>Network traffic, 3 real recordings (T7), file: groups of the operators' copy right</td><td class="num">104 of 108</td><td class="num">103 of 108</td><td class="num">−1</td><td>no difference</td></tr>
+<tr><td>Same recordings, live</td><td class="num">74 of 108</td><td class="num">98 of 108</td><td class="num">+24</td><td>better</td></tr>
+<tr><td>Generated network traffic, light keying, 4–30&nbsp;dB</td><td class="num">2.21 %</td><td class="num">0.00 %</td><td class="num">−2.21</td><td>better</td></tr>
+<tr><td>T4, recordings from the internet (40)</td><td class="num">1.30 %</td><td class="num">1.26 %</td><td class="num">−0.04 [−0.15; +0.02]</td><td>no difference</td></tr>
+<tr><td>Development, unseen text</td><td class="num">8.98 %</td><td class="num">8.76 %</td><td class="num">−0.23 [−0.73; +0.26]</td><td>no difference</td></tr>
+<tr><td>Two-minute messages (54)</td><td class="num">3.30 %</td><td class="num">3.34 %</td><td class="num">+0.04 [−0.05; +0.14]</td><td>no difference</td></tr>
+<tr><td>Two-minute messages, live, language by hand (18)</td><td class="num">3.35 %</td><td class="num">3.18 %</td><td class="num">−0.18 [−0.48; +0.07]</td><td>no difference</td></tr>
+<tr><td>Number stations (T5): digits wrong / groups right</td><td class="num">16.13 / 73.89 %</td><td class="num">16.27 / 73.25 %</td><td class="num">+0.14 / −0.64</td><td>no difference</td></tr>
+<tr><td>T2</td><td class="num">1.84 %</td><td class="num">1.41 %</td><td class="num">−0.43 [−1.30; 0.00]</td><td>better on the generated Kazakh lines</td></tr>
+<tr><td>T1</td><td class="num">8.37 %</td><td class="num">8.72 %</td><td class="num">+0.36 [−0.08; +0.80]</td><td>no difference</td></tr>
+<tr><td>Development</td><td class="num">8.79 %</td><td class="num">9.60 %</td><td class="num">+0.82 [+0.28; +1.42]</td><td>worse</td></tr>
+</table>
+<p>The gain is on network traffic keyed in this style, above all when listening live, where the
+keying is not checked: on the lightest-keyed recording live errors fall from 64.9 to 20.9&nbsp;%. The
+development set is worse in deep fading at 0–3&nbsp;dB, where both models lose most characters; on
+unseen text the same cells are mixed. The earlier model still read a few phrases from its old word
+list in those troughs (TNX FER); the new one no longer does. A run with a first, wrong guess at the
+keying style (dits after a dah shortened) did as well on generated traffic but worse on the real
+recordings (99 of 108 groups), so it was not adopted.</p>
 
 <a name="language"></a><h2 class="language">Language layer</h2>
 
@@ -352,6 +383,32 @@ group came out right.</li>
 <p>Messages longer than 30&nbsp;seconds are split only to vote on the language. The text is decoded
 in one pass over the whole message, so no group is cut at a split point.</p>
 
+<h3>Network traffic</h3>
+<p>Military CW networks send messages in a fixed frame: VV and the call signs, HR MSG GA, NR and CK
+(the number of groups) with the date and time, RMKS with a few groups, the separator =, a body of
+four-character groups, and AR. Digits are often abbreviated (1 2 3 8 9 0 as A U V D N T), eight dots
+erase, and a question mark after a botched group means it is sent again. Two things made such
+messages hard:</p>
+<ul>
+<li><b>Light keying.</b> The operators of three real recordings key every element about 0.4 of a dit
+short and start the element after a dah early. MorseDesk recognises this style from the timing of the
+message (at least 60 dits, dits clearly shorter than the gaps inside characters) and then reads the
+keying with thresholds taken from the message itself; when dits, dahs and the gaps between
+characters separate cleanly, the keying is the main source and the network fills in only what the
+keying cannot tell. On the lightest-keyed recording this took the error from 23.7 to 2.5&nbsp;%.
+Other keying styles are not affected: every clip of T1, the development sets, T2 and T4 decodes
+exactly as before.</li>
+<li><b>Groups run together.</b> The characters were right but the spaces between groups were not:
+<i>67A3TD3D6746</i> instead of 6713 0838 6746. After RMKS, MorseDesk splits the body into groups of
+the message's length, with the network's spaces as hints and the botched group before a question
+mark allowed to be short; abbreviated digits in complete groups become digits, TO between remark
+groups stays a word, and the call signs and the header are left alone. Live, where committed text
+never changes, a word is split as soon as a group is complete, and a fragment is joined only when it
+completes a group exactly.</li>
+</ul>
+<p>On the three recordings, checked against the operators' own copies, the groups that come out
+exactly as copied rose from 46 to 103 of 108 in a file and from 32 to 98 live (model 0.7.0).</p>
+
 <a name="dsp"></a><h2 class="dsp">Classic decoder and path selection</h2>
 
 <h3>The classic decoder</h3>
@@ -401,12 +458,12 @@ shows why it is marked and how often words at its level were right, on the Decod
 alike.</p>
 <table class="data" width="100%" cellspacing="0" cellpadding="6">
 <tr><th>Word confidence</th><th class="num">Right, file</th><th class="num">Right, live</th></tr>
-<tr><td>0.97 and above (no mark)</td><td class="num">95 %</td><td class="num">89 %</td></tr>
-<tr><td>0.90–0.97 (yellow)</td><td class="num">86 %</td><td class="num">81 %</td></tr>
-<tr><td>0.80–0.90 (yellow)</td><td class="num">61 %</td><td class="num">74 %</td></tr>
-<tr><td>below 0.80 (red)</td><td class="num">20–60 %</td><td class="num">70 %*</td></tr>
+<tr><td>0.97 and above (no mark)</td><td class="num">94 %</td><td class="num">90 %</td></tr>
+<tr><td>0.90–0.97 (yellow)</td><td class="num">84 %</td><td class="num">82 %</td></tr>
+<tr><td>0.80–0.90 (yellow)</td><td class="num">68 %</td><td class="num">76 %</td></tr>
+<tr><td>below 0.80 (red)</td><td class="num">18–57 %</td><td class="num">77 %*</td></tr>
 </table>
-<p class="muted">* Live mode had only 30 words below 0.8.</p>
+<p class="muted">* Live mode had only 31 words below 0.8.</p>
 <p> When the playback runs, the word being played is highlighted. When the average
 over the clip is below 0.6 the result carries the warning <i>low confidence</i>; below 0.5, the
 classic decoder's reading is shown next to it.</p>
@@ -472,6 +529,9 @@ messages.</p>
 <tr><td>Real text only: file / live / live automatic</td><td class="num">0.29 / 2.47 / 2.92 %</td></tr>
 <tr><td>18 two-minute messages, model 0.6.0, language by hand: file / live (27 September)</td><td class="num">3.15 / 3.35 %</td></tr>
 <tr><td>Number traffic, 12 messages, live: digits wrong / groups right (before 27 September: 24.8 / 62.7 %)</td><td class="num">0.0 / 95.4 %</td></tr>
+<tr><td>Same 18 two-minute messages, model 0.7.0: file / live (28 September)</td><td class="num">3.16 / 3.18 %</td></tr>
+<tr><td>Number traffic, 120 generated messages, live: digits wrong / groups right, model 0.6.0 → 0.7.0</td><td class="num">0.1 / 86.2 → 0.2 / 87.4 %</td></tr>
+<tr><td>Network traffic, 3 real recordings, live: groups of the operators' copy right, model 0.6.0 → 0.7.0</td><td class="num">74 → 98 of 108</td></tr>
 </table>
 <p>Automatic choice is weakest on random code groups (23.9&nbsp;%): with no words in them, every
 alphabet fits. Choose the language by hand for such traffic.</p>
@@ -555,13 +615,13 @@ recordings are available yet).</td></tr>
 <table class="data" width="100%" cellspacing="0" cellpadding="6">
 <tr><th>Set</th><th class="num">Character error rate</th><th>Note</th></tr>
 <tr><td>T0 round trip</td><td class="num">0 %</td><td>all 21 combinations</td></tr>
-<tr><td>T1</td><td class="num">8.36 %</td><td>word error rate 17.25 %</td></tr>
-<tr><td>Development</td><td class="num">8.79 %</td><td>word error rate 19.55 %</td></tr>
-<tr><td>Development, unseen text</td><td class="num">8.99 %</td><td>word error rate 17.98 %</td></tr>
+<tr><td>T1</td><td class="num">8.72 %</td><td>word error rate 17.15 %</td></tr>
+<tr><td>Development</td><td class="num">9.60 %</td><td>word error rate 20.03 %</td></tr>
+<tr><td>Development, unseen text</td><td class="num">8.76 %</td><td>word error rate 17.31 %</td></tr>
 <tr><td>T2, ARRL recordings</td><td class="num">0.95 %</td><td>18–40 WPM: 9,498 characters, no errors</td></tr>
 <tr><td>T2, Russian (generated)</td><td class="num">0.20 %</td><td>&nbsp;</td></tr>
-<tr><td>T2, Kazakh (generated)</td><td class="num">4.08 %</td><td>&nbsp;</td></tr>
-<tr><td>T2, all 40</td><td class="num">1.84 %</td><td>word error rate 6.20 %</td></tr>
+<tr><td>T2, Kazakh (generated)</td><td class="num">2.92 %</td><td>&nbsp;</td></tr>
+<tr><td>T2, all 40</td><td class="num">1.41 %</td><td>word error rate 5.78 %</td></tr>
 </table>
 
 <h3>Recordings from the internet (T4)</h3>
@@ -573,9 +633,9 @@ transcript. None was generated by this project.</p>
 <tr><td>ARRL code practice archive, 2013–2026</td><td class="num">3</td><td class="num">0.05 %</td></tr>
 <tr><td>K7QO and SKCC novels</td><td class="num">5</td><td class="num">0.00 %</td></tr>
 <tr><td>VK6FLAB</td><td class="num">2</td><td class="num">0.79 %</td></tr>
-<tr><td>Russian lessons, transcript copied from the screen</td><td class="num">3</td><td class="num">1.77 %</td></tr>
-<tr><td>SAQ Grimeton, hand-keyed, received over the air on 17.2&nbsp;kHz</td><td class="num">2</td><td class="num">14.67 %</td></tr>
-<tr><td>All 40</td><td class="num">40</td><td class="num">1.25 %</td></tr>
+<tr><td>Russian lessons, transcript copied from the screen</td><td class="num">3</td><td class="num">2.72 %</td></tr>
+<tr><td>SAQ Grimeton, hand-keyed, received over the air on 17.2&nbsp;kHz</td><td class="num">2</td><td class="num">13.46 %</td></tr>
+<tr><td>All 40</td><td class="num">40</td><td class="num">1.26 %</td></tr>
 </table>
 <p>No real Kazakh recording with a verified transcript could be found. The listening part is
 covered by the Russian recordings, since Kazakh shares their patterns; choosing between the paired
@@ -588,6 +648,7 @@ transcripts of two recordings (M14 and one M01) partly disagree with the audio, 
 are a floor.</p>
 <table class="data" width="100%" cellspacing="0" cellpadding="6">
 <tr><th>Decoder</th><th class="num">Digits wrong</th><th class="num">Groups entirely right</th></tr>
+<tr><td>MorseDesk 0.7.0</td><td class="num">16.27 %</td><td class="num">73.25 %</td></tr>
 <tr><td>MorseDesk 0.6.0</td><td class="num">16.13 %</td><td class="num">73.89 %</td></tr>
 <tr><td>MorseDesk before the number work (model 0.5.0, 26 September)</td><td class="num">25.12 %</td><td class="num">42.36 %</td></tr>
 <tr><td>ggmorse, an open-source signal-processing decoder</td><td class="num">28.79 %</td><td class="num">36.78 %</td></tr>
@@ -596,22 +657,36 @@ are a floor.</p>
 groups, formatted numbers, digits between punctuation; machine and hand keying, 15 to
 35&nbsp;WPM, 8 and 20&nbsp;dB; 240 minutes) MorseDesk gets 0.1&nbsp;% of the digits wrong and
 89.7&nbsp;% of the groups entirely right, 94.9&nbsp;% when letters that share a code (such as Ъ and
-Ь) count as equal. Nearly all remaining misses are spaces inside hand-sent runs (see Limits).</p>
+Ь) count as equal. Nearly all remaining misses are spaces inside hand-sent runs (see Limits). On 120 of
+these messages model 0.7.0 gets 0.2&nbsp;% of the digits wrong and 88.8&nbsp;% of the groups right
+(94.3&nbsp;%), the same as 0.6.0 on the same messages (0.2&nbsp;%, 89.0&nbsp;%, 94.2&nbsp;%).</p>
+
+<h3>Network traffic (T7)</h3>
+<p>Three real recordings of military network traffic, 3 to 4 minutes each at 15 to 18&nbsp;WPM,
+with a character-by-character reading by two independent AI judges and the operators' copies of the
+groups. The error rates of recordings 2 and 3 come mostly from the header and from faded stretches,
+where the judges themselves disagree.</p>
+<table class="data" width="100%" cellspacing="0" cellpadding="6">
+<tr><th>Recording</th><th class="num">Error, file</th><th class="num">Groups right, file</th><th class="num">Groups right, live</th></tr>
+<tr><td>1, light keying</td><td class="num">1.90 %</td><td class="num">34 of 35</td><td class="num">34 of 35</td></tr>
+<tr><td>2, standard keying, deep fade</td><td class="num">22.44 %</td><td class="num">36 of 36</td><td class="num">36 of 36</td></tr>
+<tr><td>3, slightly light keying</td><td class="num">9.76 %</td><td class="num">33 of 37</td><td class="num">28 of 37</td></tr>
+</table>
 
 <h3>By channel</h3>
 <table class="data" width="100%" cellspacing="0" cellpadding="6">
 <tr><th>Set</th><th class="num">Clean</th><th class="num">MP3</th><th class="num">QRM</th><th class="num">QRN</th><th class="num">QSB</th></tr>
-<tr><td>T1</td><td class="num">1.52</td><td class="num">1.62</td><td class="num">1.26</td><td class="num">1.38</td><td class="num">36.04</td></tr>
-<tr><td>Development</td><td class="num">2.76</td><td class="num">2.69</td><td class="num">2.80</td><td class="num">2.46</td><td class="num">33.24</td></tr>
-<tr><td>Development, unseen text</td><td class="num">1.80</td><td class="num">1.19</td><td class="num">3.39</td><td class="num">2.26</td><td class="num">36.32</td></tr>
+<tr><td>T1</td><td class="num">1.74</td><td class="num">1.68</td><td class="num">1.47</td><td class="num">1.47</td><td class="num">37.26</td></tr>
+<tr><td>Development</td><td class="num">2.61</td><td class="num">2.97</td><td class="num">2.72</td><td class="num">2.88</td><td class="num">36.84</td></tr>
+<tr><td>Development, unseen text</td><td class="num">1.71</td><td class="num">0.98</td><td class="num">3.50</td><td class="num">1.68</td><td class="num">35.91</td></tr>
 </table>
 
 <h3>By language</h3>
 <table class="data" width="100%" cellspacing="0" cellpadding="6">
 <tr><th>Language</th><th class="num">T1</th><th class="num">Development</th></tr>
-<tr><td>English</td><td class="num">7.68 %</td><td class="num">7.75 %</td></tr>
-<tr><td>Russian</td><td class="num">8.00 %</td><td class="num">7.94 %</td></tr>
-<tr><td>Kazakh</td><td class="num">9.42 %</td><td class="num">10.69 %</td></tr>
+<tr><td>English</td><td class="num">7.92 %</td><td class="num">8.81 %</td></tr>
+<tr><td>Russian</td><td class="num">8.27 %</td><td class="num">8.64 %</td></tr>
+<tr><td>Kazakh</td><td class="num">9.99 %</td><td class="num">11.37 %</td></tr>
 </table>
 
 <h3>Fading by signal strength</h3>
@@ -621,8 +696,8 @@ period, so at 20&nbsp;dB the troughs reach 0&nbsp;dB, which the decoder handles 
 the noise, and most letters there cannot be recovered.</p>
 <table class="data" width="100%" cellspacing="0" cellpadding="6">
 <tr><th>Signal-to-noise</th><th class="num">0 dB</th><th class="num">3 dB</th><th class="num">6 dB</th><th class="num">10 dB</th><th class="num">20 dB</th></tr>
-<tr><td>T1, fading</td><td class="num">65.76</td><td class="num">53.66</td><td class="num">32.78</td><td class="num">23.52</td><td class="num">4.48</td></tr>
-<tr><td>Development, fading</td><td class="num">60.15</td><td class="num">42.21</td><td class="num">36.84</td><td class="num">22.35</td><td class="num">4.62</td></tr>
+<tr><td>T1, fading</td><td class="num">72.28</td><td class="num">51.84</td><td class="num">32.07</td><td class="num">23.88</td><td class="num">6.25</td></tr>
+<tr><td>Development, fading</td><td class="num">68.63</td><td class="num">48.13</td><td class="num">37.06</td><td class="num">25.00</td><td class="num">5.39</td></tr>
 </table>
 
 <h3>Clean signals</h3>
@@ -632,7 +707,7 @@ error on clean audio (measured with model 0.3.0). All remaining room is in noise
 <h3>Compared with a public decoder</h3>
 <table class="data" width="100%" cellspacing="0" cellpadding="6">
 <tr><th>Decoder</th><th class="num">T1 error</th><th class="num">Fading</th><th>Alphabets</th></tr>
-<tr><td>MorseDesk (model 0.6.0)</td><td class="num">8.36 %</td><td class="num">36.04 %</td><td>English, Russian, Kazakh</td></tr>
+<tr><td>MorseDesk (model 0.7.0)</td><td class="num">8.72 %</td><td class="num">37.26 %</td><td>English, Russian, Kazakh</td></tr>
 <tr><td>DeepCW (pretrained, greedy)</td><td class="num">23.70 %</td><td class="num">47.00 %</td><td>Latin only; Russian and Kazakh clips transliterated for it</td></tr>
 </table>
 <p class="muted">DeepCW is used only as a yardstick; none of its code or weights is part of
@@ -647,7 +722,7 @@ therefore compared on the same clips (paired), where the uncertainty of the diff
 settings, the best gained 0.34 points on the development set and 0.01 on T1.</p>
 
 <h3>Speed and memory</h3>
-<p>Measured on an Intel Core Ultra 9 285H laptop processor with model 0.4.0 (0.5.0 and 0.6.0 have the same size), on 60 minutes of real ARRL recordings.</p>
+<p>Measured on an Intel Core Ultra 9 285H laptop processor with model 0.4.0 (0.5.0 to 0.7.0 have the same size), on 60 minutes of real ARRL recordings.</p>
 <table class="data" width="100%" cellspacing="0" cellpadding="6">
 <tr><th>Measure</th><th class="num">Value</th></tr>
 <tr><td>One hour of audio, language chosen automatically</td><td class="num">9 min</td></tr>
@@ -660,9 +735,9 @@ language for every segment. If you know the language, choosing it by hand is fas
 
 <a name="limits"></a><h2 class="safety">Limits and known issues</h2>
 <ul>
-<li><b>Deep fading at 6&nbsp;dB and below</b>: 33 to 66&nbsp;% character error. The troughs sink
+<li><b>Deep fading at 6&nbsp;dB and below</b>: 32 to 72&nbsp;% character error. The troughs sink
 below the noise; this is mostly a physical limit.</li>
-<li><b>Hand-keyed signals received over the air</b>: 15&nbsp;% character error on the SAQ
+<li><b>Hand-keyed signals received over the air</b>: 13&nbsp;% character error on the SAQ
 recordings (T4), against under 1&nbsp;% for machine-sent code, real or generated. Uneven human
 timing together with static bursts is the largest remaining gap.</li>
 <li><b>Call signs and code groups</b>: the language model does not know them and can turn them into
@@ -674,9 +749,14 @@ Radio abbreviations do not help: their codes exist in every alphabet (CQ becomes
 Cyrillic).</li>
 <li><b>One alphabet per message</b>: a message that really mixes languages is written entirely in
 the language that dominates it.</li>
-<li><b>Live mode</b>: slightly less accurate than files (3.35 against 3.15&nbsp;% on 18
-two-minute messages, language chosen by hand); 1.3&nbsp;s behind the audio. With the language on
+<li><b>Live mode</b>: about as accurate as files (3.18 against 3.16&nbsp;% on 18
+two-minute messages, language chosen by hand); 1.3&nbsp;s behind the audio. It does not read the
+keying, so light keying rests on the network alone (network traffic: 98 of 108 groups live against
+103 in a file). With the language on
 automatic, random code groups reach 24&nbsp;%; choose the language by hand for them.</li>
+<li><b>Network traffic</b>: only the body after RMKS is rearranged; call signs and the header
+(NR, CK, date and time) are shown as heard, and the CK count is not yet checked against the number of
+groups.</li>
 <li><b>Key clicks</b>: recordings of a telegraph key or sounder clicking, with no tone, are
 recognised and reported, not decoded.</li>
 <li><b>Periodic noise</b> can be read as a string of E.</li>

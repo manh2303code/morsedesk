@@ -389,23 +389,24 @@ _DEC: dict = {}
 LIVE_BLOCK = 800
 
 
-def _decoder(cfg: str, profile: str) -> Decoder:
-    key = (cfg, profile)
+def _decoder(cfg: str, profile: str, model: str | None = None) -> Decoder:
+    key = (cfg, profile, model)
+    mp = {"model_path": Path(model)} if model else {}
     if key not in _DEC:
         if cfg == "app":
-            _DEC[key] = Decoder(profile, engine="onnx")
+            _DEC[key] = Decoder(profile, engine="onnx", **mp)
         elif cfg == "auto":
-            _DEC[key] = Decoder("auto", engine="onnx")
+            _DEC[key] = Decoder("auto", engine="onnx", **mp)
         elif cfg in ("live", "live-auto"):   # đúng như LiveWorker
             _DEC[key] = Decoder("auto" if cfg == "live-auto" else profile, engine="onnx", lm=True,
-                                fallback=False, skip_silent_windows=True, numbers=False, keyed=False)
+                                fallback=False, skip_silent_windows=True, numbers=False, keyed=False, **mp)
         else:
             raise ValueError(cfg)
     return _DEC[key]
 
 
-def _decode(cfg: str, c: Case, x: np.ndarray) -> str:
-    dec = _decoder(cfg, c.profile)
+def _decode(cfg: str, c: Case, x: np.ndarray, model: str | None = None) -> str:
+    dec = _decoder(cfg, c.profile, model)
     if cfg.startswith("live"):
         from morsedesk.model.stream import StreamDecoder
 
@@ -448,7 +449,7 @@ def judge(c: Case, hyp: str) -> dict:
 
 
 def run_job(job: tuple) -> dict:
-    cid, configs = job
+    cid, configs, model = job
     c = next(x for x in cases() if x.id == cid)
     x = render(c)
     row = {"id": c.id, "cat": c.cat, "tier": c.tier, "ref": c.ref}
@@ -459,7 +460,7 @@ def run_job(job: tuple) -> dict:
     for cfg in configs:
         if cfg == "auto" and c.profile != "en" and False:
             continue
-        row[cfg] = judge(c, _decode(cfg, c, x))
+        row[cfg] = judge(c, _decode(cfg, c, x, model))
     return row
 
 
@@ -501,6 +502,7 @@ def main() -> int:
     ap.add_argument("--out", default="runs/edge")
     ap.add_argument("--workers", type=int, default=None)
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--model", default=None, help="ONNX model âm học (mặc định models/acoustic.onnx)")
     ap.add_argument("--write-wavs", default=None, help="ghi âm thanh + manifest.jsonl ra thư mục này")
     a = ap.parse_args()
     allc = cases()
@@ -526,7 +528,7 @@ def main() -> int:
         return 0
     configs = tuple(x for x in a.configs.split(",") if x)
     t0 = time.time()
-    rows = map_parallel(run_job, [(c.id, configs) for c in sel],
+    rows = map_parallel(run_job, [(c.id, configs, a.model) for c in sel],
                         a.workers if a.workers is not None else default_workers())
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
