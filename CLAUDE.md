@@ -439,6 +439,7 @@ cậy ~0,99 — về đường bao nó chính là Morse chữ E. Test cũ kiểm
 139,7 MB (`scripts/build_windows.ps1`); Linux `dist/MorseDesk-x86_64.AppImage` 148 MB. Kiểm: chạy
 `scripts/test_windows_exe.ps1` TRƯỚC (nó sinh mẫu `dist/selftest/`), rồi `scripts/test_appimage.sh`
 — cả hai đòi `--self-test` ra văn bản giống hệt mã nguồn. Đổi model thì phải dựng lại CẢ HAI.
+**Repo công khai** github.com/manh2303code/morsedesk (10/10/2026, người dùng chọn công khai, đẩy nguyên trạng). Model đang dùng (`models/acoustic.onnx` + `acoustic.golden.npz`), 3 LM và font ĐƯỢC commit; dữ liệu test thật, runs/, build/, dist/, DeepCW thì không. Đổi model: commit model mới + đẩy + tạo Release `vX.Y.Z` kèm exe, AppImage và `SHA256SUMS` (hai dấu cách, `sha256sum -c` phải OK).
 Docker Desktop có lúc báo "running" mà máy ảo đã chết (lỗi 500): `docker desktop restart` — train
 trong WSL vẫn sống qua lần khởi động lại đó (đã thử 23/09).
 

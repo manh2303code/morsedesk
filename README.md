@@ -7,10 +7,10 @@ Spec: `docs/superpowers/specs/2026-09-18-morsedesk-design.md`.
 
 | Nền tảng | Cách nhanh nhất |
 |---|---|
-| Windows, máy người dùng | chép **một file** `dist/MorseDesk.exe` (139 MB) rồi bấm đúp — không cần Python, không cài đặt. Dựng bằng `scripts/build_windows.ps1` |
+| Windows, máy người dùng | tải **một file** `MorseDesk.exe` (140 MB) ở trang [Releases](https://github.com/manh2303code/morsedesk/releases) rồi bấm đúp — không cần Python, không cài đặt. Tự dựng bằng `scripts/build_windows.ps1` |
 | Windows, máy dev | bấm đúp `MorseDesk.cmd` ở gốc kho — tự cài phụ thuộc lần đầu rồi mở giao diện |
 | Windows (dòng lệnh) | `uv run morsedesk-gui` |
-| Linux | `bash scripts/install_linux.sh dist/MorseDesk-x86_64.AppImage` một lần, rồi mở từ menu ứng dụng. Chép file rồi bấm đúp **không chạy**: file từ USB/Windows mất bit thực thi và trình quản lý file im lặng bỏ qua |
+| Linux | tải `MorseDesk-x86_64.AppImage` ở trang [Releases](https://github.com/manh2303code/morsedesk/releases), `bash scripts/install_linux.sh MorseDesk-x86_64.AppImage` một lần, rồi mở từ menu ứng dụng. Chép file rồi bấm đúp **không chạy**: file từ USB/Windows mất bit thực thi và trình quản lý file im lặng bỏ qua |
 
 Model và ba mô hình ngôn ngữ nằm sẵn trong `models/` nên giao diện mở thẳng. Thiếu chúng thì
 hộp thoại nêu đúng đường dẫn còn thiếu; muốn chạy không cần model nơ-ron thì thêm
