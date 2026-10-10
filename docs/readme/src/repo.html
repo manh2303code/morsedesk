@@ -1,0 +1,119 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>MorseDesk repository map</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  body { width: 1200px; height: 740px; }
+  .title { left: 48px; top: 22px; font-size: 40px; transform: rotate(-1deg); }
+  .core-name { left: 60px; top: 101px; font-size: 25px; }
+  .core-note { left: 300px; top: 99px; font-size: 22px; transform: rotate(-1.5deg); white-space: nowrap; }
+  .item { position: absolute; padding: 0 12px 0 16px; }
+  .item .name { font-size: 22px; display: block; line-height: 1.1; }
+  .item .sub { font-size: 15px; display: block; margin-top: 5px; line-height: 1.22; }
+  .note-train { font-size: 19px; transform: rotate(-2deg); white-space: nowrap; }
+</style>
+</head>
+<body class="grid-paper">
+<div class="abs hand title" data-t="repo.title"></div>
+<div class="abs hand core-name">morsedesk/</div>
+<div class="abs note core-note" data-t="repo.core"></div>
+<div id="items"></div>
+<div class="abs note note-train" data-t="repo.note_train"></div>
+<svg class="overlay" id="ov"></svg>
+<script src="vendor/rough.js"></script>
+<script src="strings.js"></script>
+<script src="common.js"></script>
+<script>
+// Bản đồ repo: thư mục vẽ hình bìa hồ sơ (có tai), file .py vẽ hình trang giấy gấp góc. Trong khung lớn morsedesk/
+// là lõi: app/ và cli.py gọi api.py, api.py dùng mọi thứ trong khung chì (data/ thì chỉ tools/ dùng).
+// Cột phải là những gì nằm ngoài gói. [khóa chuỗi, tên, loại, x, y, rộng, cao]
+const ITEMS = [
+  ["app", "app/", "dir", 66, 160, 360, 84], ["cli", "cli.py", "file", 482, 160, 360, 84],
+  ["api", "api.py", "file", 236, 290, 428, 76],
+  ["audio", "audio/", "dir", 72, 420, 180, 114], ["dsp", "dsp/", "dir", 266, 420, 180, 114],
+  ["model", "model/", "dir", 460, 420, 180, 114], ["lm", "lm/", "dir", 654, 420, 180, 114],
+  ["keyed", "keyed.py", "file", 72, 572, 180, 108], ["numbers", "numbers.py, traffic.py", "files", 266, 572, 180, 108],
+  ["encode", "encode/", "dir", 460, 572, 168, 108], ["data", "data/", "dir", 664, 572, 172, 108],
+  ["docs", "docs/", "dir", 916, 96, 248, 80], ["build", "scripts/, packaging/", "dir", 916, 192, 248, 92],
+  ["tests", "tests/", "dir", 916, 302, 248, 92], ["models", "models/", "dir", 916, 420, 248, 114],
+  ["tools", "tools/", "dir", 916, 588, 248, 92],
+];
+const TAB = 12, EAR = 16;
+MD.ready(() => {
+  const host = document.getElementById("items");
+  const geo = {};
+  for (const [k, name, kind, x, y, w, h] of ITEMS) {
+    geo[k] = { x, y, w, h, kind };
+    const b = document.createElement("div");
+    b.className = "item";
+    Object.assign(b.style, { left: x + "px", top: (y + (kind === "dir" ? TAB + 9 : 11)) + "px", width: w + "px" });
+    b.innerHTML = `<span class="hand name"></span><span class="print sub"></span>`;
+    MD.setText(b.querySelector(".name"), name);
+    b.querySelector(".sub").textContent = MD.get("repo." + k);
+    if (kind !== "dir") b.style.paddingRight = (EAR + 6) + "px";
+    host.appendChild(b);
+  }
+  const ov = document.getElementById("ov");
+  const rc = rough.svg(ov);
+  const ink = MD.css("--ink"), pencil = MD.css("--pencil"), note = MD.css("--note");
+  let seed = 5;
+  const folder = (x, y, w, h, o) => {
+    const tw = Math.min(118, w * 0.42), th = o && o.tab || TAB;
+    return `M ${x} ${y + th} L ${x} ${y + 4} Q ${x} ${y} ${x + 4} ${y} L ${x + tw - 9} ${y} L ${x + tw} ${y + th}` +
+      ` L ${x + w} ${y + th} L ${x + w} ${y + h} L ${x} ${y + h} Z`;
+  };
+  const page = (x, y, w, h) => `M ${x} ${y} L ${x + w - EAR} ${y} L ${x + w} ${y + EAR} L ${x + w} ${y + h} L ${x} ${y + h} Z`;
+  const ear = (x, y, w) => `M ${x + w - EAR} ${y} L ${x + w - EAR} ${y + EAR} L ${x + w} ${y + EAR}`;
+  const style = (o) => Object.assign({ stroke: ink, strokeWidth: 1.6, roughness: 1.0, bowing: 1.1, seed: seed++ }, o);
+
+  // khung lớn morsedesk/: bìa hồ sơ có tai rộng chứa tên gói
+  const core = { x: 40, y: 96, w: 830, h: 622 };
+  ov.appendChild(rc.path(`M ${core.x} ${core.y + 40} L ${core.x} ${core.y + 6} Q ${core.x} ${core.y} ${core.x + 6} ${core.y}` +
+    ` L ${core.x + 214} ${core.y} L ${core.x + 244} ${core.y + 40} L ${core.x + core.w} ${core.y + 40}` +
+    ` L ${core.x + core.w} ${core.y + core.h} L ${core.x} ${core.y + core.h} Z`, style({ strokeWidth: 2.1, roughness: 0.8 })));
+
+  // vùng api.py dùng: khung chì nét đứt hình chữ L, chừa data/ ra ngoài
+  const e = { x0: 58, x1: 850, y0: 404, yMid: 552, xMid: 646, y1: 700 };
+  ov.appendChild(rc.path(`M ${e.x0} ${e.y0} L ${e.x1} ${e.y0} L ${e.x1} ${e.yMid} L ${e.xMid} ${e.yMid} L ${e.xMid} ${e.y1}` +
+    ` L ${e.x0} ${e.y1} Z`, style({ stroke: pencil, strokeWidth: 1.3, roughness: 1.2, strokeLineDash: [8, 6] })));
+
+  for (const [k, , kind] of ITEMS) {
+    const { x, y, w, h } = geo[k];
+    if (kind === "dir") ov.appendChild(rc.path(folder(x, y, w, h), style()));
+    else {
+      if (kind === "files") {                                // hai file: chỉ phần lộ ra của trang nằm sau
+        const bx = x + 7, by = y - 7;
+        ov.appendChild(rc.path(`M ${bx} ${y} L ${bx} ${by} L ${bx + w - EAR} ${by} L ${bx + w} ${by + EAR} L ${bx + w} ${by + h}` +
+          ` L ${x + w} ${by + h}`, style({ stroke: pencil, strokeWidth: 1.2 })));
+      }
+      ov.appendChild(rc.path(page(x, y, w, h), style()));
+      ov.appendChild(rc.path(ear(x, y, w), style({ strokeWidth: 1.3 })));
+    }
+  }
+
+  const A = (x1, y1, x2, y2, o) => MD.arrow(rc, ov, x1, y1, x2, y2, Object.assign({ stroke: ink, bow: 0.08, head: 11, seed: seed++ }, o));
+  const g = geo;
+  // ai gọi ai
+  A(g.app.x + 200, g.app.y + g.app.h + 6, g.api.x + 110, g.api.y - 6, { bow: -0.08 });
+  A(g.cli.x + 160, g.cli.y + g.cli.h + 6, g.api.x + g.api.w - 110, g.api.y - 6, { bow: 0.08 });
+  A(g.api.x + g.api.w / 2, g.api.y + g.api.h + 6, g.api.x + g.api.w / 2, e.y0 - 5, { bow: 0 });
+  // ngoài gói
+  A(g.tests.x - 6, g.tests.y + g.tests.h / 2, core.x + core.w + 6, g.tests.y + g.tests.h / 2, { bow: 0 });
+  A(g.models.x - 6, g.models.y + 40, g.lm.x + g.lm.w + 6, g.lm.y + 40, { bow: 0.02 });
+  A(g.models.x - 6, g.models.y + g.models.h - 14, g.model.x + g.model.w - 30, g.model.y + g.model.h + 6, { bow: -0.16 });
+  A(g.tools.x - 6, g.tools.y + g.tools.h / 2, g.data.x + g.data.w + 6, g.tools.y + g.tools.h / 2, { bow: 0 });
+  A(g.tools.x + 150, g.tools.y - 6, g.models.x + 150, g.models.y + g.models.h + 6, { bow: 0 });
+
+  // bút chì đỏ: ranh giới Qt, và nơi huấn luyện
+  const cn = document.querySelector(".core-note").getBoundingClientRect();
+  MD.arrow(rc, ov, cn.left + 26, cn.bottom + 2, g.app.x + g.app.w - 46, g.app.y + TAB + 8, { stroke: note, bow: 0.22, seed: 91 });
+  const nt = document.querySelector(".note-train");
+  nt.style.left = (g.tools.x + 4) + "px";
+  nt.style.top = (g.tools.y + g.tools.h + 12) + "px";
+
+});
+</script>
+</body>
+</html>

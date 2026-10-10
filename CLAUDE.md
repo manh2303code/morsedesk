@@ -97,6 +97,7 @@ PYTHONUTF8=1 uv run python tools/build_i18n.py     # sau MỖI lần thêm/sửa
 PYTHONUTF8=1 uv run morsedesk-gui
 PYTHONUTF8=1 uv run python packaging/shots.py <thư mục>   # chụp mọi trang giao diện
 PYTHONUTF8=1 uv run python tools/signal_view_latency.py   # hình/s, CPU, độ trễ của khối Tín hiệu
+PYTHONUTF8=1 uv run python docs/readme/render.py   # dựng lại 24 ảnh README (4 trang x en/ru/kk x sáng/tối), Edge/Chrome headless
 ```
 
 Huấn luyện chạy trong WSL trên GPU (~0,05 s/bước, 30k bước ≈ 30 phút):
@@ -252,6 +253,10 @@ mình**. Trong một phiên đã có hai kết luận research không sống só
   tham số model, CER T1/dev/T2, tốc độ, bộ nhớ. Đổi model hay số đo thì sửa CẢ SÁU file (số trong bản
   Nga/Kazakh dùng dấu phẩy thập phân và `&nbsp;` phân nhóm). `tests/app/test_about.py` kiểm ba bản dịch
   cùng mục, cùng số bảng/hàng, và bảng mã Kazakh khớp profile — nhưng KHÔNG kiểm từng con số.
+- **README cũng chứa số đo** (README.md / README.ru.md / README.kk.md + ảnh vẽ từ `docs/readme/src/strings.js`):
+  T7, T2, T4, dev-OOV, số test, cỡ model. Đổi model hay số đo thì sửa cả ba README lẫn strings.js rồi chạy
+  `docs/readme/render.py` và NHÌN ảnh (chữ Nga/Kazakh dài hơn, dễ tràn hộp). README mô tả REPO, không phải
+  quảng cáo ứng dụng (người dùng chốt 10/10/2026); không có bản tiếng Việt.
 - Hiển thị bằng QTextBrowser (tập con HTML/CSS của Qt): `line-height` nhân lên khoảng dòng sẵn có của
   font (145 % ra gần gấp đôi), widget bề rộng cố định trong layout dọc khống chế bề rộng cả cột trừ khi
   thêm căn lề. Chụp `packaging/shots.py` rồi nhìn ảnh sau mỗi lần sửa.

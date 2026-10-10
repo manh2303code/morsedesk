@@ -1,120 +1,241 @@
-# MorseDesk
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/readme/img/hero-en-dark.png">
+  <img alt="MorseDesk: hears Morse and writes it down, and keys your text back into Morse" src="docs/readme/img/hero-en-light.png">
+</picture>
 
-Ứng dụng desktop Linux air-gap giải mã và tạo mã Morse cho tiếng Anh, Nga, Kazakh.
-Spec: `docs/superpowers/specs/2026-09-18-morsedesk-design.md`.
+**English** | [Русский](README.ru.md) | [Қазақша](README.kk.md)
 
-## Chạy ứng dụng
+MorseDesk decodes Morse code from audio files or a sound card and turns text into Morse audio, in
+English, Russian and Kazakh. It runs offline on Windows and Linux. The neural network, the three
+language models and the interface are all in this repository, so a clone is enough to run it.
 
-| Nền tảng | Cách nhanh nhất |
+This page describes the repository: what lives where, how the decoder works, and how to run, test,
+build and retrain it. To use the program without Python, download a ready build from
+[Releases](https://github.com/manh2303code/morsedesk/releases).
+
+- [What is in the repository](#what-is-in-the-repository)
+- [How decoding works](#how-decoding-works)
+- [Accuracy](#accuracy)
+- [Downloads](#downloads)
+- [Running from source](#running-from-source)
+- [Tests](#tests)
+- [Building the release files](#building-the-release-files)
+- [Training and evaluation](#training-and-evaluation)
+- [Documentation](#documentation)
+- [Licenses](#licenses)
+
+## What is in the repository
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/readme/img/repo-en-dark.png">
+  <img alt="Repository map: morsedesk/ holds the core and app/; api.py is the entry point used by the interface and the command line; models, tools, tests, scripts and docs sit beside it" src="docs/readme/img/repo-en-light.png">
+</picture>
+
+| Path | What it holds |
 |---|---|
-| Windows, máy người dùng | tải **một file** `MorseDesk.exe` (140 MB) ở trang [Releases](https://github.com/manh2303code/morsedesk/releases) rồi bấm đúp — không cần Python, không cài đặt. Tự dựng bằng `scripts/build_windows.ps1` |
-| Windows, máy dev | bấm đúp `MorseDesk.cmd` ở gốc kho — tự cài phụ thuộc lần đầu rồi mở giao diện |
-| Windows (dòng lệnh) | `uv run morsedesk-gui` |
-| Linux | tải `MorseDesk-x86_64.AppImage` ở trang [Releases](https://github.com/manh2303code/morsedesk/releases), `bash scripts/install_linux.sh MorseDesk-x86_64.AppImage` một lần, rồi mở từ menu ứng dụng. Chép file rồi bấm đúp **không chạy**: file từ USB/Windows mất bit thực thi và trình quản lý file im lặng bỏ qua |
+| `morsedesk/` | The core package. Nothing outside `app/` imports Qt, so the command line and the benchmarks run on a machine without a display. |
+| `morsedesk/api.py` | `Decoder` and `Encoder`, the one entry point. The interface and the command line both go through it. |
+| `morsedesk/audio/` | Reading and writing audio files, sound card capture and playback. Every PortAudio call runs on one device thread. |
+| `morsedesk/dsp/` | Tone search, the 11 features, the classic threshold decoder, and the choice between the two readings. |
+| `morsedesk/model/` | The CTC network through ONNX Runtime, 12-second windows, live streaming. |
+| `morsedesk/lm/` | Character n-gram language models, beam search, language identification. |
+| `morsedesk/keyed.py` | Checks the text against the measured keying on clean or light-keyed signals. |
+| `morsedesk/numbers.py`, `traffic.py` | Number groups and abbreviated digits; the layout of network traffic messages (header, RMKS, groups). |
+| `morsedesk/encode/` | Text into Morse timing and audio. |
+| `morsedesk/data/` | Synthetic training data: keying styles, noise, fading, interference, text sources. |
+| `morsedesk/app/` | The Qt interface (PySide6): Decode, Listen and Encode pages, documentation in three languages. |
+| `models/` | `acoustic.onnx`, model 0.7.0 (4.5 MB), and `lm/{en,ru,kk}.bin`, the language models (43 MB). |
+| `tools/` | Training, ONNX export, language model building, evaluation and benchmarks. |
+| `tests/` | 805 tests in `unit/`, `app/` (Qt) and `regression/`. |
+| `scripts/`, `packaging/` | Building and checking the Windows exe and the Linux AppImage; running the tests on Linux. |
+| `docs/` | Research notes with every measurement, the backlog, and the sources of the images on this page. |
+| `testdata/` | Only a README. The test recordings are not published. |
 
-Model và ba mô hình ngôn ngữ nằm sẵn trong `models/` nên giao diện mở thẳng. Thiếu chúng thì
-hộp thoại nêu đúng đường dẫn còn thiếu; muốn chạy không cần model nơ-ron thì thêm
-`--engine baseline`.
+The same dependencies as a graph:
 
-## Thiết lập môi trường dev
+```mermaid
+---
+config:
+  look: handDrawn
+---
+flowchart LR
+  app["morsedesk/app/<br/>Qt interface"] --> api
+  subgraph core["morsedesk/ (no Qt)"]
+    cli["cli.py"] --> api["api.py<br/>Decoder, Encoder"]
+    api --> audio["audio/"]
+    api --> dsp["dsp/"]
+    api --> model["model/"]
+    api --> lm["lm/"]
+    api --> keyed["keyed.py"]
+    api --> traffic["numbers.py<br/>traffic.py"]
+    api --> encode["encode/"]
+    data["data/"]
+  end
+  models[("models/<br/>acoustic.onnx<br/>lm/*.bin")] -.-> model
+  models -.-> lm
+  tools["tools/<br/>train, export, evaluate"] --> data
+  tools --> model
+  tools -. "export_onnx.py" .-> models
+```
+
+## How decoding works
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/readme/img/pipeline-en-dark.png">
+  <img alt="Nine steps from sound to text: find the tone, 11 features, neural network, beam search, classic decoder in parallel, choose by evidence, check the keying, message structure, text" src="docs/readme/img/pipeline-en-light.png">
+</picture>
+
+1. The tone is located between 300 and 1500 Hz.
+2. Every 5 ms the signal becomes 11 features. Long recordings are cut into 12-second windows that
+   overlap by 10 seconds.
+3. A bidirectional GRU with 1,119,425 parameters gives CTC probabilities over 65 classes. Each class
+   is a whole Morse character such as `.-` or `-...`, not a single dot or dash.
+4. Beam search combines those probabilities with a character 6-gram language model of each
+   language. When the language is set to automatic, all three are tried, and this is where most of
+   the time goes.
+5. A classic threshold decoder reads the same signal in parallel, and `dsp/selection.py` keeps the
+   reading that the signal supports better.
+6. On clean or light-keyed signals `keyed.py` compares the text with the measured keying.
+7. `numbers.py` and `traffic.py` restore digit groups and the layout of network traffic messages.
+
+Every character keeps its own confidence, and the interface underlines words the network did not
+hear clearly.
+
+## Accuracy
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/readme/img/results-en-dark.png">
+  <img alt="Network traffic: 103 of 108 groups correct from a file and 98 live, up from 46 and 32. Character errors: ARRL 0.95 %, internet recordings 1.26 %, generated 8.76 %, hand keying over the air 13.46 %" src="docs/readme/img/results-en-light.png">
+</picture>
+
+| Test set | What it is | Model 0.7.0 |
+|---|---|---|
+| T7 | 3 real military network traffic recordings, checked against the operator's copy | 103 of 108 groups from a file, 98 of 108 live (on 27 September: 46 and 32) |
+| T2 | ARRL W1AW code practice, 10 real recordings at 5–40 WPM | 0.95 % character errors; none at all from 18 to 40 WPM |
+| T4 | 40 real recordings from the internet | 1.26 % |
+| T4, SAQ | hand keying received over the air | 13.46 %, the largest gap left |
+| dev-OOV | 500 generated clips: text the model never saw, noise, interference, fading | 8.76 % |
+
+Measured on 28 September 2026. How each set was built, and every number with its error margin, is
+in `docs/research/` and in the documentation inside the program.
+
+## Downloads
+
+[Releases](https://github.com/manh2303code/morsedesk/releases) has two files and their checksums:
+
+| System | File |
+|---|---|
+| Windows | `MorseDesk.exe`, one file of about 140 MB. Double-click it; nothing is installed. |
+| Linux | `MorseDesk-x86_64.AppImage`. Install it once with `bash install_linux.sh MorseDesk-x86_64.AppImage`, using the script from `scripts/` in this repository. A file copied from a USB stick or from Windows loses its executable bit, and a double-click then silently does nothing. |
+
+Check a download with `sha256sum -c --ignore-missing SHA256SUMS`.
+
+## Running from source
+
+You need Python 3.11 and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-uv sync --all-extras          # tạo .venv với Python 3.11 và cài mọi phụ thuộc
-uv run pytest                 # chạy test (bỏ qua test đánh dấu gate)
-uv run morsedesk --help
+git clone https://github.com/manh2303code/morsedesk
+cd morsedesk
+uv sync --extra runtime --extra gui     # --all-extras adds tests and training
+uv run morsedesk-gui
 ```
 
-Tùy chọn: cài `ffmpeg` (ví dụ `scoop install ffmpeg`) để bộ sinh dữ liệu tạo được biến thể MP3.
+On Windows you can double-click `MorseDesk.cmd` instead: on the first run it installs what is
+missing, then opens the interface. On Linux, listening and playback need `libportaudio2`.
 
-`uv run pytest -m gate` chạy các test cần model đã huấn luyện (`models/acoustic.onnx`) một khi file đó tồn tại; mặc định các test này bị loại khỏi `uv run pytest`.
+The command line:
 
-## Giải mã bằng model ONNX và mô hình ngôn ngữ (tuần 3)
+```bash
+uv run morsedesk decode recording.wav                    # language chosen automatically
+uv run morsedesk decode recording.wav --profile ru --json
+uv run morsedesk encode "CQ CQ DE R1ABC K" --wpm 20 --out cq.wav
+uv run morsedesk devices                                 # list sound devices
+```
 
-- Model âm thanh mặc định là `models/acoustic.onnx` (không commit; xuất từ checkpoint bằng `uv run python tools/export_onnx.py --checkpoint runs/<run>/best.pt --out models/acoustic.onnx`). Giải mã: `uv run morsedesk decode file.wav --engine onnx` (thêm `--no-lm` để giải mã greedy, `--beam N` để đổi độ rộng beam).
-- `--profile` mặc định là `auto` (nhận diện ngôn ngữ theo đoạn) và cần ba mô hình ngôn ngữ `models/lm/{en,ru,kk}.bin` (không commit). Dựng chúng trên máy dev: `uv run python tools/fetch_corpus.py --lang en|ru|kk` → `uv run python tools/normalize_corpus.py --profile <id> --lang <lang> --in corpus/raw/<lang> --out-dir corpus` → `bash tools/build_lm.sh 6` trong WSL Ubuntu (cài KenLM, chỉ dùng lúc dev) → `uv run python tools/arpa_to_bin.py --arpa corpus/<lang>.arpa --profile <id> --out models/lm/<lang>.bin --holdout corpus/<lang>.holdout.txt`. Không có KenLM: `uv run python tools/train_small_lm.py --profile <id> --text corpus/<lang>.txt --out models/lm/<lang>.bin`. Nguồn và giấy phép corpus: `models/lm/LICENSES.md`.
-- Chưa có LM: `Decoder(profile, engine="onnx")` nạp LM **mặc định** (`lm=True`) nên thiếu `models/lm/*.bin` sẽ ném `FileNotFoundError`, và `profile="auto"` luôn cần đủ ba LM. Giải mã khi không có LM: `morsedesk decode file.wav --profile en` (engine baseline, không đụng tới LM) hoặc `morsedesk decode file.wav --profile en --engine onnx --no-lm` (greedy CTC). `Decoder.lm_available(lm_dir=None)` trả `True` khi đủ LM cho mọi profile — GUI/CLI dùng nó để quyết định có bật `auto` và beam+LM hay không.
-- Đo trên T1: `uv run morsedesk bench --manifest testdata/generated/t1/manifest.jsonl --engine onnx --gate` (thêm `--no-lm` hoặc `--profile-override auto`); đo một run huấn luyện: `uv run python tools/eval_run.py --run runs/<run> --name <run>`. Số đo hiện tại: `docs/research/02-baseline-numbers.md`, `docs/research/03-model-experiments.md`.
+Profiles are `en`, `ru`, `kk-cyrl-ru` (Kazakh) and `auto`. On Windows, set `PYTHONUTF8=1` so that
+Cyrillic text prints correctly.
 
-## Giao diện đồ họa (tuần 4)
+## Tests
 
-- Chạy: `uv run morsedesk-gui` (cần `models/acoustic.onnx` và `models/lm/{en,ru,kk}.bin`; thiếu file → hộp thoại nêu đường dẫn và thoát mã 2). Tham số: `--model`, `--lm-dir`, `--engine baseline` (dev, không cần ONNX), `--lang en|ru|kk`.
-- Tab Giải mã: mở hoặc kéo thả file (`.wav .flac .ogg .oga .mp3 .aiff .aif` — đúng `SUPPORTED_EXT`; thả nhiều file thì chỉ nhận file đầu), chọn ngôn ngữ bản tin (Tự động/Anh/Nga/Kazakh), bật/tắt mô hình ngôn ngữ; từ tô màu theo tin cậy (xanh ≥ 0,8, vàng ≥ 0,5, đỏ dưới), spectrogram 0–2 kHz với vạch tone, xuất TXT/JSON. File tới **1 giờ**; thanh tiến trình hiện phần trăm theo số cửa sổ đã xử lý và nút **Hủy** dừng lần giải mã đang chạy.
-- Tab Tạo mã: văn bản → chuỗi chấm gạch, bảng ký tự Cyrillic và 9 chữ Kazakh, WPM/Farnsworth/weight/tone/nhiễu, Nghe thử (sounddevice), Lưu WAV/FLAC/OGG. Định dạng lưu: WAV/FLAC/OGG/OGA/AIFF/AIF, và MP3 khi máy có bộ mã hóa (xem tab Cài đặt). Văn bản mà audio ước tính dài hơn 1 giờ (cùng trần với tab Giải mã) thì Nghe thử và Lưu bị tắt kèm cảnh báo.
-- Ngôn ngữ giao diện đổi ngay bằng ba lá cờ trên thanh công cụ (không ảnh hưởng tới bảng mã giải mã); lưu trong QSettings. Sửa bản dịch trong `morsedesk/app/i18n/translations.json` rồi chạy `uv run python tools/build_i18n.py` để sinh lại `.ts/.qm`.
-- Thanh phát ở trang Giải mã: nghe lại chính file vừa giải mã, từ đang nghe được viền xanh, bấm một từ thì nghe từ chỗ đó. Chỉ bật sau khi giải mã xong; đọc lại file từ đĩa nên không đụng vào kết quả giải mã.
-- Tab Nghe: giải mã trực tiếp từ card âm thanh — thác nước tần số, chip từ theo độ tin cậy, WPM/tone/SNR, chữ xám = còn có thể đổi, chữ thường = đã chốt. Bảng mã mặc định `auto`, cần khoảng 8 ký tự mới nhận đúng. Chất lượng kém đường file 3,1 điểm CER (đo trên 40 clip).
-- Tab Cài đặt: engine đang dùng, xuất MP3 đi đường nào (libsndfile / ffmpeg ngoài / không có, kèm cách khắc phục), các định dạng ghi trực tiếp được, và đường dẫn file log. Trang chỉ đọc.
-- Log: `~/.local/share/morsedesk/logs/morsedesk.log` trên Linux (theo chuẩn XDG, tôn trọng `XDG_DATA_HOME`); trên Windows theo `QStandardPaths.AppDataLocation`.
-- Font: `uv run python tools/fetch_fonts.py` tải DejaVu Sans và Noto Sans vào `morsedesk/app/fonts/` (không commit). Ứng dụng tự nạp và đặt làm font mặc định, để máy Linux tối giản vẫn hiện đủ Ә Ғ Қ Ң Ө Ұ Ү Һ І.
+```bash
+uv sync --all-extras
+PYTHONUTF8=1 uv run pytest -p no:warnings
+```
 
-## Bản ghi thật và chất lượng đo được (tuần 5)
+`-p no:warnings` keeps the PyTorch warnings out of the summary. No test opens a real sound device:
+`tests/conftest.py` replaces `sounddevice` for every test. `scripts/test_linux.sh` runs the same
+tests on Linux in a separate virtual environment, with Qt offscreen. Tests marked `gate` run the model
+on the generated set T1 (`tools/make_t1.py`) and run with `-m gate`.
 
-- Bộ T2 gồm bản ghi thật: `uv run python tools/fetch_t2.py page --source arrl --profile en --index-url https://www.arrl.org/code-practice-files` rồi `uv run python tools/fetch_t2.py build`. Dữ liệu vào `testdata/private/t2/` (không commit). Các nguồn khác: `commons` (API Wikimedia), `local` (file tự thu), `synth` (bù tiếng Nga/Kazakh, đánh dấu `synthetic`).
-- Số đo ngày 23/09/2026 (model E16 v0.4.0, cửa sổ 12 s): T1 tổng hợp **7,78 %** CER, bộ dev cùng ma trận khác seed **8,07 %** (sai số mỗi bộ ±1 điểm) — gần như toàn bộ phần còn lại nằm ở kênh `qsb`; T2 **1,62 %** (bản ghi thật ARRL 0,95 %, riêng dải 18–40 WPM **0 lỗi trên 9 498 ký tự**) (đạt yêu cầu A2 của spec); T0 roundtrip audio sạch **CER = 0 trên cả 21 ô** (đạt D2). Chi tiết và cách tái lập: `docs/research/02-baseline-numbers.md`.
-- Bộ giải mã được chọn theo bằng chứng đo từ chính clip: tín hiệu sạch hơn dải huấn luyện của model thì lấy kết quả bộ DSP, còn lại dùng model (`morsedesk/dsp/selection.py`). `DecodeResult.decoded_by` cho biết đường nào đã sinh ra văn bản.
+## Building the release files
 
-## Giao diện (24/09)
-
-- Giao diện "thiết bị đo" nền đêm theo tham chiếu SDR Console: một màu hành động (vàng đèn tín
-  hiệu), dữ liệu dùng chung một bảng màu phổ. Hệ thống giao diện: `morsedesk/app/theme.py`.
-- Trang Giải mã: dải số đo (ngôn ngữ, tone, tốc độ, SNR, đường giải mã), **phong cảnh phổ 3D**
-  (ngang là thời gian, sâu là tần số quanh tone — thấy từng chấm gạch) hoặc phổ 2D, chữ lớn tô
-  theo độ tin cậy, nút một chạm "Đọc theo tiếng Anh/Nga/Kazakh" khi chế độ tự động đọc nhầm.
-- Trong lúc giải mã: vòng tiến trình % theo thời gian thực phủ lên vùng kết quả; kết quả chỉ hiện
-  khi mô hình ngôn ngữ đã xong. Tiến trình chia theo tầng đúng tỉ trọng đo được
-  (`morsedesk/progress.py`): trước đây nó chạm 100 % ở ~5 % thời gian rồi đứng im.
-- Trang Nghe: thác nước 3D cuộn kiểu SDR trên thác nước phẳng, số đo trực tiếp.
-- Nghe lại ở trang Giải mã: nút phát tròn ▶/❚❚ (chữ nằm ở tooltip và tên trợ năng); trong cảnh
-  3D phần đã nghe nổi lên, phần chưa tới chìm xuống, kèm luồng sáng chiếu từ trên đi theo con
-  trỏ phát. Vẽ một khung 5–21 ms, đủ theo nhịp 50 ms của thanh phát.
-- Trang Tạo mã: băng Morse trực quan (dit/dah như đèn tín hiệu, chữ dưới từng nhóm).
-- Mở lên là có sẵn file mẫu "Xin chào" đúng ngôn ngữ giao diện (HELLO / ЗДРАВСТВУЙТЕ /
-  СӘЛЕМЕТСІЗ БЕ), đã giải mã. Sinh lại: `uv run python tools/make_samples.py`.
-- Logo: phím Morse nét trắng, trên là `· · –`. Khi khởi động, màn hình chờ động gõ ra đúng ba dấu
-  đó kèm dòng bản quyền và tên tác giả (`--no-splash` để bỏ qua). Sinh lại biểu tượng và ảnh
-  chờ: `uv run python packaging/make_icon.py` rồi `uv run python packaging/make_splash.py`.
-
-## Đóng gói Windows: một file `.exe`
+Windows, in PowerShell 7:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/build_windows.ps1     # -> dist/MorseDesk.exe
-powershell -ExecutionPolicy Bypass -File scripts/test_windows_exe.ps1  # khởi động + tự kiểm giải mã
+pwsh -File scripts/build_windows.ps1       # dist/MorseDesk.exe
+pwsh -File scripts/test_windows_exe.ps1    # starts the exe and compares --self-test with the source
 ```
 
-- Một file chứa sẵn model âm thanh, ba mô hình ngôn ngữ, Qt và onnxruntime. Mỗi lần chạy nó bung
-  vào `%TEMP%\_MEIxxxx` rồi tự dọn khi đóng cửa sổ bình thường (giết cứng tiến trình thì thư mục
-  đó ở lại).
-- Đo 23/09 trên máy rảnh: ảnh chờ hiện sau **0,2–0,3 s**, cửa sổ chính sau **2,8–3,3 s** (lúc máy
-  bận train: 5,0–5,4 s); chạy từ mã nguồn là 2,6–3,1 s. Ảnh chờ do bootloader PyInstaller vẽ, nói chuyện với ứng dụng qua
-  socket **loopback 127.0.0.1** — không ra mạng ngoài.
-- `MorseDesk.exe --self-test VÀO.wav RA.json` giải một file bằng đúng model trong gói rồi ghi
-  JSON, không mở cửa sổ. `test_windows_exe.ps1` dùng nó để đòi kết quả **giống hệt** mã nguồn trên
-  cùng file (ru, kk, và một ca en đi đường model).
-- File chưa ký: SmartScreen có thể cảnh báo khi file đến từ Internet; chép qua USB thì không có
-  dấu "tải từ mạng" nên thường không hỏi. **Smart App Control** (Windows 11) thì khác: nếu đang
-  bật, nó chặn file chưa ký bất kể nguồn gốc, và chỉ tắt được một chiều. Chi tiết:
-  `.superpowers/sdd/research-distribution.md` §2.
-
-## Đóng gói AppImage (tuần 6)
+Linux AppImage, built in Ubuntu 22.04 with Docker:
 
 ```bash
 docker build -f packaging/Dockerfile.build -t morsedesk-build .
 docker run --rm -v "$PWD":/src morsedesk-build bash scripts/build_appimage.sh
-# -> dist/MorseDesk-x86_64.AppImage (148 MB) và dist/SHA256SUMS
+# dist/MorseDesk-x86_64.AppImage and dist/SHA256SUMS
 
 docker build -f packaging/Dockerfile.test -t morsedesk-test .
 docker run --rm -v "$PWD":/work morsedesk-test bash /work/scripts/test_appimage.sh
 ```
 
-- Dựng trong Ubuntu 22.04 để liên kết với glibc cũ nhất được hỗ trợ; đã kiểm chạy trên **22.04
-  và 24.04** sạch (ảnh chụp trong `dist/` và `dist2404/`).
-- Ảnh kiểm **cố ý không cài** 8 thư viện xcb mà tài liệu rà soát liệt kê — nếu cửa sổ mở được ở
-  đó thì gói đã mang theo đủ.
-- Thư viện đồ họa `libEGL`/`libGL` **không** đóng gói: theo thông lệ AppImage chúng phải khớp
-  driver của máy chạy, và mọi cài đặt Ubuntu có màn hình đều đã có.
-- Model (`models/acoustic.onnx`) và ba mô hình ngôn ngữ được gói kèm nếu có mặt lúc dựng; thiếu
-  thì ứng dụng hiện hộp thoại nêu đường dẫn còn thiếu rồi thoát mã 2 (`morsedesk/app/main.py`).
-- `test_appimage.sh` còn chạy `AppRun --self-test` trên các mẫu `dist/selftest/` mà
-  `scripts/test_windows_exe.ps1` để lại, và đòi văn bản **giống hệt** mã nguồn — phần mở cửa sổ chỉ
-  dùng engine baseline nên không chứng minh được model trong gói. Bản dựng 23/09 (model v0.4.0,
-  148 MB) đạt cả ba mẫu ru/kk/en.
+Run `test_windows_exe.ps1` first: it writes the samples in `dist/selftest/` that `test_appimage.sh`
+checks against. Do not build the two at the same time, because the AppImage build clears the
+`build/` folder that the Windows build uses.
+
+## Training and evaluation
+
+The acoustic model learns only from synthetic audio that `morsedesk/data` generates on the fly:
+text, keying, noise, fading and interference, including light keying measured on real recordings.
+
+```bash
+uv sync --all-extras
+PYTHONUTF8=1 uv run python -m tools.train --name my_run --steps 30000 --device auto
+PYTHONUTF8=1 uv run python tools/export_onnx.py --checkpoint runs/my_run/best.pt --out models/eval_my_run.onnx
+```
+
+On the development machine training runs in WSL on a GPU (`scripts/wsl_train.sh`, about 0.05 s per
+step, so 30,000 steps take about half an hour). The settings of every model so far are in
+`docs/research/03-model-experiments.md`.
+
+```bash
+PYTHONUTF8=1 uv run python tools/make_t1.py           # T1: 500 generated clips
+PYTHONUTF8=1 uv run morsedesk bench --manifest testdata/generated/t1/manifest.jsonl --engine onnx --out-dir runs/t1
+PYTHONUTF8=1 uv run python tools/long_random_eval.py  # two-minute messages in three languages
+```
+
+The real recordings (T2, T4 to T7) are not in the repository: some may only be used internally,
+others are private. The tools that collected them, `tools/fetch_t2.py` and `tools/make_t4.py`, are
+included and name their sources.
+
+The language models are built from text corpora with KenLM: `tools/fetch_corpus.py`, then
+`tools/normalize_corpus.py`, `tools/build_lm.sh` and `tools/arpa_to_bin.py`. The corpora and their
+licenses are listed in `models/lm/LICENSES.md`.
+
+## Documentation
+
+- `morsedesk/app/docs/technical_{en,ru,kk}.html`: the full technical description with
+  measurements. The program shows it in the interface language and can save it as PDF.
+- `docs/research/`: every experiment and measurement (in Vietnamese). 02 baseline numbers,
+  03 model experiments, 04 pretrained baselines, 05 numbers, 06 network traffic and light keying.
+- `docs/backlog.md`: open work.
+- `CLAUDE.md`: notes for working on the code, with the architecture boundaries and known pitfalls
+  (in Vietnamese).
+- `docs/readme/`: the sources of the images on this page. `uv run python docs/readme/render.py`
+  redraws them with Edge or Chrome.
+
+## Licenses
+
+`pyproject.toml` declares the MorseDesk code proprietary; no open-source license is attached.
+Third-party files keep their own licenses: the DejaVu and Noto Sans fonts in `morsedesk/app/fonts`,
+the language model corpora in `models/lm/LICENSES.md`, and in `docs/readme/src` the Bad Script and
+PT Sans Narrow fonts (SIL Open Font License) and rough.js (MIT).

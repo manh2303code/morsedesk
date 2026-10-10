@@ -1,0 +1,89 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>MorseDesk results</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  body { width: 1200px; height: 720px; }
+  .title { left: 48px; top: 26px; font-size: 40px; transform: rotate(-1deg); }
+  .cap { font-size: 23px; width: 500px; transform: rotate(-.5deg); }
+  .cap-a { left: 48px; top: 104px; }
+  .cap-b { left: 648px; top: 104px; }
+  .val { font-size: 27px; transform: translateX(-50%); white-space: nowrap; }
+  .cat { font-size: 22px; transform: translateX(-50%); white-space: nowrap; }
+  .legend { font-size: 20px; color: var(--pencil); white-space: nowrap; }
+  .all { font-size: 19px; color: var(--pencil); white-space: nowrap; }
+  .row-label { font-size: 17px; white-space: nowrap; }
+  .row-val { font-size: 26px; white-space: nowrap; }
+  .foot { left: 48px; top: 676px; font-size: 15px; }
+</style>
+</head>
+<body class="grid-paper">
+<div class="abs hand title" data-t="res.title"></div>
+<div class="abs hand cap cap-a" data-t="res.a_cap"></div>
+<div class="abs hand cap cap-b" data-t="res.b_cap"></div>
+<div id="labels"></div>
+<div class="abs print foot" data-t="res.foot"></div>
+<svg class="overlay" id="ov"></svg>
+<script src="vendor/rough.js"></script>
+<script src="strings.js"></script>
+<script src="common.js"></script>
+<script>
+MD.ready(() => {
+  const ov = document.getElementById("ov");
+  const rc = rough.svg(ov);
+  const host = document.getElementById("labels");
+  const ink = MD.css("--ink"), pencil = MD.css("--pencil"), note = MD.css("--note");
+  const put = (cls, text, x, y, hand = true) => {
+    const d = document.createElement("div");
+    d.className = "abs " + (hand ? "hand " : "print ") + cls;
+    d.style.left = x + "px"; d.style.top = y + "px";
+    host.appendChild(d);
+    MD.setText(d, text);
+    return d;
+  };
+  // --- A: nhóm bản chép đúng (trên 108), trước và sau, file và nghe
+  const base = 610, top = 236, full = 108, H = base - top;
+  const y = (v) => base - v / full * H;
+  ov.appendChild(rc.line(70, base, 560, base, { stroke: ink, strokeWidth: 1.6, roughness: 1, seed: 1 }));
+  ov.appendChild(rc.line(70, y(full), 560, y(full), { stroke: pencil, strokeWidth: 1.2, roughness: 0.8, seed: 2, strokeLineDash: [8, 7] }));
+  put("all", MD.get("res.all"), 74, y(full) + 4);
+  const groups = [[MD.get("res.a_file"), 46, 103, 205], [MD.get("res.a_live"), 32, 98, 430]];
+  let seed = 10;
+  for (const [label, before, now, cx] of groups) {
+    const w = 74;
+    ov.appendChild(rc.rectangle(cx - w - 8, y(before), w, base - y(before), { stroke: pencil, strokeWidth: 1.3,
+      fill: pencil, fillStyle: "hachure", hachureGap: 9, hachureAngle: -41, fillWeight: 1.1, roughness: 1.2, seed: seed++ }));
+    ov.appendChild(rc.rectangle(cx + 8, y(now), w, base - y(now), { stroke: ink, strokeWidth: 1.7,
+      fill: ink, fillStyle: "cross-hatch", hachureGap: 7, hachureAngle: -41, fillWeight: 1.2, roughness: 1.2, seed: seed++ }));
+    const vb = put("val", String(before), cx - w / 2 - 8, y(before) - 40);
+    vb.style.color = pencil;
+    const vn = put("val", String(now), cx + w + 14, y(now) - 6);
+    vn.style.transform = "none";
+    put("cat", label, cx, base + 10);
+  }
+  // chú giải: hai ô mẫu nhỏ
+  const lx = 92, ly = 196;
+  ov.appendChild(rc.rectangle(lx, ly, 22, 16, { stroke: pencil, fill: pencil, fillStyle: "hachure", hachureGap: 5, roughness: 1, seed: 40 }));
+  put("legend", MD.get("res.before"), lx + 32, ly - 7);
+  ov.appendChild(rc.rectangle(lx + 230, ly, 22, 16, { stroke: ink, fill: ink, fillStyle: "cross-hatch", hachureGap: 5, roughness: 1, seed: 41 }));
+  const ln = put("legend", MD.get("res.now"), lx + 262, ly - 7);
+  ln.style.color = ink;
+  // --- B: tỉ lệ ký tự sai, thanh ngang, thang 0–15 %
+  const x0 = 648, maxV = 15, W = 430;
+  const rows = MD.get("res.rows");
+  const pct = MD.get("res.pct");
+  rows.forEach(([label, v], i) => {
+    const ty = 214 + i * 102;
+    put("row-label", label, x0 + 12, ty, false);
+    const bw = Math.max(6, v / maxV * W);
+    ov.appendChild(rc.rectangle(x0, ty + 30, bw, 30, { stroke: ink, strokeWidth: 1.6, fill: ink, fillStyle: "hachure",
+      hachureGap: 7, hachureAngle: -41, fillWeight: 1.1, roughness: 1.1, seed: 60 + i }));
+    put("row-val", pct(v), x0 + bw + 14, ty + 24);
+  });
+  ov.appendChild(rc.line(x0, 236, x0, 640, { stroke: ink, strokeWidth: 1.4, roughness: 0.9, seed: 80 }));
+});
+</script>
+</body>
+</html>

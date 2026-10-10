@@ -1,0 +1,89 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>MorseDesk hero</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  body { width: 1200px; height: 600px; }
+  /* Mẫu radiogram: khung in kép */
+  .form { position: absolute; left: 28px; top: 26px; width: 1144px; height: 548px; border: 2px solid var(--form); }
+  .form::after { content: ""; position: absolute; inset: 5px; border: 1px solid var(--form); }
+  .head { position: absolute; left: 44px; right: 44px; top: 44px; height: 46px; border-bottom: 1px solid var(--form); }
+  .head .form-title { position: absolute; left: 4px; bottom: 9px; font-size: 26px; font-weight: 700; letter-spacing: .01em; }
+  .head .no { position: absolute; right: 4px; bottom: 6px; font-size: 17px; display: flex; align-items: baseline; gap: 10px; }
+  .field-line { display: inline-block; min-width: 118px; border-bottom: 1px dotted var(--form); text-align: center; padding: 0 6px 1px; }
+  .title { left: 70px; top: 112px; font-size: 116px; transform: rotate(-2.2deg); transform-origin: left center; }
+  .tagline { left: 82px; top: 268px; width: 720px; font-size: 29px; transform: rotate(-.6deg); text-wrap: balance; }
+  /* Băng giấy Morse (máy in băng): vắt qua mép mẫu biểu */
+  .strip { position: absolute; left: -60px; top: 364px; width: 1320px; height: 120px; transform: rotate(-1.4deg); }
+  .tape { position: absolute; left: 0; top: 0; width: 100%; height: 58px; background: var(--tape);
+          box-shadow: 0 3px 7px var(--shadow), 0 0 0 1px rgba(0,0,0,.04); }
+  .tape svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+  .letters { position: absolute; left: 0; top: 64px; width: 100%; height: 44px; }
+  .letters span { position: absolute; top: 0; transform: translateX(-50%); font-size: 30px; color: var(--pencil); }
+  .fields { position: absolute; left: 72px; right: 72px; top: 506px; display: flex; gap: 46px; font-size: 16px; align-items: baseline; }
+  .fields .lbl { margin-right: 10px; }
+  .fields .val { font-size: 25px; border-bottom: 1px dotted var(--form); padding: 0 8px; }
+  .tape-note { left: 806px; top: 186px; font-size: 27px; transform: rotate(-5deg); width: 330px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="form"></div>
+<div class="head">
+  <span class="print form-title" data-t="hero.form"></span>
+  <span class="print no"><span data-t="hero.no"></span><span class="field-line"><span class="hand" style="font-size:24px" data-t="hero.version"></span></span></span>
+</div>
+<div class="abs hand title" data-t="hero.title" data-jitter="0"></div>
+<div class="abs hand tagline" data-t="hero.tagline"></div>
+<div class="abs note tape-note" data-t="hero.tape_note"></div>
+<div class="strip">
+  <div class="tape"><svg id="marks"></svg></div>
+  <div class="letters hand" id="letters"></div>
+</div>
+<div class="fields">
+  <span><span class="print lbl" data-t="hero.lang_label"></span><span class="hand val" data-t="hero.lang_value"></span></span>
+  <span><span class="print lbl" data-t="hero.runs_label"></span><span class="hand val" data-t="hero.runs_value"></span></span>
+</div>
+<svg class="overlay" id="ov"></svg>
+<script src="vendor/rough.js"></script>
+<script src="strings.js"></script>
+<script src="common.js"></script>
+<script>
+MD.ready(() => {
+  // Chấm/gạch đúng nhịp Morse: chấm 1 đơn vị, gạch 3, giữa phần tử 1, giữa ký tự 3.
+  const { chars, units } = MD.morseLayout("MORSEDESK");
+  const u = 14, x0 = 132, ink = MD.css("--tape-ink");
+  const svg = document.getElementById("marks");
+  const NS = "http://www.w3.org/2000/svg";
+  const r = MD.rnd;
+  chars.forEach((c) => c.marks.forEach(([a, b]) => {
+    const el = document.createElementNS(NS, "rect");
+    const w = (b - a) * u - 2 + (r() - 0.5) * 1.6;           // bánh mực không đều tuyệt đối
+    el.setAttribute("x", (x0 + a * u + 1).toFixed(1));
+    el.setAttribute("y", (25.5 + (r() - 0.5) * 1.4).toFixed(1));
+    el.setAttribute("width", w.toFixed(1));
+    el.setAttribute("height", (7 + (r() - 0.5) * 0.8).toFixed(1));
+    el.setAttribute("rx", "3.4");
+    el.setAttribute("fill", ink);
+    el.setAttribute("opacity", (0.86 + r() * 0.12).toFixed(2));
+    svg.appendChild(el);
+  }));
+  const letters = document.getElementById("letters");
+  chars.forEach((c) => {
+    const s = document.createElement("span");
+    s.textContent = c.ch;
+    s.style.left = (x0 + (c.x0 + c.x1) / 2 * u) + "px";
+    s.style.transform = `translateX(-50%) rotate(${((r() - 0.5) * 6).toFixed(1)}deg)`;
+    letters.appendChild(s);
+  });
+  // Mũi tên bút chì đỏ: từ ghi chú xuống băng giấy
+  const ov = document.getElementById("ov");
+  const rc = rough.svg(ov);
+  const note = document.querySelector(".tape-note").getBoundingClientRect();
+  const lastLetter = letters.lastElementChild.getBoundingClientRect();
+  MD.arrow(rc, ov, note.left + 70, note.bottom + 6, lastLetter.left - 30, 372, { bow: -0.22, seed: 11 });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+/* Ảnh README MorseDesk: tờ mẫu radiogram và giấy kẻ ô của điện báo viên, điền tay bằng bút bi và bút chì đỏ.
+   Bản tối: "ca trực đêm" — giấy xanh đá, chữ phấn, bút chì hổ phách (màu nhấn của chính ứng dụng). */
+@font-face { font-family: "Hand"; src: url("fonts/BadScript.ttf"); }
+@font-face { font-family: "Print"; src: url("fonts/PTSansNarrow.ttf"); font-weight: 400; }
+@font-face { font-family: "Print"; src: url("fonts/PTSansNarrow-Bold.ttf"); font-weight: 700; }
+
+:root {
+  --paper: #edf1ee;      /* giấy mẫu biểu, xám-lục lạnh */
+  --grid: #d3dedf;       /* ô kẻ mờ */
+  --grid-major: #bfcfd2;
+  --form: #7e9baa;       /* mực in của mẫu biểu */
+  --print: #4c6675;      /* chữ in nhỏ */
+  --ink: #26358c;        /* bút bi */
+  --pencil: #5b6169;     /* bút chì than */
+  --note: #c2293a;       /* bút chì đỏ sửa bài */
+  --tape: #fbfbf6;       /* băng giấy Morse */
+  --tape-ink: #1c2024;
+  --sticky: rgba(226, 216, 178, .72);   /* băng keo dán ảnh */
+  --photo: #fcfcf8;
+  --shadow: rgba(32, 48, 58, .20);
+}
+:root[data-theme="dark"] {
+  --paper: #13202a;
+  --grid: #1b2c37;
+  --grid-major: #233846;
+  --form: #3e6070;
+  --print: #8aa4b1;
+  --ink: #e9e5d9;        /* phấn */
+  --pencil: #9aa6ae;
+  --note: #f3a93e;       /* bút chì hổ phách = màu nhấn ứng dụng */
+  --tape: #e7e3d5;
+  --tape-ink: #13202a;
+  --sticky: rgba(201, 192, 160, .55);
+  --photo: #263844;
+  --shadow: rgba(0, 0, 0, .55);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  position: relative;
+  overflow: hidden;
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+.grid-paper {
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-major) 1px, transparent 1px),
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px;
+  background-position: -1px -1px;
+}
+.hand { font-family: "Hand", cursive; color: var(--ink); line-height: 1.18; }
+.print { font-family: "Print", sans-serif; color: var(--print); }
+.note { font-family: "Hand", cursive; color: var(--note); line-height: 1.15; }
+.abs { position: absolute; }
+svg.overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.w { display: inline-block; }   /* một từ viết tay: nghiêng/lệch dòng nhẹ (common.js) */
