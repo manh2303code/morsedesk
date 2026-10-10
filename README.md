@@ -58,7 +58,7 @@ The same dependencies as a graph:
 config:
   look: handDrawn
 ---
-flowchart LR
+flowchart TB
   app["morsedesk/app/<br/>Qt interface"] --> api
   subgraph core["morsedesk/ (no Qt)"]
     cli["cli.py"] --> api["api.py<br/>Decoder, Encoder"]
@@ -71,11 +71,10 @@ flowchart LR
     api --> encode["encode/"]
     data["data/"]
   end
-  models[("models/<br/>acoustic.onnx<br/>lm/*.bin")] -.-> model
-  models -.-> lm
   tools["tools/<br/>train, export, evaluate"] --> data
-  tools --> model
-  tools -. "export_onnx.py" .-> models
+  tools -.->|export_onnx.py| models[("models/<br/>acoustic.onnx<br/>lm/*.bin")]
+  models -.-> model
+  models -.-> lm
 ```
 
 ## How decoding works

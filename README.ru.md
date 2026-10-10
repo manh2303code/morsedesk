@@ -59,7 +59,7 @@ MorseDesk декодирует азбуку Морзе из аудиофайло
 config:
   look: handDrawn
 ---
-flowchart LR
+flowchart TB
   app["morsedesk/app/<br/>интерфейс Qt"] --> api
   subgraph core["morsedesk/ (без Qt)"]
     cli["cli.py"] --> api["api.py<br/>Decoder, Encoder"]
@@ -72,11 +72,10 @@ flowchart LR
     api --> encode["encode/"]
     data["data/"]
   end
-  models[("models/<br/>acoustic.onnx<br/>lm/*.bin")] -.-> model
-  models -.-> lm
   tools["tools/<br/>обучение, экспорт, оценка"] --> data
-  tools --> model
-  tools -. "export_onnx.py" .-> models
+  tools -.->|export_onnx.py| models[("models/<br/>acoustic.onnx<br/>lm/*.bin")]
+  models -.-> model
+  models -.-> lm
 ```
 
 ## Как запись становится текстом

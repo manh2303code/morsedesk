@@ -59,7 +59,7 @@ MorseDesk аудиофайлдардан және дыбыс картасына�
 config:
   look: handDrawn
 ---
-flowchart LR
+flowchart TB
   app["morsedesk/app/<br/>Qt интерфейсі"] --> api
   subgraph core["morsedesk/ (Qt жоқ)"]
     cli["cli.py"] --> api["api.py<br/>Decoder, Encoder"]
@@ -72,11 +72,10 @@ flowchart LR
     api --> encode["encode/"]
     data["data/"]
   end
-  models[("models/<br/>acoustic.onnx<br/>lm/*.bin")] -.-> model
-  models -.-> lm
   tools["tools/<br/>оқыту, экспорт, бағалау"] --> data
-  tools --> model
-  tools -. "export_onnx.py" .-> models
+  tools -.->|export_onnx.py| models[("models/<br/>acoustic.onnx<br/>lm/*.bin")]
+  models -.-> model
+  models -.-> lm
 ```
 
 ## Жазба мәтінге қалай айналады
