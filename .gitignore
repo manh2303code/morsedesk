@@ -19,11 +19,12 @@ runs/
 *.ckpt
 models/*.onnx
 models/*.npz
+# model đang dùng (0.7.0) + mẫu đối chứng của nó ĐƯỢC commit: clone về là chạy được (10/10/2026)
+!models/acoustic.onnx
+!models/acoustic.golden.npz
 models/eval_*.json
 corpus/
-models/lm/*.bin
 models/lm/*.arpa
 # model bên ngoài tải về (DeepCW 15 MB); mẫu models/*.onnx không khớp thư mục con
 models/deepcw/
-morsedesk/app/fonts/
 models/archive/
